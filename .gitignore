@@ -1,0 +1,23 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# run output (the committed sample lives in results-sample/)
+results/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# local embedding model cache for the retrieval baseline
+.fastembed_cache/
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/

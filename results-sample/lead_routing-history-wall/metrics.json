@@ -1,0 +1,298 @@
+{
+  "metrics": {
+    "jev": {
+      "seeds": [
+        11
+      ],
+      "per_seed": {
+        "11": {
+          "n": 400,
+          "wrong": 188,
+          "dollars": 444700.0,
+          "accuracy": 0.53,
+          "accuracy_pre": 0.62,
+          "accuracy_post": 0.44,
+          "tacit_accuracy": 0.0,
+          "changed_accuracy": 0.0,
+          "probe_accuracy": 0.0,
+          "confidently_wrong": 0.4425,
+          "churn_tacit": 0.0,
+          "recover_cycle1": null,
+          "recover_cycle2": null,
+          "mean_state_bytes": 873.77,
+          "mean_input_tokens": 750.9575,
+          "jev_usd": 0.0126,
+          "errors": 0
+        }
+      },
+      "n": 400.0,
+      "n_range": [
+        400,
+        400
+      ],
+      "wrong": 188.0,
+      "wrong_range": [
+        188,
+        188
+      ],
+      "dollars": 444700.0,
+      "dollars_range": [
+        444700.0,
+        444700.0
+      ],
+      "accuracy": 0.53,
+      "accuracy_range": [
+        0.53,
+        0.53
+      ],
+      "accuracy_pre": 0.62,
+      "accuracy_pre_range": [
+        0.62,
+        0.62
+      ],
+      "accuracy_post": 0.44,
+      "accuracy_post_range": [
+        0.44,
+        0.44
+      ],
+      "tacit_accuracy": 0.0,
+      "tacit_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "changed_accuracy": 0.0,
+      "changed_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "probe_accuracy": 0.0,
+      "probe_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "confidently_wrong": 0.4425,
+      "confidently_wrong_range": [
+        0.4425,
+        0.4425
+      ],
+      "churn_tacit": 0.0,
+      "churn_tacit_range": [
+        0.0,
+        0.0
+      ],
+      "recover_cycle1": null,
+      "recover_cycle1_range": null,
+      "recover_cycle2": null,
+      "recover_cycle2_range": null,
+      "mean_state_bytes": 873.77,
+      "mean_state_bytes_range": [
+        873.77,
+        873.77
+      ],
+      "mean_input_tokens": 750.9575,
+      "mean_input_tokens_range": [
+        750.9575,
+        750.9575
+      ],
+      "jev_usd": 0.0126,
+      "jev_usd_range": [
+        0.0126,
+        0.0126
+      ],
+      "errors": 0.0,
+      "errors_range": [
+        0,
+        0
+      ],
+      "recover_cycle1_unrecovered": 1,
+      "recover_cycle2_unrecovered": 1
+    },
+    "jev+history": {
+      "seeds": [
+        11
+      ],
+      "per_seed": {
+        "11": {
+          "n": 400,
+          "wrong": 161,
+          "dollars": 331200.0,
+          "accuracy": 0.5975,
+          "accuracy_pre": 0.785,
+          "accuracy_post": 0.41,
+          "tacit_accuracy": 0.39416058394160586,
+          "changed_accuracy": 0.0,
+          "probe_accuracy": 0.0,
+          "confidently_wrong": 0.045,
+          "churn_tacit": 0.3382352941176471,
+          "recover_cycle1": 0,
+          "recover_cycle2": null,
+          "mean_state_bytes": 83216.64,
+          "mean_input_tokens": 11627.3375,
+          "jev_usd": 0.1953,
+          "errors": 124
+        }
+      },
+      "n": 400.0,
+      "n_range": [
+        400,
+        400
+      ],
+      "wrong": 161.0,
+      "wrong_range": [
+        161,
+        161
+      ],
+      "dollars": 331200.0,
+      "dollars_range": [
+        331200.0,
+        331200.0
+      ],
+      "accuracy": 0.5975,
+      "accuracy_range": [
+        0.5975,
+        0.5975
+      ],
+      "accuracy_pre": 0.785,
+      "accuracy_pre_range": [
+        0.785,
+        0.785
+      ],
+      "accuracy_post": 0.41,
+      "accuracy_post_range": [
+        0.41,
+        0.41
+      ],
+      "tacit_accuracy": 0.39416058394160586,
+      "tacit_accuracy_range": [
+        0.39416058394160586,
+        0.39416058394160586
+      ],
+      "changed_accuracy": 0.0,
+      "changed_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "probe_accuracy": 0.0,
+      "probe_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "confidently_wrong": 0.045,
+      "confidently_wrong_range": [
+        0.045,
+        0.045
+      ],
+      "churn_tacit": 0.3382352941176471,
+      "churn_tacit_range": [
+        0.3382352941176471,
+        0.3382352941176471
+      ],
+      "recover_cycle1": 0.0,
+      "recover_cycle1_range": [
+        0,
+        0
+      ],
+      "recover_cycle2": null,
+      "recover_cycle2_range": null,
+      "mean_state_bytes": 83216.64,
+      "mean_state_bytes_range": [
+        83216.64,
+        83216.64
+      ],
+      "mean_input_tokens": 11627.3375,
+      "mean_input_tokens_range": [
+        11627.3375,
+        11627.3375
+      ],
+      "jev_usd": 0.1953,
+      "jev_usd_range": [
+        0.1953,
+        0.1953
+      ],
+      "errors": 124.0,
+      "errors_range": [
+        124,
+        124
+      ],
+      "recover_cycle1_unrecovered": 0,
+      "recover_cycle2_unrecovered": 1
+    }
+  },
+  "lifecycle": {
+    "fixes": [],
+    "verdicts": {},
+    "incidents": 0,
+    "behaviors": 0
+  },
+  "events": [],
+  "resume_accuracy": {},
+  "meta": {
+    "run_id": "wall1",
+    "scenario": {
+      "name": "lead_routing",
+      "title": "Inbound lead routing",
+      "actions": [
+        "route_to_ae",
+        "sdr_nurture",
+        "self_serve",
+        "partner",
+        "disqualify"
+      ],
+      "policy": [
+        {
+          "key": "policy-enterprise",
+          "text": "Enterprise leads (1000+ employees) with a corporate email and buying intent: route to an account executive."
+        },
+        {
+          "key": "policy-mid-market",
+          "text": "Mid-market leads (100-999 employees) with buying intent (demo, pricing or trial): route to an account executive."
+        },
+        {
+          "key": "policy-smb",
+          "text": "SMB leads (under 100 employees): send to self-serve signup."
+        },
+        {
+          "key": "policy-personal-email",
+          "text": "Leads from personal email addresses (gmail, yahoo, outlook, etc.): disqualify."
+        },
+        {
+          "key": "policy-low-intent",
+          "text": "Content downloads and webinar signups with no demo, pricing or trial request: SDR nurture sequence."
+        }
+      ],
+      "tacit_rule": "EMEA mid-market leads close only through a regional partner; the AE queue loses them.",
+      "change_rule": "After the pricing update, NA mid-market leads buy self-serve; routing them to an AE loses the deal.",
+      "expected_fix": "Mid-market leads in EMEA: hand to a regional partner, not an account executive.",
+      "cost_by_severity": {
+        "minor_failure": 200.0,
+        "failure": 2500.0,
+        "critical_failure": 15000.0
+      }
+    },
+    "episodes": 400,
+    "seeds": [
+      11
+    ],
+    "change_at": 200,
+    "probe_at": 300,
+    "noise": 0.1,
+    "arms": [
+      "jev",
+      "history"
+    ],
+    "knobs": {
+      "policy": "auto_after_canary",
+      "canary_pct": 50,
+      "canary_min_outcomes": 5,
+      "canary_timeout_sessions": 60,
+      "look_every": 5,
+      "judge": true,
+      "judge_mode": "continuous"
+    },
+    "jev_model": "jev-1.13.0",
+    "amfs_url": "https://amfs-login.sense-lab.ai",
+    "started_at": "2026-10-13T04:45:02.818576+00:00",
+    "resumes": [],
+    "finished_at": "2026-10-13T04:46:30.291311+00:00"
+  }
+}

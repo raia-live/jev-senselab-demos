@@ -1,0 +1,22 @@
+name: lint and replay
+
+# No API keys here: the workflow lints the code and rebuilds the reports from the
+# committed sample results, so a broken report builder or scenario import is caught on
+# every push without spending a cent on Jev or SenseLab.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv python install 3.12
+      - run: uv sync --extra dev
+      - run: uv run ruff check .
+      - run: uv run python -m pytest -q
+      - run: uv run python -m core.runner --replay results-sample --quiet
+      - run: test -f results-sample/index.html
