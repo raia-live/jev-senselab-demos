@@ -1,0 +1,858 @@
+"""The live agent behind the voice demo.
+
+Vapi runs the call (telephony, speech to text, the conversational model, text to speech).
+At the decision point of the call its model calls one tool, ``decide_next_step``. This
+module answers that tool call the way the batch harness answers a case: the call's facts
+and the written policy go into Jev's state, SenseLab's guidance for this situation goes
+into the memory slot, Jev picks the action. When the call ends, what came of the decision
+is written back as the outcome of that run, and the next call in the same situation starts
+from it.
+
+The same ``call_handling`` scenario drives the batch harness and this agent: same actions,
+same policy, same situation labels, same review. A batch run and the live agent can share
+an entity path, and then what the batch run learned is what the live agent knows.
+
+Latency: ``Run.begin`` is two reads of the SenseLab API, a few seconds on a hosted account
+(``voice/README.md`` has measurements). A caller will not wait that long for an answer,
+so the server opens runs ahead of the decision: when a call starts it begins one run per
+situation the caller could be in (the account tells us tier and prior contacts; the
+intent is what we do not know yet) and the tool call picks the one that matches. A run
+that is begun and never completed is two reads; nothing is left open on the platform.
+"""
+
+from __future__ import annotations
+
+import logging
+import random
+import re
+import threading
+import time
+import uuid
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+from core import settings as S
+from core.arms import MEMORY_NOTE, build_state
+from core.eval_client import EvalApiError, EvalClient
+from core.jev import Jev
+from core.loops import RepairLoop
+from core.scenario import Case, Outcome
+from core.senselab import ReviewHistory, SenseLabClient, SenseLabEpisode
+from demos.call_handling.scenario import SCENARIO, situation_of, truth_of
+
+from . import customers as cust
+
+log = logging.getLogger("voice")
+
+INTENTS = ("billing_dispute", "cancellation", "outage", "upgrade", "how_to")
+DEFAULT_AGENT_ID = "jev-voice-support-agent"
+DEFAULT_ENTITY_PATH = "jev-demos/call_handling/live"
+
+# What the assistant says when it follows each action. The conversational model gets this
+# back from the tool and speaks it (in its own words if it must; the instruction says not to).
+SAY = {
+    "resolve_in_bot": "Okay, good news: I can sort this out for you right now, on this call.",
+    "transfer_to_agent": "Okay. This one needs a colleague of mine, so let me bring them in.",
+    "schedule_callback": ("Right. I don't want you going round in circles on this again, so I'm booking a billing "
+                          "specialist to call you back within one business day. They'll have your account open and "
+                          "the authority to fix it properly."),
+    "issue_credit": "Okay, I'm putting a credit for the disputed amount on your account right now.",
+}
+
+_REVIEW_RE = re.compile(r"\[(worked|did not work)\] (.*?)(?=; \[(?:worked|did not work)\] |$)")
+_TALLY_RE = re.compile(r"with (?P<action>\S+): worked (?P<worked>\d+) of (?P<total>\d+) time")
+
+
+@dataclass
+class Caller:
+    """What the account lookup knows before the caller says a word."""
+
+    name: str = "Alex"
+    tier: str = "consumer"
+    prior_contacts_30d: int = 0
+    tenure_months: int = 14
+    customer_id: str = ""  # the account's id for this caller; "" when the caller is nobody we know
+
+    @classmethod
+    def from_mapping(cls, m: dict[str, Any] | None) -> Caller:
+        m = m or {}
+        tier = str(m.get("tier") or "consumer")
+        if tier not in ("consumer", "business", "enterprise"):
+            tier = "consumer"
+        return cls(
+            name=str(m.get("name") or "Alex")[:40],
+            tier=tier,
+            prior_contacts_30d=_int(m.get("prior_contacts_30d"), 0),
+            tenure_months=_int(m.get("tenure_months"), 14),
+            customer_id=re.sub(r"[^a-z0-9-]", "", str(m.get("customer_id") or "").lower())[:40],
+        )
+
+
+@dataclass
+class Warm:
+    """The entity's briefing and entries at one moment, shared by the runs a call opens."""
+
+    briefing: list[Any]
+    entries: list[Any]
+    at: float
+
+
+@dataclass
+class LiveDecision:
+    """One decision on one call, from the tool call to the outcome."""
+
+    id: str
+    call_id: str
+    at: float
+    caller: dict[str, Any]
+    fields: dict[str, Any]
+    text: str
+    situation: str
+    action: str
+    confidence: float
+    say: str
+    basis: str | None
+    probabilities: dict[str, float]
+    memory_text: str
+    memory_entries: list[str]
+    memory_mode: str | None
+    memory_prefetched: bool
+    memory_ms: float
+    jev_ms: float
+    jev_input_tokens: int
+    jev_error: str | None = None
+    # What Jev would have done on the written policy alone, with nothing from SenseLab in
+    # front of it: the same call, decided twice, so the page can show the difference.
+    alone_action: str | None = None
+    alone_confidence: float | None = None
+    alone_outcome: dict[str, Any] | None = None
+    outcome: dict[str, Any] | None = None
+    trace_id: str | None = None
+    causal_keys: list[str] = field(default_factory=list)
+    commit_error: str | None = None
+    ended_reason: str | None = None
+
+    def public(self) -> dict[str, Any]:
+        d = asdict(self)
+        d["memory_text"] = self.memory_text[:4000]
+        return d
+
+
+@dataclass
+class _Pending:
+    """A decision waiting for the call to end."""
+
+    decision: LiveDecision
+    case: Case
+    episode: SenseLabEpisode
+    jev: Any  # core.jev.Decision
+
+
+def _safe(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:80]
+
+
+def _int(v: Any, default: int) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return default
+
+
+def _float(v: Any, default: float) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def rehydrate_history(entries: list[Any]) -> ReviewHistory:
+    """Rebuild the review history from the ``seen-*`` entries already in memory, so a
+    restarted server keeps counting where the last one stopped."""
+    hist = ReviewHistory()
+    for e in entries:
+        key = str(getattr(e, "key", ""))
+        text = getattr(e, "value", "")
+        if not key.startswith("seen-") or not isinstance(text, str):
+            continue
+        m = _TALLY_RE.search(text)
+        head = text.split(":", 1)[0]  # "Seen on <situation> with <action>"
+        if not m or not head.startswith("Seen on "):
+            continue
+        situation = head[len("Seen on "):].rsplit(" with ", 1)[0]
+        action_key = m.group("action")
+        worked, total = int(m.group("worked")), int(m.group("total"))
+        reviews = _REVIEW_RE.findall(text.split("Recent reviews: ", 1)[-1])
+        k = (situation, action_key)
+        # The rendered reviews are newest first; keep them oldest first as ``add`` does.
+        hist.seen[k] = [(ok == "worked", note) for ok, note in reversed(reviews)]
+        hist.tally[k] = [worked, total]
+    return hist
+
+
+class LiveAgent:
+    """Jev decides at the decision point of a call; SenseLab remembers what came of it."""
+
+    def __init__(self, settings: S.Settings, *, agent_id: str = DEFAULT_AGENT_ID,
+                 entity_path: str = DEFAULT_ENTITY_PATH, noise: float = 0.0, changed: bool = False,
+                 repair_loop: bool = True, prefetch_workers: int = 24) -> None:
+        S.require(settings)
+        assert settings.typesafe_api_key and settings.amfs_api_key
+        self.scenario = SCENARIO
+        self.agent_id = agent_id
+        self.entity_path = entity_path
+        self.noise = noise
+        self.changed = changed  # has the retention offer gone live in this demo's world
+        self.jev = Jev(settings.typesafe_api_key)
+        self.client = SenseLabClient(settings.amfs_api_key, base_url=settings.amfs_url)
+        self.eval_api = EvalClient(settings.amfs_api_key, base_url=settings.amfs_url) if repair_loop else None
+        self.loop: RepairLoop | None = None
+        self.history = ReviewHistory()
+        self.decisions: list[LiveDecision] = []
+        self.calls: dict[str, dict[str, Any]] = {}
+        self.events: list[dict[str, Any]] = []
+        self._seq = 0
+        self._pending: dict[str, list[_Pending]] = {}  # call id -> decisions awaiting the outcome
+        self._prefetch: dict[str, dict[str, Future[SenseLabEpisode]]] = {}
+        self._slot_fields: dict[tuple[str, str], dict[str, Any]] = {}  # to open a queued slot early
+        self._opening: dict[str, Future[None]] = {}  # call id -> the _open_all job, until the slots exist
+        self._customer: dict[str, Future[cust.CustomerMemory | None]] = {}  # call id -> what we know of the caller
+        self._lock = threading.RLock()
+        self._pool = ThreadPoolExecutor(max_workers=prefetch_workers, thread_name_prefix="prefetch")
+        self.ready_info: dict[str, Any] = {}
+        self.begin_ms: list[float] = []
+        # Vapi records every call; the recording is fetched here so the demo has the audio
+        # next to the decision. ``None`` turns it off.
+        self.recordings_dir: Path | None = S.REPO_ROOT / "results" / "voice"
+        self.prefetch_wait_s = 12.0  # how long a decision waits for a run still being opened
+        # The entity's briefing and entries, fetched once and shared by the runs opened for a
+        # call (the briefing is the slow half of a begin, and the same for every situation).
+        # Refreshed after every sealed outcome, since that is when memory changes.
+        self._warm: Warm | None = None
+        self._warm_future: Future[Warm] | None = None
+        self.warm_max_age_s = 900.0
+
+    # -- lifecycle -------------------------------------------------------------------------
+
+    def start(self) -> dict[str, Any]:
+        t0 = time.perf_counter()
+        seeded = self.client.seed_policy(self.agent_id, self.entity_path, self.scenario)
+        entries = self._warm_up().entries
+        self.history = rehydrate_history(entries)
+        seeded_customers = self.seed_customers()
+        info: dict[str, Any] = {
+            "agent_id": self.agent_id, "entity_path": self.entity_path, "seeded": seeded,
+            "seeded_customers": seeded_customers,
+            "entries": len(entries), "seen_pairs": len(self.history.tally),
+            "lessons": sum(1 for e in entries if str(e.key).startswith(("learned-", "lesson-"))),
+        }
+        if self.eval_api is not None:
+            self.loop = RepairLoop(self.eval_api, agent_id=self.agent_id, scenario=self.scenario,
+                                   look_every=3, judge_mode="continuous")
+            try:
+                info["loop"] = self.loop.ready()
+            except EvalApiError as exc:
+                info["loop_error"] = str(exc)[:200]
+                self.loop = None
+        info["ms"] = round((time.perf_counter() - t0) * 1000)
+        self.ready_info = info
+        self._event("agent_ready", info)
+        return info
+
+    def close(self) -> None:
+        self._pool.shutdown(wait=False, cancel_futures=True)
+        self.jev.close()
+        if self.loop is not None:
+            self.loop.close()
+
+    # -- calls -----------------------------------------------------------------------------
+
+    def _warm_up(self) -> Warm:
+        mem = self.client.memory(self.agent_id)
+        with ThreadPoolExecutor(2, thread_name_prefix="warm") as ex:
+            fb = ex.submit(mem.briefing, entity_path=self.entity_path, compact=True, credit_reuse=True)
+            fl = ex.submit(mem.list, self.entity_path)
+            warm = Warm(briefing=list(fb.result()), entries=list(fl.result()), at=time.time())
+        self._warm = warm
+        return warm
+
+    def _refresh_warm(self) -> None:
+        with self._lock:
+            if self._warm_future is not None and not self._warm_future.done():
+                return
+            self._warm_future = self._pool.submit(self._warm_up)
+
+    def _current_warm(self, *, wait_s: float) -> Warm | None:
+        """The shared briefing and entries, fresh enough to open runs on; waits for a refresh
+        in flight up to *wait_s*."""
+        with self._lock:
+            fut, warm = self._warm_future, self._warm
+        if fut is not None and not fut.done():
+            try:
+                return fut.result(timeout=wait_s)
+            except FuturesTimeout:
+                pass
+            except Exception as exc:  # noqa: BLE001 - begin fetches its own
+                log.warning("warm-up failed: %s", exc)
+        if warm is not None and time.time() - warm.at <= self.warm_max_age_s:
+            return warm
+        return None
+
+    def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall") -> None:
+        with self._lock:
+            self.calls[call_id] = {"id": call_id, "started": time.time(), "caller": asdict(caller),
+                                   "type": call_type, "status": "in-progress", "decisions": 0}
+        self._event("call_started", {"call_id": call_id, "caller": asdict(caller)})
+        if self._current_warm(wait_s=0) is None:
+            self._refresh_warm()
+        with self._lock:
+            self._opening[call_id] = self._pool.submit(self._open_all, call_id, caller)
+            self._customer[call_id] = self._pool.submit(self._fetch_customer, caller)
+
+    def _open_all(self, call_id: str, caller: Caller) -> None:
+        """Open a run for each situation this caller could turn out to be in. The intent is
+        what the account does not know; everything else that names the situation it does."""
+        t0 = time.perf_counter()
+        # A refresh in flight (the previous call's seal just changed what is known) is worth
+        # a short wait; past that, the last briefing will do and the retrieve is fresh anyway.
+        warm = self._current_warm(wait_s=6.0)
+        if warm is None:
+            with self._lock:
+                warm = self._warm
+        opened: list[Future[SenseLabEpisode]] = []
+        # The hosted retrieve queues requests from one account, so six at once come back
+        # together, late. Two lanes in order of likelihood (billing, cancellation, outage,
+        # then the rest) have the common situations ready while the caller is still talking.
+        lanes: list[list[tuple[str, dict[str, Any], Future[SenseLabEpisode]]]] = [[], []]
+        with self._lock:
+            if call_id not in self.calls:
+                return  # ended before the briefing came back
+            slots = self._prefetch.setdefault(call_id, {})
+            for i, fields in enumerate(self._candidate_fields(caller)):
+                situation = situation_of(fields)
+                if situation not in slots:
+                    fut: Future[SenseLabEpisode] = Future()
+                    slots[situation] = fut
+                    self._slot_fields[(call_id, situation)] = fields
+                    opened.append(fut)
+                    lanes[i % len(lanes)].append((situation, fields, fut))
+            self._opening.pop(call_id, None)
+        for lane in lanes:
+            if lane:
+                self._pool.submit(self._open_lane, call_id, t0, lane, warm)
+        self._event("memory_opening", {"call_id": call_id, "runs": len(opened), "warm": warm is not None})
+        for fut in opened:
+            try:
+                fut.result(timeout=60)
+            except Exception:  # noqa: BLE001 - reported where the run is taken
+                pass
+        self._event("memory_ready", {"call_id": call_id, "runs": len(opened), "ms": round((time.perf_counter() - t0) * 1000)})
+
+    def _candidate_fields(self, caller: Caller) -> list[dict[str, Any]]:
+        """Every situation this caller could be in, most common first: small billing disputes
+        and cancellations, then outages and large disputes, then the rest."""
+        order = (("billing_dispute", 50.0), ("cancellation", 0.0), ("outage", 0.0), ("billing_dispute", 400.0),
+                 ("upgrade", 0.0), ("how_to", 0.0))
+        return [{"intent": intent, "tier": caller.tier, "prior_contacts_30d": caller.prior_contacts_30d,
+                 "amount_usd": amount} for intent, amount in order]
+
+    def _open_lane(self, call_id: str, t0: float, lane: list[tuple[str, dict[str, Any], Future[SenseLabEpisode]]],
+                   warm: Warm | None) -> None:
+        for situation, fields, fut in lane:
+            if not fut.set_running_or_notify_cancel():
+                continue
+            try:
+                fut.set_result(self._open_ahead(situation, fields, warm))
+            except Exception as exc:  # noqa: BLE001 - reported where the run is taken
+                fut.set_exception(exc)
+                continue
+            self._event("memory_run_ready", {"call_id": call_id, "situation": situation,
+                                             "ms": round((time.perf_counter() - t0) * 1000)})
+
+    def _open_ahead(self, situation: str, fields: dict[str, Any], warm: Warm | None) -> SenseLabEpisode:
+        """Begin a run for *situation* before the caller has asked for anything."""
+        ep = SenseLabEpisode(self.client, agent_id=self.agent_id, entity_path=self.entity_path, scenario=self.scenario)
+        text = (f"Support call, {fields['intent'].replace('_', ' ')}, from a {fields['tier']} account with "
+                f"{fields['prior_contacts_30d']} contact(s) with support in the last 30 days.")
+        probe = Case(id="ahead", episode=0, text=text, fields=fields, situation=situation, truth="", kind=fields["intent"])
+        t0 = time.perf_counter()
+        self._begin(ep, probe, warm)
+        self.begin_ms.append((time.perf_counter() - t0) * 1000)
+        return ep
+
+    @staticmethod
+    def _begin(ep: SenseLabEpisode, case: Case, warm: Warm | None) -> str:
+        if warm is None:
+            return ep.begin(case)
+        return ep.begin(case, briefing=warm.briefing, entries=warm.entries)
+
+    def _take_prefetched(self, call_id: str, situation: str, *, wait_s: float) -> SenseLabEpisode | None:
+        """The run opened ahead for this situation: ready, or still opening (wait for it up to
+        *wait_s*; a wait is still shorter than a second begin)."""
+        t0 = time.perf_counter()
+        with self._lock:
+            opening = self._opening.get(call_id)
+        if opening is not None and not opening.done():
+            # The runs are about to be opened (the briefing is still coming back): wait for the
+            # slots rather than open a run of our own on top of them.
+            try:
+                opening.result(timeout=wait_s / 2)
+            except Exception:  # noqa: BLE001 - fall through to whatever slots exist
+                pass
+        with self._lock:
+            slots = self._prefetch.get(call_id) or {}
+            fut = slots.pop(situation, None)
+            fields = self._slot_fields.pop((call_id, situation), None)
+        if fut is None:
+            return None
+        if fields is not None and not fut.running() and not fut.done():
+            # Still queued behind the likelier situations: open it now rather than wait its turn.
+            try:
+                claimed = fut.set_running_or_notify_cancel()
+            except RuntimeError:  # the lane got there first
+                claimed = False
+            if claimed:
+                warm = self._current_warm(wait_s=0)
+                try:
+                    ep = self._open_ahead(situation, fields, warm)
+                except Exception as exc:  # noqa: BLE001
+                    fut.set_exception(exc)
+                    log.warning("opening %s failed: %s", situation, exc)
+                    return None
+                fut.set_result(ep)
+                return ep
+        try:
+            return fut.result(timeout=max(0.5, wait_s - (time.perf_counter() - t0)))
+        except FuturesTimeout:
+            log.warning("run for %s still opening after %.0fs; opening another", situation, wait_s)
+            return None
+        except Exception as exc:  # noqa: BLE001 - the decision falls back to a live begin
+            log.warning("opening ahead for %s failed: %s", situation, exc)
+            return None
+
+    def note_speech(self, call_id: str, role: str, status: str) -> None:
+        """Vapi's speech-update: who started or stopped talking. Timeline material."""
+        if call_id in self.calls:
+            self._event("speech", {"call_id": call_id, "role": "assistant" if role in ("assistant", "bot") else "user",
+                                   "status": "started" if status == "started" else "stopped"})
+
+    def note_transcript(self, call_id: str, role: str, text: str) -> None:
+        """A final transcript line from Vapi, kept on the call and announced."""
+        text = " ".join(str(text or "").split())
+        if not text or call_id not in self.calls:
+            return
+        who = "assistant" if role in ("assistant", "bot") else "user"
+        with self._lock:
+            self.calls[call_id].setdefault("live", []).append({"role": who, "text": text, "t": time.time()})
+        self._event("transcript", {"call_id": call_id, "role": who, "text": text[:300]})
+
+    # -- the caller ------------------------------------------------------------------------
+
+    def seed_customers(self) -> list[str]:
+        """Give the demo callers their seeded history, once. Returns the customers seeded."""
+        mem = self.client.memory(self.agent_id)
+        seeded: list[str] = []
+        for persona in cust.PERSONAS:
+            entity = cust.customer_entity(self.entity_path, persona.id)
+            try:
+                if mem.list(entity):
+                    continue
+                for key, value in cust.seed_entries(persona):
+                    mem.write(entity, key, value, confidence=1.0, memory_type="experience")
+                seeded.append(persona.id)
+            except Exception as exc:  # noqa: BLE001 - the call still works without the history
+                log.warning("seeding %s: %s", persona.id, exc)
+        return seeded
+
+    def _fetch_customer(self, caller: Caller) -> cust.CustomerMemory | None:
+        if not caller.customer_id:
+            return None
+        t0 = time.perf_counter()
+        entries = self.client.memory(self.agent_id).list(cust.customer_entity(self.entity_path, caller.customer_id))
+        return cust.CustomerMemory.from_entries(caller.customer_id, entries, ms=round((time.perf_counter() - t0) * 1000))
+
+    def situation_record_words(self, situation: str) -> str:
+        """The situation's record in words, for the conversational model."""
+        rows = [(k[1].split(":", 1)[-1], v) for k, v in self.history.tally.items() if k[0] == situation]
+        if not rows:
+            return ""
+        words = {"resolve_in_bot": "handling it on the call", "transfer_to_agent": "a transfer to an agent",
+                 "schedule_callback": "a scheduled specialist callback", "issue_credit": "a credit"}
+        worked = [f"{words.get(a, a)} ({w} of {t})" for a, (w, t) in rows if t and w / t >= 0.5]
+        failed = [f"{words.get(a, a)} ({w} of {t})" for a, (w, t) in rows if t and w / t < 0.5]
+        out = f"For callers in this situation ({situation.replace('/', ', ').replace('_', ' ')}),"
+        out += f" what has worked: {', '.join(worked)}." if worked else " nothing has worked yet."
+        if failed:
+            out += f" What has not: {', '.join(failed)}."
+        return out
+
+    def recall(self, call_id: str, params: dict[str, Any], *, caller: Caller | None = None) -> str:
+        """Answer ``recall_customer``: what the account knows about this caller, in prose."""
+        with self._lock:
+            call = self.calls.get(call_id)
+        if call is None:
+            self.call_started(call_id, caller or Caller())
+            call = self.calls[call_id]
+        c = Caller.from_mapping(call["caller"])
+        t0 = time.perf_counter()
+        memory: cust.CustomerMemory | None = None
+        with self._lock:
+            fut = self._customer.get(call_id)
+        if fut is not None:
+            try:
+                memory = fut.result(timeout=6.0)
+            except Exception as exc:  # noqa: BLE001 - the brief is the account facts alone
+                log.warning("customer memory for %s: %s", c.customer_id, exc)
+        intent = str(params.get("intent") or "")
+        record = ""
+        if intent in INTENTS:
+            amount = _float(params.get("amount_usd"), 0.0)
+            if intent == "billing_dispute" and not amount:
+                amount = 50.0  # the common case until the caller names a figure
+            record = self.situation_record_words(situation_of({"intent": intent, "tier": c.tier,
+                                                               "prior_contacts_30d": c.prior_contacts_30d,
+                                                               "amount_usd": amount}))
+        text = cust.brief(c, memory, record=record)
+        with self._lock:
+            call["customer_brief"] = text
+            call["customer"] = memory.public() if memory else None
+        self._event("recall", {"call_id": call_id, "customer_id": c.customer_id, "name": c.name,
+                               "contacts": len(memory.contacts) if memory else 0,
+                               "seeded": sum(1 for x in memory.contacts if x["seeded"]) if memory else 0,
+                               "topic": str(params.get("topic") or "")[:120], "record": bool(record),
+                               "ms": round((time.perf_counter() - t0) * 1000), "brief": text[:1800]})
+        return text
+
+    def _note_customer(self, d: LiveDecision, outcome: Outcome) -> None:
+        """After the seal: one line in the caller's own history, so the next call from them
+        starts from what happened on this one."""
+        customer_id = str(d.caller.get("customer_id") or "")
+        if not customer_id:
+            return
+        key, value = cust.contact_entry(d.call_id, intent=str(d.fields.get("intent") or "how_to"),
+                                        summary=d.text.split(". ", 2)[-1][:240] if ". " in d.text else d.text[:240],
+                                        action=d.action, outcome_note=outcome.note, worked=outcome.success)
+        try:
+            self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), key, value,
+                                                    confidence=1.0, memory_type="experience")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("customer note for %s: %s", customer_id, exc)
+            return
+        self._event("customer_noted", {"call_id": d.call_id, "customer_id": customer_id, "key": key, "text": value["text"]})
+
+    # -- the decision ----------------------------------------------------------------------
+
+    def decide(self, call_id: str, params: dict[str, Any], *, caller: Caller | None = None) -> LiveDecision:
+        """Answer ``decide_next_step``: the action, and the line to say."""
+        with self._lock:
+            call = self.calls.get(call_id)
+        if call is None:
+            # A tool call for a call we did not see start (the server restarted, or the
+            # status update was not subscribed). Register it from what the tool call carries.
+            self.call_started(call_id, caller or Caller())
+            call = self.calls[call_id]
+        c = Caller.from_mapping(call["caller"])
+        intent = str(params.get("intent") or "how_to")
+        if intent not in INTENTS:
+            intent = "how_to"
+        fields = {
+            "intent": intent, "tier": c.tier, "prior_contacts_30d": c.prior_contacts_30d,
+            "amount_usd": _float(params.get("amount_usd"), 0.0), "tenure_months": c.tenure_months,
+            "sentiment": str(params.get("sentiment") or "calm"), "channel": "voice",
+        }
+        summary = " ".join(str(params.get("summary") or "").split())[:600]
+        text = (f"Caller on a {c.tier} account, {c.tenure_months} months with us, sounds {fields['sentiment']}. "
+                f"{c.prior_contacts_30d} contact(s) with support in the last 30 days. {summary}")
+        situation = situation_of(fields)
+        self._event("tool_call", {"call_id": call_id, "intent": intent, "situation": situation, "summary": summary[:160]})
+        n = len(self.decisions)
+        case = Case(id=f"{call_id}:{n}", episode=n, text=text, fields=fields, situation=situation,
+                    truth=truth_of(fields, changed=self.changed), kind=intent,
+                    is_tacit=(intent == "billing_dispute" and c.prior_contacts_30d >= 2 and fields["amount_usd"] < 200
+                              and c.tier != "enterprise"),
+                    is_changed=(intent == "cancellation" and c.tier == "consumer" and self.changed))
+
+        t0 = time.perf_counter()
+        ep = self._take_prefetched(call_id, situation, wait_s=self.prefetch_wait_s)
+        prefetched = ep is not None
+        if ep is None:
+            ep = SenseLabEpisode(self.client, agent_id=self.agent_id, entity_path=self.entity_path, scenario=self.scenario)
+            try:
+                self._begin(ep, case, self._current_warm(wait_s=0))
+            except Exception as exc:  # noqa: BLE001 - decide on the policy alone
+                log.warning("begin failed on %s: %s", situation, exc)
+                ep.trace.guidance_error = f"{type(exc).__name__}: {exc}"[:200]
+        memory_ms = (time.perf_counter() - t0) * 1000
+        memory_text = ep.trace.guidance_text
+        # The same call decided twice: Jev alone on the written policy, and Jev with what
+        # SenseLab learned from earlier calls. The second one is the one the caller gets.
+        alone_fut = self._pool.submit(self.jev.decide, build_state(self.scenario, case, "", policy_in_state=True),
+                                      instructions=self.scenario.jev_instructions + MEMORY_NOTE,
+                                      criteria=self.scenario.jev_criteria)
+        state = build_state(self.scenario, case, memory_text, policy_in_state=True)
+        decision = self.jev.decide(state, instructions=self.scenario.jev_instructions + MEMORY_NOTE,
+                                   criteria=self.scenario.jev_criteria, basis=ep.basis_criteria())
+        alone = None
+        try:
+            alone = alone_fut.result(timeout=10)
+        except Exception as exc:  # noqa: BLE001 - the comparison is a bonus
+            log.warning("jev alone: %s", exc)
+        if ep.run is not None:
+            try:
+                ep.decided(decision)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("record decision: %s", exc)
+        live = LiveDecision(
+            id=case.id, call_id=call_id, at=time.time(), caller=asdict(c), fields=fields, text=text,
+            situation=situation, action=decision.action, confidence=round(decision.confidence, 3),
+            say=SAY[decision.action], basis=decision.basis,
+            probabilities={k: round(v, 3) for k, v in decision.probabilities.items()},
+            memory_text=memory_text, memory_entries=list(ep.trace.guidance_entries[:12]),
+            memory_mode=ep.trace.guidance_mode, memory_prefetched=prefetched, memory_ms=round(memory_ms),
+            jev_ms=round(decision.latency_ms), jev_input_tokens=decision.input_tokens, jev_error=decision.error,
+            alone_action=alone.action if alone else None,
+            alone_confidence=round(alone.confidence, 3) if alone else None,
+        )
+        with self._lock:
+            self.decisions.append(live)
+            call["decisions"] += 1
+            call["last_action"] = decision.action
+            self._pending.setdefault(call_id, []).append(_Pending(live, case, ep, decision))
+        self._event("decision", {"call_id": call_id, "situation": situation, "action": decision.action,
+                                 "confidence": live.confidence, "basis": decision.basis, "prefetched": prefetched,
+                                 "memory_ms": live.memory_ms, "jev_ms": live.jev_ms,
+                                 "alone_action": live.alone_action, "alone_confidence": live.alone_confidence})
+        return live
+
+    # -- the outcome -----------------------------------------------------------------------
+
+    def call_ended(self, call_id: str, *, ended_reason: str | None = None, transcript: str | None = None,
+                   artifact: dict[str, Any] | None = None, auto_review: bool = True,
+                   fetch_recording: Callable[[], str | None] | None = None) -> list[LiveDecision]:
+        """The call is over. Drop the runs opened for situations that did not come up and,
+        unless the outcome will be reported later, review each decision the demo world's way.
+        *artifact* is Vapi's: the recording URLs and the transcript, kept with the call."""
+        artifact = artifact or {}
+        transcript = transcript or artifact.get("transcript")
+        # The plain recording URLs are not fetchable without Vapi's credentials; the presigned
+        # ones are, and they may take a few seconds to appear. *fetch_recording* gets one.
+        recording = artifact.get("presignedStereoUrl") or artifact.get("presignedMonoUrl")
+        has_recording = bool(recording or artifact.get("stereoRecordingUrl") or artifact.get("recordingUrl"))
+        with self._lock:
+            self._opening.pop(call_id, None)
+            for fut in (self._prefetch.pop(call_id, None) or {}).values():
+                fut.cancel()  # a queued slot is skipped by its lane; a running one finishes unused
+            for k in [k for k in self._slot_fields if k[0] == call_id]:
+                del self._slot_fields[k]
+            self._customer.pop(call_id, None)
+            call = self.calls.get(call_id)
+            if call is not None:
+                call["status"] = "ended"
+                call["ended"] = time.time()
+                call["ended_reason"] = ended_reason
+                if transcript:
+                    call["transcript"] = transcript[:6000]
+                if recording:
+                    call["recording_url"] = recording
+                if artifact.get("messages"):
+                    call["messages"] = [{"role": m.get("role"), "message": m.get("message") or m.get("content") or "",
+                                         "secondsFromStart": m.get("secondsFromStart"),
+                                         **({"name": m.get("name")} if m.get("name") else {}),
+                                         **({"result": str(m.get("result"))[:300]} if m.get("result") else {})}
+                                        for m in artifact["messages"] if isinstance(m, dict)][:80]
+            pending = list(self._pending.get(call_id) or [])
+        if has_recording and self.recordings_dir is not None:
+            self._pool.submit(self._save_recording, call_id, recording, fetch_recording)
+        for p in pending:
+            p.decision.ended_reason = ended_reason
+        self._event("call_ended", {"call_id": call_id, "ended_reason": ended_reason, "decisions": len(pending)})
+        if not auto_review:
+            return [p.decision for p in pending]
+        return [self._review(p) for p in pending]
+
+    def _save_recording(self, call_id: str, url: str | None, fetch: Callable[[], str | None] | None) -> None:
+        """Download the call's recording, trying for a couple of minutes: the file lands on
+        Vapi's storage shortly after the report, and a presigned URL for it comes from the
+        call record."""
+        assert self.recordings_dir is not None
+        last_error = "no url"
+        for delay in (2, 8, 20, 45, 90):
+            time.sleep(delay)
+            try:
+                if fetch is not None:
+                    url = fetch() or url
+                if not url:
+                    last_error = "no presigned url yet"
+                    continue
+                self.recordings_dir.mkdir(parents=True, exist_ok=True)
+                path = self.recordings_dir / f"{_safe(call_id)}.wav"
+                with httpx.stream("GET", url, timeout=120.0, follow_redirects=True) as r:
+                    r.raise_for_status()
+                    with path.open("wb") as fh:
+                        for chunk in r.iter_bytes():
+                            fh.write(chunk)
+                rel = str(path.relative_to(S.REPO_ROOT))
+                with self._lock:
+                    call = self.calls.get(call_id)
+                    if call is not None:
+                        call["recording_file"] = rel
+                        call["recording_url"] = url
+                self._event("recording_saved", {"call_id": call_id, "file": rel, "bytes": path.stat().st_size})
+                return
+            except Exception as exc:  # noqa: BLE001 - try again after the next delay
+                last_error = f"{type(exc).__name__}: {exc}"[:160]
+        log.warning("recording for %s not saved: %s", call_id, last_error)
+
+    def _loop_look(self, episode: int, trace_id: str | None, reported_success: bool) -> None:
+        assert self.loop is not None
+        try:
+            self.loop.after_seal(episode, trace_id, reported_success=reported_success)
+            note = self.loop.look(episode)
+            if note.get("changed") or note.get("canary_active"):
+                self._event("repair_loop", note)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("repair loop: %s", exc)
+
+    def end_call_later(self, call_id: str, **kwargs: Any) -> None:
+        """``call_ended`` off the request path: the review and the seal are a few seconds of
+        SenseLab calls, and the webhook (or the page) should not wait on them."""
+        def run() -> None:
+            try:
+                self.call_ended(call_id, **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("call_ended %s: %s", call_id, exc)
+        self._pool.submit(run)
+
+    def _review(self, p: _Pending) -> LiveDecision:
+        """What happened next, as the demo's world has it: the scenario's review of the action
+        against the hidden right answer, with the configured share of wrong reviews."""
+        rng = random.Random(f"live:{p.case.id}:review")
+        outcome = self.scenario.review(p.case, p.decision.action, rng, noise=self.noise)
+        if p.decision.alone_action:
+            rng = random.Random(f"live:{p.case.id}:review")  # the same review, of the other action
+            alone = self.scenario.review(p.case, p.decision.alone_action, rng, noise=self.noise)
+            p.decision.alone_outcome = {"action": p.decision.alone_action, "success": alone.success,
+                                        "severity": alone.severity, "cost_usd": alone.cost_usd, "note": alone.note}
+        return self.report_outcome(p.decision.id, outcome, source="demo world")
+
+    def report_outcome(self, decision_id: str, outcome: Outcome, *, source: str = "review") -> LiveDecision:
+        """Seal the run with the outcome, write the lesson and the review record."""
+        with self._lock:
+            found = next(((cid, p) for cid, ps in self._pending.items() for p in ps if p.decision.id == decision_id),
+                         None)
+            if found is None:
+                raise KeyError(decision_id)
+            cid, p = found
+            self._pending[cid].remove(p)
+            if not self._pending[cid]:
+                del self._pending[cid]
+        d = p.decision
+        d.outcome = {**outcome.to_row(), "source": source, "at": time.time()}
+        t0 = time.perf_counter()
+        if p.episode.run is None:
+            d.commit_error = "no run: guidance failed at begin"
+        else:
+            trace = p.episode.complete(p.case, p.jev, outcome, history=self.history, task_input=p.case.text)
+            d.trace_id = trace.trace_id
+            d.causal_keys = list(trace.causal_keys)
+            d.commit_error = trace.commit_error
+            if self.loop is not None:
+                # The platform's side (judge, fixes, canaries) can take a while; it runs off the
+                # call's path so the outcome shows the moment the trace is sealed.
+                self._pool.submit(self._loop_look, p.case.episode, trace.trace_id, outcome.success)
+            self._refresh_warm()  # the seal wrote the lesson and the record; the next call reads them
+        self._pool.submit(self._note_customer, d, outcome)
+        self._event("outcome", {"call_id": d.call_id, "decision": d.id, "situation": d.situation, "action": d.action,
+                                "success": outcome.success, "severity": outcome.severity, "note": outcome.note,
+                                "cost_usd": outcome.cost_usd, "trace_id": d.trace_id, "causal_keys": d.causal_keys,
+                                "source": source, "seal_ms": round((time.perf_counter() - t0) * 1000),
+                                "alone": d.alone_outcome})
+        return d
+
+    def pending_decisions(self, call_id: str | None = None) -> list[LiveDecision]:
+        with self._lock:
+            if call_id is not None:
+                return [p.decision for p in self._pending.get(call_id, [])]
+            return [p.decision for ps in self._pending.values() for p in ps]
+
+    # -- the world -------------------------------------------------------------------------
+
+    def set_changed(self, changed: bool) -> None:
+        self.changed = changed
+        self._event("world_changed", {"changed": changed,
+                                      "note": self.scenario.change_rule if changed else "retention offer withdrawn"})
+
+    def memory_snapshot(self) -> dict[str, Any]:
+        """What is in memory now, for the page: lessons and review records by situation."""
+        mem = self.client.memory(self.agent_id)
+        try:
+            entries = mem.list(self.entity_path)
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)[:200]}
+        lessons, seen, policy, other = [], [], [], []
+        for e in entries:
+            key = str(e.key)
+            row = {"key": key, "value": e.value if isinstance(e.value, (dict, str)) else str(e.value),
+                   "confidence": getattr(e, "confidence", None), "version": getattr(e, "version", None)}
+            if key.startswith(("learned-", "lesson-")):
+                if isinstance(e.value, dict):
+                    v = e.value
+                    row["value"] = (f"When: {v.get('situation')}. {str(v.get('action') or '').split(':', 1)[-1]} "
+                                    f"{'worked' if v.get('worked') else 'did not work'}. {v.get('text') or ''}")
+                lessons.append(row)
+            elif key.startswith("seen-"):
+                seen.append(row)
+            elif key.startswith("policy-"):
+                policy.append(row)
+            else:
+                other.append(row)
+        return {"entity_path": self.entity_path, "lessons": lessons, "seen": seen, "policy": policy, "other": other[:40]}
+
+    def loop_snapshot(self) -> dict[str, Any]:
+        if self.loop is None:
+            return {"enabled": False}
+        try:
+            note = self.loop.look(-1)
+        except Exception as exc:  # noqa: BLE001
+            return {"enabled": True, "error": str(exc)[:200]}
+        return {"enabled": True, **note, "fixes_seen": list(self.loop.fixes_seen.values())[-10:]}
+
+    def state(self) -> dict[str, Any]:
+        with self._lock:
+            calls = sorted(self.calls.values(), key=lambda c: -c["started"])[:20]
+            decisions = [d.public() for d in self.decisions[-40:]]
+            events = self.events[-80:]
+        begin = sorted(self.begin_ms)
+        return {
+            "agent_id": self.agent_id, "entity_path": self.entity_path, "changed": self.changed, "noise": self.noise,
+            "dashboard": f"{S.DASHBOARD_URL}",
+            "calls": calls, "decisions": decisions, "events": events,
+            "begin_ms_median": (begin[len(begin) // 2] if begin else None), "begin_count": len(begin),
+            "ready": self.ready_info,
+        }
+
+    def events_since(self, seq: int) -> list[dict[str, Any]]:
+        """Events after *seq*, for the page's live view (it polls this a few times a second)."""
+        with self._lock:
+            return [e for e in self.events if e["seq"] > seq]
+
+    def _event(self, kind: str, data: dict[str, Any]) -> None:
+        with self._lock:
+            self._seq += 1
+            self.events.append({"seq": self._seq, "t": time.time(), "kind": kind, **data})
+            del self.events[:-500]
+        log.info("%s %s", kind, {k: v for k, v in data.items() if k not in ("memory_text",)})
+
+
+def new_call_id() -> str:
+    return f"local-{uuid.uuid4().hex[:12]}"
+
+
+__all__ = ["Caller", "DEFAULT_AGENT_ID", "DEFAULT_ENTITY_PATH", "INTENTS", "LiveAgent", "LiveDecision", "SAY",
+           "new_call_id", "rehydrate_history"]

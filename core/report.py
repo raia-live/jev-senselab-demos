@@ -136,8 +136,34 @@ def aggregate(rows: list[dict[str, Any]], meta: dict[str, Any]) -> dict[str, Any
             agg[f"{k}_range"] = _range(vals)
         agg["recover_cycle1_unrecovered"] = sum(1 for m in per_seed.values() if m["recover_cycle1"] is None)
         agg["recover_cycle2_unrecovered"] = sum(1 for m in per_seed.values() if m["recover_cycle2"] is None and m["changed_accuracy"] is not None)
+        team = team_metrics([r for rs in seeds.values() for r in rs])
+        if team:
+            agg["team"] = team
         out[arm] = agg
     return out
+
+
+def team_metrics(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """How a team of agents fared on one stream: wrong decisions per agent, how many of the
+    agents paid the tacit rule's first miss themselves, and the losses after the change.
+    ``None`` unless the rows carry an ``agent`` field (a ``--agents`` run)."""
+    main = [r for r in rows if not r.get("resume") and r.get("agent") is not None]
+    if not main:
+        return None
+    agents = sorted({int(r["agent"]) for r in main})
+    per_agent = {a: sum(1 for r in main if int(r["agent"]) == a and not r.get("correct")) for a in agents}
+    first_miss = 0
+    for a in agents:
+        tacit = sorted((r for r in main if int(r["agent"]) == a and r.get("is_tacit")), key=lambda r: r["episode"])
+        if tacit and not tacit[0].get("correct"):
+            first_miss += 1
+    return {
+        "agents": len(agents),
+        "wrong_per_agent": per_agent,
+        "tacit_first_miss_agents": first_miss,
+        "tacit_wrong": sum(1 for r in main if r.get("is_tacit") and not r.get("correct")),
+        "changed_wrong": sum(1 for r in main if r.get("is_changed") and not r.get("correct")),
+    }
 
 
 def curves(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -152,17 +178,21 @@ def curves(rows: list[dict[str, Any]]) -> dict[str, Any]:
         episodes = sorted({ep for s in seeds.values() for ep in s})
         acc_series: list[float | None] = []
         usd_series: list[float | None] = []
+        wrong_series: list[float | None] = []
         for ep in episodes:
-            accs, usds = [], []
+            accs, usds, wrongs = [], [], []
             for s in seeds.values():
                 if ep not in s:
                     continue
                 window = [s[e] for e in range(max(0, ep - WINDOW + 1), ep + 1) if e in s]
                 accs.append(sum(1 for r in window if r.get("correct")) / len(window))
                 usds.append(sum(float(s[e].get("cost_usd") or 0) for e in s if e <= ep))
+                wrongs.append(sum(1 for e in s if e <= ep and not s[e].get("correct")))
             acc_series.append(statistics.fmean(accs) if accs else None)
             usd_series.append(statistics.fmean(usds) if usds else None)
-        out[arm] = {"episodes": episodes, "rolling_accuracy": acc_series, "cumulative_usd": usd_series}
+            wrong_series.append(statistics.fmean(wrongs) if wrongs else None)
+        out[arm] = {"episodes": episodes, "rolling_accuracy": acc_series, "cumulative_usd": usd_series,
+                    "cumulative_wrong": wrong_series}
     return out
 
 
@@ -302,11 +332,18 @@ def console_summary(metrics: dict[str, Any], meta: dict[str, Any], life: dict[st
             f"{_fmt(m['churn_tacit'], 'pct'):>6s} {_fmt(m['recover_cycle1'], 'ep'):>5s} {_fmt(m['recover_cycle2'], 'ep'):>5s} "
             f"{_fmt(m['confidently_wrong'], 'pct'):>10s} {_fmt(m['mean_state_bytes'], 'int'):>8s}"
         )
+    teams = {arm: metrics[arm]["team"] for arm in arms if metrics[arm].get("team")}
+    if teams:
+        lines.append("")
+        lines.append(f"{next(iter(teams.values()))['agents']} instances on the stream (wrong per instance · instances that paid the tacit rule's first miss · wrong after the change):")
+        for arm, t in teams.items():
+            per = " / ".join(str(t["wrong_per_agent"][a]) for a in sorted(t["wrong_per_agent"]))
+            lines.append(f"  {arm:<26s} {per:<12s} {t['tacit_first_miss_agents']} of {t['agents']}   {t['changed_wrong']}")
     if life.get("fixes"):
         lines.append("")
         lines.append("repair loop fixes:")
         for f in life["fixes"]:
-            lines.append(f"  s{f['seed']} {f['id']} {f['status']:<18s} lever={f['lever']} test={f['test']} canary={f['canary']} {f['canary_arms']} {f['title'][:70]}")
+            lines.append(f"  s{f['seed']} {f['id']} {str(f['status']):<18s} lever={f['lever']} test={f['test']} canary={f['canary']} {f['canary_arms']} {f['title'][:70]}")
     return "\n".join(lines)
 
 
@@ -386,7 +423,9 @@ def render_scenario_html(meta: dict[str, Any], metrics: dict[str, Any], cur: dic
     h.append(f"<h1>{html.escape(sc['title'])}</h1>")
     seeds = meta.get("seeds") or []
     seed_label = f"seed {seeds[0]}" if len(seeds) == 1 else f"seeds {seeds}"
-    h.append(f"<p class='sub'>run {html.escape(str(meta.get('run_id')))} · {meta.get('episodes')} episodes · {seed_label} · "
+    agents = int(meta.get("agents") or 1)
+    agents_label = f" · {agents} instances on the stream" if agents > 1 else ""
+    h.append(f"<p class='sub'>run {html.escape(str(meta.get('run_id')))} · {meta.get('episodes')} episodes · {seed_label}{agents_label} · "
              f"change at {change_at} · probe at {probe_at} · review noise {meta.get('noise')} · Jev {html.escape(str(meta.get('jev_model')))}</p>")
     h.append("<div class='card'><b>Tacit rule the policy misses:</b> " + html.escape(sc.get("tacit_rule", "")) +
              "<br><b>Change half-way:</b> " + html.escape(sc.get("change_rule", "")) +
@@ -411,10 +450,29 @@ def render_scenario_html(meta: dict[str, Any], metrics: dict[str, Any], cur: dic
              "the arms only ever saw the review. Recover = episodes from the start of the cycle until the arm gets 4 of the next 5 such cases right. "
              "Churn = share of consecutive same-truth tacit cases on which the action flipped.</p>")
 
+    # a team on one stream
+    teams = {arm: metrics[arm]["team"] for arm in arms if metrics[arm].get("team")}
+    if agents > 1 and teams:
+        h.append(f"<h2>{agents} instances, one stream</h2>")
+        h.append(f"<div class='card'>The same {meta.get('episodes')} cases, handed round-robin to {agents} instances of the agent instead of one. "
+                 "A lookup or history store is local to the instance that built it, so each of those learns only from "
+                 "its own cases and each pays for the tacit rule and the change separately. The SenseLab arm is one agent "
+                 "whichever instance is deciding: one memory, one repair loop over every instance's outcomes, the instance "
+                 "recorded on the trace. What one instance's review teaches is in the next one's memory before the next case arrives.</div>")
+        h.append("<table><tr><th>arm</th><th>wrong decisions</th><th>per instance</th><th>instances that paid the tacit rule's first miss</th>"
+                 "<th>wrong on tacit cases</th><th>wrong after the change</th></tr>")
+        for arm, t in teams.items():
+            per = " / ".join(str(t["wrong_per_agent"][a]) for a in sorted(t["wrong_per_agent"]))
+            h.append(f"<tr><td><span style='color:{ARM_COLORS.get(arm, '#333')}'>●</span> {html.escape(arm)}</td>"
+                     f"<td>{_fmt(metrics[arm]['wrong'], 'int')}</td><td style='white-space:nowrap'>{per}</td><td>{t['tacit_first_miss_agents']} of {t['agents']}</td>"
+                     f"<td>{t['tacit_wrong']}</td><td>{t['changed_wrong']}</td></tr>")
+        h.append("</table>")
+
     # charts
-    h.append("<h2>Learning curves</h2><div class='card'><canvas id='acc'></canvas></div>")
+    h.append("<h2>Learning curves</h2><div class='card'><canvas id='wrong'></canvas></div>")
+    h.append("<div class='card'><canvas id='acc'></canvas></div>")
     h.append("<div class='card'><canvas id='usd'></canvas></div>")
-    datasets_acc, datasets_usd = [], []
+    datasets_acc, datasets_usd, datasets_wrong = [], [], []
     for arm in arms:
         c = cur.get(arm)
         if not c:
@@ -424,6 +482,8 @@ def render_scenario_html(meta: dict[str, Any], metrics: dict[str, Any], cur: dic
                              "borderColor": color, "backgroundColor": color, "pointRadius": 0, "borderWidth": 2, "tension": 0.2, "spanGaps": True})
         datasets_usd.append({"label": arm, "data": [{"x": e, "y": (None if v is None else round(v, 1))} for e, v in zip(c["episodes"], c["cumulative_usd"], strict=False)],
                              "borderColor": color, "backgroundColor": color, "pointRadius": 0, "borderWidth": 2, "tension": 0.1, "spanGaps": True})
+        datasets_wrong.append({"label": arm, "data": [{"x": e, "y": (None if v is None else round(v, 2))} for e, v in zip(c["episodes"], c.get("cumulative_wrong") or [], strict=False)],
+                               "borderColor": color, "backgroundColor": color, "pointRadius": 0, "borderWidth": 2, "tension": 0.1, "spanGaps": True})
     # fix lifecycle markers on the SenseLab accuracy curve
     markers = []
     rsi = cur.get("jev+senselab")
@@ -441,7 +501,8 @@ def render_scenario_html(meta: dict[str, Any], metrics: dict[str, Any], cur: dic
         datasets_acc.append({"label": "repair loop events (RSI)", "data": markers, "type": "scatter", "pointRadius": 5,
                              "pointStyle": "rectRot", "borderColor": "#0f9d58", "backgroundColor": "#fff", "borderWidth": 2, "showLine": False})
     h.append("<script>")
-    h.append(f"const ACC={_js(datasets_acc)}; const USD={_js(datasets_usd)}; const CHANGE={change_at}; const PROBE={probe_at};")
+    h.append(f"const ACC={_js(datasets_acc)}; const USD={_js(datasets_usd)}; const WRONG={_js(datasets_wrong)}; "
+             f"const CHANGE={change_at}; const PROBE={probe_at};")
     h.append("""
 const vline = {id:'vline', afterDraw(chart){const {ctx, chartArea:{top,bottom}, scales:{x}} = chart;
   for (const [v,label,color] of [[CHANGE,'change','#d93025'],[PROBE,'held-out phrasing','#8e24aa']]) { if (v<0) continue;
@@ -451,7 +512,7 @@ function mk(id, datasets, ylabel, max){ new Chart(document.getElementById(id), {
   options:{parsing:false, animation:false, responsive:true, interaction:{mode:'nearest', intersect:false},
   scales:{x:{type:'linear', title:{display:true,text:'episode'}}, y:{min:0, max:max, title:{display:true,text:ylabel}}},
   plugins:{legend:{position:'bottom'}, tooltip:{callbacks:{label:(c)=> c.raw.label ? c.raw.label : `${c.dataset.label}: ${c.parsed.y}`}}}}, plugins:[vline]}); }
-mk('acc', ACC, 'rolling accuracy (window 10)', 1.0); mk('usd', USD, 'cumulative dollars lost', undefined);
+mk('wrong', WRONG, 'cumulative wrong decisions', undefined); mk('acc', ACC, 'rolling accuracy (window 10)', 1.0); mk('usd', USD, 'cumulative dollars lost', undefined);
 </script>""")
 
     # memory footprint against Jev's input limit
@@ -550,7 +611,9 @@ def render_index_html(run_id: str, summaries: dict[str, dict[str, Any]]) -> str:
         metrics = s["metrics"]
         arms = sorted(metrics, key=lambda a: ARM_ORDER.index(a) if a in ARM_ORDER else 99)
         h.append(f"<h2><a href='{name}/report.html'>{html.escape(meta['scenario']['title'])}</a></h2>")
-        h.append(f"<p class='sub'>{html.escape(name)} · run {html.escape(str(meta.get('run_id', run_id)))} · {meta.get('episodes', '?')} episodes · "
+        agents = int(meta.get("agents") or 1)
+        extra = (f" · {agents} instances" if agents > 1 else "") + (f" · review noise {meta['noise']}" if meta.get("noise") is not None else "")
+        h.append(f"<p class='sub'>{html.escape(name)} · run {html.escape(str(meta.get('run_id', run_id)))} · {meta.get('episodes', '?')} episodes{extra} · "
                  f"arms: {html.escape(', '.join(arms))}</p>")
         h.append("<table><tr><th>arm</th><th>wrong decisions</th><th>dollars lost</th><th>accuracy</th><th>tacit</th><th>changed</th><th>held-out</th><th>recover 1</th><th>recover 2</th></tr>")
         for arm in arms:

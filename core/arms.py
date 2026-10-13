@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import random
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,12 +29,13 @@ MEMORY_NOTE = (
     "bears on this case, let it take precedence over the written policy. This case's situation "
     "is named at the top of the memory; a lesson's 'When:' names the situation it is about, and "
     "a lesson about a different situation does not apply here. Read a tally like "
-    "this. An action that has worked many times and failed only on its single most recent try "
-    "has most likely met a wrong review: keep taking it, even if memory suggests exploring. An "
-    "action that has failed on its last two or more tries has stopped working: the policy rule "
-    "behind it is stale, do not take it again, and pick the action the failure reviews point "
-    "to (what the customer actually did) rather than an untried one at random. A tally of one "
-    "or two outcomes is weak evidence either way; the review text says what actually happened."
+    "this. An action that has worked many times and failed only on its last one or two tries "
+    "has most likely met wrong reviews: keep taking it, even if memory suggests exploring. An "
+    "action that has failed on its last three tries, or on its last two when it had worked "
+    "fewer than three times, has stopped working: the policy rule behind it is stale, do not "
+    "take it again, and pick the action the failure reviews point to (what the customer "
+    "actually did) rather than an untried one at random. A tally of one or two outcomes is "
+    "weak evidence either way; the review text says what actually happened."
 )
 
 
@@ -206,6 +208,7 @@ class SenseLabArm(Arm):
         self.entity_path = ctx.entity_path(self.slug)
         self._episode: SenseLabEpisode | None = None
         self.history = ReviewHistory()
+        self.worker: int | None = None  # which of a team's workers is deciding (TeamArm sets it)
         k = ctx.knobs
         # The repair loop is the product: judge, incident, corrective entry, Tier 1 test,
         # canary, ship, recheck — all on the SenseLab side. This process only watches it.
@@ -230,7 +233,8 @@ class SenseLabArm(Arm):
         return info
 
     def memory_text(self, episode: int, case: Case) -> str:
-        self._episode = SenseLabEpisode(self.client, agent_id=self.agent_id, entity_path=self.entity_path, scenario=self.scenario)
+        self._episode = SenseLabEpisode(self.client, agent_id=self.agent_id, entity_path=self.entity_path,
+                                        scenario=self.scenario, worker=self.worker)
         return self._episode.begin(case)
 
     def basis(self) -> dict[str, str] | None:
@@ -262,6 +266,107 @@ class SenseLabArm(Arm):
         return report
 
 
+def _items(value: Any) -> list[Any]:
+    """The list inside an eval API collection answer (``{"items": [...]}`` or a bare list)."""
+    if isinstance(value, dict):
+        for k in ("items", "incidents", "behaviors"):
+            if isinstance(value.get(k), list):
+                return list(value[k])
+        return []
+    return list(value) if isinstance(value, list) else []
+
+
+def merge_loop_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    """One loop record for a team: the members' events, fixes, verdicts, incidents and
+    behaviours side by side, in the shape ``core.report`` reads for a single agent."""
+    reports = [r for r in reports if r]
+    if not reports:
+        return {}
+    if len(reports) == 1:
+        return reports[0]
+    out: dict[str, Any] = {k: v for k, v in reports[0].items()
+                           if k in ("policy", "canary", "judge_mode", "contract")}
+    out["agent_id"] = reports[0].get("agent_id")
+    out["agents"] = [{"agent_id": r.get("agent_id"), "sessions_sealed": r.get("sessions_sealed"),
+                      "verdict_summary": r.get("verdict_summary"), "lifecycle": r.get("lifecycle")} for r in reports]
+    out["sessions_sealed"] = sum(int(r.get("sessions_sealed") or 0) for r in reports)
+    out["events"] = [dict(ev, agent=i) for i, r in enumerate(reports) for ev in (r.get("events") or [])]
+    out["fixes"] = [dict(f, agent=i) for i, r in enumerate(reports) for f in (r.get("fixes") or [])]
+    out["verdicts"] = [dict(v, agent=i) for i, r in enumerate(reports) for v in (r.get("verdicts") or [])]
+    vs: dict[str, Any] = {"graded": 0, "failed": 0, "errors": 0, "judge_usd": 0.0, "disagreements": 0}
+    cats: Counter[str] = Counter()
+    for r in reports:
+        s = r.get("verdict_summary") or {}
+        for k in ("graded", "failed", "errors", "disagreements"):
+            vs[k] += int(s.get(k) or 0)
+        vs["judge_usd"] += float(s.get("judge_usd") or 0)
+        cats.update({str(k): int(v) for k, v in (s.get("categories") or {}).items()})
+    vs["judge_usd"] = round(vs["judge_usd"], 4)
+    vs["categories"] = dict(cats.most_common(8))
+    out["verdict_summary"] = vs
+    life: Counter[str] = Counter()
+    for r in reports:
+        life.update({str(k): int(v) for k, v in (r.get("lifecycle") or {}).items()})
+    out["lifecycle"] = dict(life)
+    for name in ("incidents", "behaviors"):
+        out[name] = {"items": [dict(it, agent=i) if isinstance(it, dict) else it
+                               for i, r in enumerate(reports) for it in _items(r.get(name))]}
+    out["final_look"] = [r.get("final_look") for r in reports]
+    out["judge_pending_at_end"] = sum(int(r.get("judge_pending_at_end") or 0) for r in reports)
+    return out
+
+
+class TeamArm(Arm):
+    """The same stream handled by several instances of the agent, round-robin: case 0 to
+    worker 0, case 1 to worker 1, and so on.
+
+    What differs between arms is where the memory lives. A lookup or history store is local
+    to the process that built it, so each worker of those arms keeps its own and learns only
+    from its own cases. The SenseLab arm is one agent whichever worker is deciding: one
+    identity, one memory entity, one repair loop over every worker's outcomes. The worker
+    is an attribute on the trace. A lesson one worker learns from its review is in the next
+    worker's memory before the next case arrives.
+    """
+
+    def __init__(self, spec: str, ctx: RunContext, agents: int) -> None:
+        super().__init__(ctx)
+        if agents < 2:
+            raise ValueError("a team needs at least two agents")
+        self.agents = agents
+        if spec == "senselab":
+            self.members: list[Arm] = [ARM_FACTORIES[spec](ctx)]
+        else:
+            self.members = [ARM_FACTORIES[spec](ctx) for _ in range(agents)]
+        lead = self.members[0]
+        self.name = lead.name
+        self.slug = lead.slug
+
+    def member(self, episode: int) -> Arm:
+        worker = episode % self.agents
+        m = self.members[worker % len(self.members)]
+        if isinstance(m, SenseLabArm):
+            m.worker = worker
+        return m
+
+    def setup(self) -> dict[str, Any]:
+        infos = [m.setup() for m in self.members]
+        info = dict(infos[0])
+        info["workers"] = self.agents
+        info["stores"] = len(self.members)
+        return info
+
+    def episode(self, episode: int, case: Case) -> dict[str, Any]:
+        row = self.member(episode).episode(episode, case)
+        row["agent"] = episode % self.agents
+        return row
+
+    def after_episode(self, episode: int) -> dict[str, Any] | None:
+        return self.member(episode).after_episode(episode)
+
+    def finish(self) -> dict[str, Any]:
+        return merge_loop_reports([m.finish() for m in self.members])
+
+
 ARM_FACTORIES: dict[str, Any] = {
     "jev": lambda ctx: JevArm(ctx),
     "retrieval": lambda ctx: RetrievalArm(ctx, "text-k8"),
@@ -274,11 +379,13 @@ ARM_FACTORIES: dict[str, Any] = {
 DEFAULT_ARMS = ["jev", "retrieval:meta-k8", "senselab"]
 
 
-def make_arm(spec: str, ctx: RunContext) -> Arm:
+def make_arm(spec: str, ctx: RunContext, *, agents: int = 1) -> Arm:
     if spec not in ARM_FACTORIES:
         raise SystemExit(f"unknown arm {spec!r}; choose from {', '.join(ARM_FACTORIES)}")
+    if agents > 1:
+        return TeamArm(spec, ctx, agents)
     return ARM_FACTORIES[spec](ctx)
 
 
 __all__ = ["ARM_FACTORIES", "DEFAULT_ARMS", "Arm", "HistoryArm", "JevArm", "LoopKnobs", "RetrievalArm", "RunContext",
-           "SenseLabArm", "build_state", "make_arm", "S"]
+           "SenseLabArm", "TeamArm", "build_state", "make_arm", "merge_loop_reports", "S"]

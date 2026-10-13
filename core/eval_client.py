@@ -51,7 +51,7 @@ class EvalClient:
                     continue
                 raise EvalApiError(0, f"{type(exc).__name__}: {exc}", path) from exc
             if resp.status_code in (429, 502, 503, 504) and attempt < retries:
-                wait = min(float(resp.headers.get("Retry-After", 1.0)) * (1.5 ** attempt), 20.0)
+                wait = min(max(1.0, float(resp.headers.get("Retry-After", 1.0))) * (1.5 ** attempt), 20.0)
                 time.sleep(wait)
                 continue
             if resp.status_code >= 400:
@@ -71,8 +71,9 @@ class EvalClient:
         """Can this key run the repair loop? ``{"ok", "readiness", "budget", "error"}``."""
         out: dict[str, Any] = {"ok": False, "readiness": None, "budget": None, "error": None}
         try:
-            out["readiness"] = self._call("GET", "/api/v1/eval/readiness", retries=1, timeout=20.0)
-            out["budget"] = self._call("GET", "/api/v1/eval/budget", retries=1, timeout=20.0)
+            # A 429 here is load, not a missing capability; give it a few tries before saying no.
+            out["readiness"] = self._call("GET", "/api/v1/eval/readiness", retries=4, timeout=20.0)
+            out["budget"] = self._call("GET", "/api/v1/eval/budget", retries=4, timeout=20.0)
         except EvalApiError as exc:
             out["error"] = f"{exc.status}: {str(exc.detail)[:200]}"
             return out

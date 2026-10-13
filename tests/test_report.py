@@ -22,6 +22,7 @@ from core.senselab import (
     split_priors,
     strip_retry_lines,
     tag_entries,
+    turned_streak,
 )
 
 
@@ -69,6 +70,50 @@ def test_build_scenario_and_index(tmp_path: Path) -> None:
     assert "memory_shipped" in html and "Inbound lead routing" in html
     report.build_all(run, quiet=True)
     assert (run / "index.html").exists()
+
+
+def test_team_metrics_and_section(tmp_path: Path) -> None:
+    from core.arms import merge_loop_reports
+
+    run = tmp_path / "run"
+    sdir = run / "lead_routing"
+    sdir.mkdir(parents=True)
+    # Three agents, round-robin. The lookup pays the first miss once per agent (eps 0, 1, 2);
+    # the shared memory pays it once (ep 0) and agent 1 and 2 already know.
+    lookup = _rows("jev+retrieval:meta-k8", 11, [False, False, False] + [True] * 9)
+    shared = _rows("jev+senselab", 11, [False] + [True] * 11)
+    for r in lookup + shared:
+        r["agent"] = r["episode"] % 3
+    (sdir / "episodes.jsonl").write_text("\n".join(json.dumps(r) for r in lookup + shared) + "\n")
+    (sdir / "meta.json").write_text(json.dumps({
+        "run_id": "t", "episodes": 12, "seeds": [11], "agents": 3, "change_at": -1, "probe_at": -1, "noise": 0.1,
+        "jev_model": "jev-x", "scenario": {"name": "lead_routing", "title": "Inbound lead routing", "tacit_rule": "t",
+                                           "change_rule": "c", "expected_fix": "f", "policy": []},
+    }))
+    merged = merge_loop_reports([
+        {"agent_id": "a0", "sessions_sealed": 4, "events": [{"kind": "x", "episode": 0}], "fixes": [],
+         "verdict_summary": {"graded": 4, "failed": 1, "judge_usd": 0.01, "categories": {"c1": 1}}, "incidents": {"items": [{"id": 1}]}},
+        {"agent_id": "a1", "sessions_sealed": 4, "events": [], "fixes": [{"id": "f1"}],
+         "verdict_summary": {"graded": 4, "failed": 0, "judge_usd": 0.02, "categories": {}}, "incidents": []},
+        {"agent_id": "a2", "sessions_sealed": 4, "events": [], "fixes": [], "verdict_summary": {"graded": 4, "failed": 1, "judge_usd": 0.01,
+                                                                                                "categories": {"c1": 1}}},
+    ])
+    assert merged["sessions_sealed"] == 12 and merged["verdict_summary"]["graded"] == 12
+    assert merged["verdict_summary"]["failed"] == 2 and merged["verdict_summary"]["categories"] == {"c1": 2}
+    assert merged["events"][0]["agent"] == 0 and merged["fixes"][0]["agent"] == 1
+    assert len(merged["incidents"]["items"]) == 1
+    (sdir / "loop-senselab-s11.json").write_text(json.dumps(merged))
+
+    summary = report.build_scenario(sdir, quiet=True)
+    assert summary is not None
+    t = summary["metrics"]["jev+retrieval:meta-k8"]["team"]
+    assert t["agents"] == 3 and t["tacit_first_miss_agents"] == 3 and t["wrong_per_agent"] == {0: 1, 1: 1, 2: 1}
+    t = summary["metrics"]["jev+senselab"]["team"]
+    assert t["tacit_first_miss_agents"] == 1 and t["wrong_per_agent"] == {0: 1, 1: 0, 2: 0}
+    html = (sdir / "report.html").read_text()
+    assert "3 instances, one stream" in html and "3 of 3" in html and "1 of 3" in html
+    assert "cumulative wrong decisions" in html
+    assert summary["lifecycle"]["verdicts"]["11"]["graded"] == 12
 
 
 def test_tag_entries_numbers_in_rendered_order() -> None:
@@ -147,9 +192,17 @@ def test_noise_guard_leaves_the_record_only_when_nothing_in_it_works() -> None:
     out = hold_action("Recommendation: explore. regime shift suspected.\nUntried: decide:partner", held)
     assert out == ("Recommendation: act -> decide:self_serve. decide:self_serve has worked 1 of 2 times here and failed only on "
                    "its latest try; one failure after a working record is more likely a wrong review than a change.")
-    # lr5 ep 66-67: the only action tried has failed its last two — a change; the explore stands.
-    turned = [seen("mid-market-na", "route-to-ae", "Seen on mid_market/na with decide:route_to_ae: worked 20 of 22 times; the last 2 did not. Recent reviews: x")]
+    # A proven action that failed its last two is held: two wrong reviews in a row happen.
+    doubted = [seen("mid-market-na", "route-to-ae", "Seen on mid_market/na with decide:route_to_ae: worked 20 of 22 times; the last 2 did not. Recent reviews: x")]
+    kind, held = noise_guard("explore", parse_record(doubted))
+    assert kind == HOLD and held.action == "decide:route_to_ae" and turned_streak(held) == 3
+    assert "failed its last 2 tries; 2 failures after a record of 20 successes" in hold_action("Recommendation: explore. x", held)
+    # Three straight failures on it, and it has turned: the explore stands. That is a change.
+    turned = [seen("mid-market-na", "route-to-ae", "Seen on mid_market/na with decide:route_to_ae: worked 20 of 23 times; the last 3 did not. Recent reviews: x")]
     assert noise_guard("explore", parse_record(turned)) is None
+    # A thin record turns on two: one success does not buy the benefit of the doubt.
+    thin_turned = [seen("mid-market-emea", "partner", "Seen on mid_market/emea with decide:partner: worked 1 of 3 times; the last 2 did not. Recent reviews: x")]
+    assert turned_streak(parse_record(thin_turned)[0]) == 2 and noise_guard("explore", parse_record(thin_turned)) is None
     # A proven action with one recent miss is held; an act is never touched; no record, nothing to do.
     proven = [seen("personal-email", "disqualify", "Seen on personal-email with decide:disqualify: worked 5 of 6 times; the last 1 did not. Recent reviews: x")]
     assert noise_guard("explore", parse_record(proven))[1].action == "decide:disqualify"

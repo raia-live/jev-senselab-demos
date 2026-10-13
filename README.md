@@ -51,6 +51,73 @@ What the rows say:
   tally is one line no matter how many outcomes it counts. Paste the history in instead and
   Jev refuses the call at case 276 (more on that below).
 
+## Where the gap grows
+
+The table above is one agent, 120 leads, 10% review noise. Both memory arms sit close to the
+floor there. About five of those misses are the price of learning from outcomes at all,
+whatever does the learning: first contact with the tacit rule, the two losses it takes to
+notice the change, a flipped review landing on a one-case record. So the gap at 120 is two
+decisions. Here's what happens when you change the things a real deployment changes.
+
+### Three instances, one stream
+
+`--agents 3` hands the same 120 leads round-robin to three instances of the agent, the way a
+deployment runs several workers behind one queue. A lookup store is local to the worker that
+built it, so each of the three learns only from its own cases. SenseLab's agent is one agent
+whichever worker is deciding: one memory, one repair loop, the worker recorded on the trace.
+
+| arm | wrong decisions | dollars lost | after the change | wrong per worker | workers that paid the EMEA rule's first miss |
+|---|---:|---:|---:|---|---|
+| `jev` | 61 | $143,300 | 0% | 21 / 22 / 18 | 3 of 3 |
+| `jev+retrieval:meta-k8` | 15 | $35,200 | 47% | 4 / 6 / 5 | 3 of 3 |
+| `jev+senselab` | 5 | $7,900 | 87% | 5 / 0 / 0 | 1 of 3 |
+
+The lookup paid for the EMEA rule three times (episodes 0, 1 and 2, one per worker), paid for
+the change three times too (60, 66, 67), and lost 4x the dollars it lost with one worker.
+SenseLab made the same five misses as the single agent and no others: the first failure
+anywhere teaches everyone, so workers 1 and 2 walked into their first EMEA lead already
+knowing, and neither got anything wrong all run. (All five misses land on worker 0 because
+episodes 0, 27, 36, 60 and 66 happen to be its turns.) One judge graded the 120 traces, one
+repair loop ran, for $3.75 of platform spend, the same as a single-agent run.
+
+Worth saying out loud: a lookup that three workers share is a memory service, with everything
+that comes with running one. That's the thing you'd be building. Run:
+[`results-sample/lead_routing-team3`](results-sample/lead_routing-team3).
+
+### 400 episodes, and noisier reviews
+
+Same stream, 400 leads instead of 120, change at 200, new wording from 300. Then the same
+again with one review in five wrong instead of one in ten.
+
+| run | arm | wrong decisions | dollars lost | after the change | recovered in |
+|---|---|---:|---:|---:|---:|
+| 400, noise 0.1 | `jev` | 187 | $444,500 | 0% | never |
+| | `jev+retrieval:meta-k8` | 9 | $17,900 | 88% | 41 episodes |
+| | `jev+senselab` | 6 | $8,100 | 95% | 5 episodes |
+| 400, noise 0.2 | `jev` | 187 | $444,500 | 0% | never |
+| | `jev+retrieval:meta-k8` | 11 | $22,900 | 85% | 5 episodes |
+| | `jev+senselab` | 7 | $10,600 | 92% | 6 episodes |
+
+Over the longer run the lookup loses 2.2x the dollars at noise 0.1. The difference is the
+change: after episode 200 the lookup's eight nearest cases are mostly the old, confirmed
+`route_to_ae` outcomes, so it takes 41 episodes to settle, with three more lost leads along
+the way (206, 236, 241). SenseLab's record for the situation shows the action failing twice
+in a row, and the third such lead goes self-serve.
+
+With more wrong reviews the lookup picks up misses late in the run (351, 373, 393), all on
+the changed situation: a wrong review on `self_serve` plus the old `route_to_ae` wins still
+among its eight neighbours, and it drifts back to the action the business left behind.
+SenseLab's seven are three first exposures, one bad pair of reviews on a thin record at 49,
+and three leads at the change, one more than at noise 0.1. That extra one is deliberate. An
+action that has worked three or more times is only written off after three straight
+failures, because two wrong reviews in a row happen one pair in 25 at this noise level and
+a real change costs one more lead to confirm. Before that rule, the same run was behind the
+lookup at episode 140 (8 wrong to 5), every extra miss a working action dropped after two
+bad reviews. The rule is `turned_streak` in `core/senselab.py`.
+
+Runs: [`results-sample/lead_routing-400`](results-sample/lead_routing-400) and
+[`results-sample/lead_routing-400-noise20`](results-sample/lead_routing-400-noise20).
+
 ## What you're looking at
 
 Jev is good at the decision you ask it to make. What it can't do on its own is find out
@@ -88,10 +155,19 @@ reviewers are late, terse, and sometimes wrong.
 | [`demos/ap_invoices`](demos/ap_invoices) | handle an invoice exception | recurring services have no PO; pay on receipt | audit: large PO-matched invoices need sign-off |
 | [`demos/marketing`](demos/marketing) | adjust an ad set's budget | fresh paid-social must be held, not scaled | privacy change flatters retargeting CPA |
 | [`demos/moderation`](demos/moderation) | act on a reported post | news footage is age-gated, not removed | EU medical misinformation must be removed |
+| [`demos/call_handling`](demos/call_handling) | what a support bot does next on a call | repeat billing callers need a specialist callback | a retention offer lets the bot keep cancellations |
+
+The last one is also live: [`voice/`](voice/) puts the same decision behind a phone bot you
+can call from your browser or a real number (Vapi runs the call; Jev decides; the outcome
+goes back into memory when you hang up). Every call is decided twice, Jev alone and Jev with
+SenseLab, so the page can show the difference, and SenseLab remembers each caller between
+calls. See [voice/README.md](voice/README.md).
 
 ```bash
 uv run python -m core.runner --scenario ap_invoices        # full run: 120 episodes, ~35 min
 uv run python -m core.runner --scenario marketing --quick  # 40 episodes, ~8 min
+uv run python -m core.runner --scenario lead_routing --agents 3   # the same stream handled by three instances
+uv run python -m core.runner --scenario lead_routing --episodes 400 --change-at 200 --probe-at 300   # a longer run
 uv run python -m core.runner --all                         # every demo
 uv run python -m core.runner --replay results-sample       # rebuild the committed reports, no keys needed
 ```
@@ -188,8 +264,8 @@ Jev: 900 to 2,000 input tokens per decision depending on the arm. A 120-episode 
 default three arms is 360 calls.
 
 SenseLab: the memory calls are part of your plan. The judge and repair agent spend from your
-account's evaluation budget (default cap $25/month, visible on the dashboard). The committed
-run spent $0.86 of it.
+account's evaluation budget (the cap is yours to set; the dashboard shows it). The committed
+120-episode run spent $0.86, the three-instance run $3.75.
 
 Time: `--quick` is about 8 minutes. A full demo is about 35 minutes, including the loop's
 drain at the end. The Jev-only and retrieval arms finish in under two minutes and run in
@@ -197,13 +273,16 @@ parallel with the SenseLab arm.
 
 Each run gets a fresh agent id and entity path (`jev-demo-<scenario>-<run-id>-s<seed>-<arm>`),
 so runs never contaminate each other. `--resume --run-id <id>` continues a finished run on
-the memory it learned.
+the memory it learned. With `--agents N` the cases go round-robin to N instances of the
+agent: the lookup and history arms get one store per instance, the SenseLab arm stays one
+agent with one memory and one repair loop, and each row records which instance decided.
 
 ## Layout
 
 ```
 core/        runner, Jev wrapper, SenseLab episode, repair-loop watcher, report builder, limit probe
 demos/       one folder per decision: scenario.py (cases, policy, reviews) + README
+voice/       the live voice agent: Vapi runs the call, Jev decides, SenseLab remembers (see voice/README.md)
 baselines/   the retrieval lookup baseline
 templates/   the integration template for your own decision
 results-sample/   the committed runs this README quotes; CI rebuilds them with --replay

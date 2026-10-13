@@ -43,6 +43,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--noise", type=float, default=0.10, help="share of reviews flipped at random")
     p.add_argument("--arms", default=",".join(DEFAULT_ARMS),
                    help="comma-separated: jev, retrieval:meta-k8, retrieval:text-k8, history, senselab")
+    p.add_argument("--agents", type=int, default=1,
+                   help="handle the stream with this many instances of the agent, round-robin: lookup and history "
+                        "arms keep one store per instance, the SenseLab arm is one agent with one memory and one "
+                        "repair loop (default 1)")
     p.add_argument("--policy", default="auto_after_canary", choices=["auto_after_canary", "auto_after_replay", "review"])
     p.add_argument("--canary-pct", type=int, default=50)
     p.add_argument("--canary-min", type=int, default=5)
@@ -79,6 +83,8 @@ def _fmt_row(row: dict[str, Any], note: dict[str, Any] | None) -> str:
         f"ep {row['episode']:03d}", f"{row['situation']:<22s}", f"truth={row['truth']:<12s}",
         f"-> {row['action']:<12s} {verdict}", f"review={rep:<16s}", f"${row['cost_usd']:>7.0f}",
     ]
+    if row.get("agent") is not None:
+        bits.insert(1, f"a{row['agent']}")
     if row.get("memory_strength") is not None:
         bits.append(f"mem={row.get('memory_strength')}/{row.get('memory_mode') or '-'}")
         if row.get("causal_keys"):
@@ -123,7 +129,7 @@ def run_scenario(scenario: Scenario, args: argparse.Namespace, *, run_id: str, o
     if not args.resume:
         meta = {
             "run_id": run_id, "scenario": scenario.describe(), "episodes": args.episodes, "seeds": seeds,
-            "change_at": change_at, "probe_at": probe_at, "noise": args.noise, "arms": arms,
+            "change_at": change_at, "probe_at": probe_at, "noise": args.noise, "arms": arms, "agents": args.agents,
             "knobs": knobs.__dict__, "jev_model": S.JEV_MODEL, "amfs_url": S.load().amfs_url,
             "started_at": datetime.now(UTC).isoformat(), "resumes": [],
         }
@@ -142,12 +148,13 @@ def run_scenario(scenario: Scenario, args: argparse.Namespace, *, run_id: str, o
         cases = scenario.cases(seed=seed, episodes=total, change_at=change_at, probe_at=probe_at)[offset:]
         ctx = RunContext(scenario=scenario, jev=jev, run_id=run_id, seed=seed, noise=args.noise,
                          senselab=senselab, eval_api=eval_api, knobs=knobs, resume=bool(args.resume))
-        arm = make_arm(spec, ctx)
+        agents = int(meta.get("agents", args.agents) or 1) if args.resume else args.agents
+        arm = make_arm(spec, ctx, agents=agents)
         head = f"[{scenario.name} s{seed} {arm.name}]"
         t0 = time.perf_counter()
         setup = arm.setup()
         if not args.quiet:
-            print(f"{head} setup: {json.dumps({k: v for k, v in setup.items() if k in ('agent_id', 'entity_path', 'seeded', 'judge', 'settings', 'auto_propose')}, default=str)[:400]}")
+            print(f"{head} setup: {json.dumps({k: v for k, v in setup.items() if k in ('agent_id', 'workers', 'stores', 'entity_path', 'seeded', 'judge', 'settings', 'auto_propose')}, default=str)[:400]}")
         for i, case in enumerate(cases):
             if stop.is_set():
                 break

@@ -12,17 +12,41 @@ canvas{max-height:360px} .legend{color:#5f6368;font-size:13px} code{background:#
 </style></head><body><main>
 <h1>Jev + SenseLab demos</h1><p class='sub'>run results-sample</p>
 <h2><a href='lead_routing/report.html'>Inbound lead routing</a></h2>
-<p class='sub'>lead_routing · run lr9 · 120 episodes · arms: jev, jev+retrieval:meta-k8, jev+senselab</p>
+<p class='sub'>lead_routing · run lr9 · 120 episodes · review noise 0.1 · arms: jev, jev+retrieval:meta-k8, jev+senselab</p>
 <table><tr><th>arm</th><th>wrong decisions</th><th>dollars lost</th><th>accuracy</th><th>tacit</th><th>changed</th><th>held-out</th><th>recover 1</th><th>recover 2</th></tr>
 <tr><td><span style='color:#9aa0a6'>●</span> jev</td><td>60</td><td>$143,100</td><td>50%</td><td>0%</td><td>0%</td><td>0%</td><td>–</td><td>–</td></tr>
 <tr><td><span style='color:#e37400'>●</span> jev+retrieval:meta-k8</td><td>7</td><td>$12,900</td><td>94%</td><td>95%</td><td>80%</td><td>100%</td><td>0</td><td>7</td></tr>
 <tr><td><span style='color:#0f9d58'>●</span> jev+senselab</td><td>5</td><td>$7,900</td><td>96%</td><td>98%</td><td>87%</td><td>100%</td><td>0</td><td>6</td></tr>
 </table>
 <p class='legend'>repair loop: 1 fixes proposed, 0 shipped · incidents 1 · behaviours 3</p>
+<h2><a href='lead_routing-400/report.html'>Inbound lead routing</a></h2>
+<p class='sub'>lead_routing-400 · run lh400 · 400 episodes · review noise 0.1 · arms: jev, jev+retrieval:meta-k8, jev+senselab</p>
+<table><tr><th>arm</th><th>wrong decisions</th><th>dollars lost</th><th>accuracy</th><th>tacit</th><th>changed</th><th>held-out</th><th>recover 1</th><th>recover 2</th></tr>
+<tr><td><span style='color:#9aa0a6'>●</span> jev</td><td>187</td><td>$444,500</td><td>53%</td><td>0%</td><td>0%</td><td>0%</td><td>–</td><td>–</td></tr>
+<tr><td><span style='color:#e37400'>●</span> jev+retrieval:meta-k8</td><td>9</td><td>$17,900</td><td>98%</td><td>99%</td><td>88%</td><td>100%</td><td>0</td><td>41</td></tr>
+<tr><td><span style='color:#0f9d58'>●</span> jev+senselab</td><td>6</td><td>$8,100</td><td>98%</td><td>99%</td><td>95%</td><td>100%</td><td>0</td><td>5</td></tr>
+</table>
+<p class='legend'>repair loop: 3 fixes proposed, 0 shipped · incidents 3 · behaviours 5</p>
+<h2><a href='lead_routing-400-noise20/report.html'>Inbound lead routing</a></h2>
+<p class='sub'>lead_routing-400-noise20 · run lh400n20c · 400 episodes · review noise 0.2 · arms: jev, jev+retrieval:meta-k8, jev+senselab</p>
+<table><tr><th>arm</th><th>wrong decisions</th><th>dollars lost</th><th>accuracy</th><th>tacit</th><th>changed</th><th>held-out</th><th>recover 1</th><th>recover 2</th></tr>
+<tr><td><span style='color:#9aa0a6'>●</span> jev</td><td>187</td><td>$444,500</td><td>53%</td><td>0%</td><td>0%</td><td>0%</td><td>–</td><td>–</td></tr>
+<tr><td><span style='color:#e37400'>●</span> jev+retrieval:meta-k8</td><td>11</td><td>$22,900</td><td>97%</td><td>98%</td><td>85%</td><td>100%</td><td>0</td><td>5</td></tr>
+<tr><td><span style='color:#0f9d58'>●</span> jev+senselab</td><td>7</td><td>$10,600</td><td>98%</td><td>99%</td><td>92%</td><td>100%</td><td>0</td><td>6</td></tr>
+</table>
+<p class='legend'>repair loop: 2 fixes proposed, 0 shipped · incidents 2 · behaviours 4</p>
 <h2><a href='lead_routing-history-wall/report.html'>Inbound lead routing</a></h2>
-<p class='sub'>lead_routing-history-wall · run wall1 · 400 episodes · arms: jev, jev+history</p>
+<p class='sub'>lead_routing-history-wall · run wall1 · 400 episodes · review noise 0.1 · arms: jev, jev+history</p>
 <table><tr><th>arm</th><th>wrong decisions</th><th>dollars lost</th><th>accuracy</th><th>tacit</th><th>changed</th><th>held-out</th><th>recover 1</th><th>recover 2</th></tr>
 <tr><td><span style='color:#9aa0a6'>●</span> jev</td><td>188</td><td>$444,700</td><td>53%</td><td>0%</td><td>0%</td><td>0%</td><td>–</td><td>–</td></tr>
 <tr><td><span style='color:#5f6368'>●</span> jev+history</td><td>161</td><td>$331,200</td><td>60%</td><td>39%</td><td>0%</td><td>0%</td><td>0</td><td>–</td></tr>
 </table>
+<h2><a href='lead_routing-team3/report.html'>Inbound lead routing</a></h2>
+<p class='sub'>lead_routing-team3 · run team3b · 120 episodes · 3 instances · review noise 0.1 · arms: jev, jev+retrieval:meta-k8, jev+senselab</p>
+<table><tr><th>arm</th><th>wrong decisions</th><th>dollars lost</th><th>accuracy</th><th>tacit</th><th>changed</th><th>held-out</th><th>recover 1</th><th>recover 2</th></tr>
+<tr><td><span style='color:#9aa0a6'>●</span> jev</td><td>61</td><td>$143,300</td><td>49%</td><td>0%</td><td>0%</td><td>0%</td><td>–</td><td>–</td></tr>
+<tr><td><span style='color:#e37400'>●</span> jev+retrieval:meta-k8</td><td>15</td><td>$35,200</td><td>88%</td><td>86%</td><td>47%</td><td>100%</td><td>12</td><td>30</td></tr>
+<tr><td><span style='color:#0f9d58'>●</span> jev+senselab</td><td>5</td><td>$7,900</td><td>96%</td><td>98%</td><td>87%</td><td>100%</td><td>0</td><td>6</td></tr>
+</table>
+<p class='legend'>repair loop: 3 fixes proposed, 0 shipped · incidents 3 · behaviours 5</p>
 </main></body></html>

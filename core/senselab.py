@@ -28,8 +28,13 @@ GUIDANCE_CAP_CHARS = 3200
 BEGIN_LIMIT = 16
 CORRECTIONS_HEADING = "Corrections from the repair loop (a rule here stopped working; these take precedence):"
 REVIEWS_KEPT = 4
-# An action that failed its last two tries has turned; one failure is one review, and ten percent of them are wrong.
+# When has an action turned? One failure is one review, and some reviews are wrong. An action
+# with a thin record turns on two straight failures. One that has worked PROVEN or more times
+# needs three: with one review in five wrong, two wrong in a row happen one pair in 25, three
+# in a row one in 125, and the cost of the extra wait is one more case per real change.
 TURNED_STREAK = 2
+PROVEN = 3
+PROVEN_TURNED_STREAK = 3
 
 
 def _slug(text: str) -> str:
@@ -179,27 +184,33 @@ NO_RECOMMENDATION = (
 )
 
 
+def turned_streak(t: Tally) -> int:
+    """How many straight failures write *t*'s action off here."""
+    return PROVEN_TURNED_STREAK if t.worked >= PROVEN else TURNED_STREAK
+
+
 def noise_guard(mode: str | None, tallies: list[Tally]) -> tuple[str, Tally | None] | None:
     """Leave the record only when nothing in it is working.
 
     The SDK's ``explore`` is an exploration assignment for an agent retrying one task; here
-    every decision is a fresh case and one review is one data point, ten percent of them
+    every decision is a fresh case and one review is one data point, and some reviews are
     wrong. Read against the situation's own record:
 
-    - an action that has worked here and has not failed its last two tries is *alive*; the
-      best one is held (``("hold", tally)``), whatever the SDK suggested exploring past it;
-    - an action that failed its last two or more tries has *turned*; when nothing is alive
-      the explore stands (``None``) — that is what a change looks like;
+    - an action that has worked here and has not reached its turning streak (two straight
+      failures on a thin record, three on a proven one) is *alive*; the best one is held
+      (``("hold", tally)``), whatever the SDK suggested exploring past it;
+    - an action that has reached it has *turned*; when nothing is alive the explore stands
+      (``None``) — that is what a change looks like;
     - a record of nothing but single failures is not evidence to leave the policy on
       (``("drop", None)``): the recommendation and the untried list go, and a line says
       the policy decides unless a failure review names the right action.
     """
     if mode != "explore" or not tallies:
         return None
-    alive = [t for t in tallies if t.worked >= 1 and t.streak <= 1]
+    alive = [t for t in tallies if t.worked >= 1 and t.streak < turned_streak(t)]
     if alive:
         return HOLD, max(alive, key=lambda t: (t.worked, -t.streak, t.total))
-    if any(t.streak >= TURNED_STREAK for t in tallies):
+    if any(t.streak >= turned_streak(t) for t in tallies):
         return None
     return DROP, None
 
@@ -208,9 +219,15 @@ def hold_action(text: str, held: Tally | None) -> str:
     """Rewrite the explore recommendation in *text*: as an act on *held*, or, with no
     *held*, as the line that hands the decision back to the policy."""
     if held is not None:
-        reason = (f"{held.action} has worked {held.worked} of {held.total} time{'s' if held.total != 1 else ''} here"
-                  + (" and failed only on its latest try; one failure after a working record is more likely a wrong "
-                     "review than a change." if held.streak else "; the exploration suggested is past a record that is working."))
+        reason = f"{held.action} has worked {held.worked} of {held.total} time{'s' if held.total != 1 else ''} here"
+        if held.streak >= 2:
+            reason += (f" and failed its last {held.streak} tries; {held.streak} failures after a record of "
+                       f"{held.worked} successes are more likely wrong reviews than a change (it takes "
+                       f"{turned_streak(held)} in a row to call one).")
+        elif held.streak:
+            reason += " and failed only on its latest try; one failure after a working record is more likely a wrong review than a change."
+        else:
+            reason += "; the exploration suggested is past a record that is working."
         line = f"Recommendation: act -> {held.action}. {reason}"
     else:
         line = NO_RECOMMENDATION
@@ -416,11 +433,13 @@ class EpisodeTrace:
 class SenseLabEpisode:
     """The integration pattern, in the order a customer's agent would call it."""
 
-    def __init__(self, client: SenseLabClient, *, agent_id: str, entity_path: str, scenario: Scenario) -> None:
+    def __init__(self, client: SenseLabClient, *, agent_id: str, entity_path: str, scenario: Scenario,
+                 worker: int | None = None) -> None:
         self.client = client
         self.agent_id = agent_id
         self.entity_path = entity_path
         self.scenario = scenario
+        self.worker = worker  # which instance of the agent is deciding, when there are several
         self.trace = EpisodeTrace()
         self.mem: AgentMemory | None = None
         self.run: Run | None = None
@@ -430,12 +449,20 @@ class SenseLabEpisode:
         self.held: Tally | None = None  # the action the noise guard held this episode, if any
         self.guard: str | None = None  # HOLD, DROP or None: what the guard did this episode
 
-    def begin(self, case: Case) -> str:
-        """Open the run; return the text for Jev's memory slot."""
+    def begin(self, case: Case, *, briefing: list[Any] | None = None, entries: list[Any] | None = None) -> str:
+        """Open the run; return the text for Jev's memory slot.
+
+        ``Run.begin`` fetches the entity's briefing and then retrieves for the task. The
+        briefing is per entity, not per task, and is the slow half (3 to 4 s hosted, against
+        about 1 s for the retrieve), so a caller opening several runs on the same entity at
+        once can fetch it once and pass it as *briefing*; likewise the entity's *entries*,
+        which the situation record is read from."""
         import time
 
         t0 = time.perf_counter()
         self.mem = self.client.memory(self.agent_id)
+        if briefing is not None:
+            self.mem.briefing = lambda **_kw: briefing  # type: ignore[method-assign]
         self.run = Run(self.mem)
         g = self.run.begin(
             case.text,
@@ -450,7 +477,7 @@ class SenseLabEpisode:
         self.guidance = g
         text = strip_retry_lines(g.text or "")
         shown = list(g.entry_keys)
-        own = self._situation_record(case.situation)
+        own = self._situation_record(case.situation, entries=entries)
         self.held = None
         guard = noise_guard(g.mode, parse_record(own))
         context, priors = split_priors(text)
@@ -486,12 +513,14 @@ class SenseLabEpisode:
         self.trace.memory_ms += (time.perf_counter() - t0) * 1000
         return self.trace.guidance_text
 
-    def _situation_record(self, situation: str) -> list[Any]:
-        """The ``seen-*`` entries for *situation*, read back by key (one ``list`` call)."""
+    def _situation_record(self, situation: str, *, entries: list[Any] | None = None) -> list[Any]:
+        """The ``seen-*`` entries for *situation*, read back by key (one ``list`` call, unless
+        the caller already has the entity's *entries*)."""
         assert self.mem is not None
         prefix = ReviewHistory.prefix(situation)
         try:
-            entries = self.mem.list(self.entity_path)
+            if entries is None:
+                entries = self.mem.list(self.entity_path)
         except Exception as exc:  # noqa: BLE001 - the record is a bonus; the run goes on
             self.trace.guidance_error = (self.trace.guidance_error or "") + f" record: {type(exc).__name__}"
             return []
@@ -558,8 +587,10 @@ class SenseLabEpisode:
         )
 
     def complete(self, case: Case, decision: Decision, outcome: Outcome,
-                 history: ReviewHistory | None = None) -> EpisodeTrace:
-        """Write the lesson (and the review history), then seal the trace with the outcome."""
+                 history: ReviewHistory | None = None, *, task_input: str | None = None) -> EpisodeTrace:
+        """Write the lesson (and the review history), then seal the trace with the outcome.
+        *task_input* replaces what ``begin`` was given when the run was opened ahead of the
+        case (the live agent opens runs before the caller has said what they want)."""
         import time
 
         assert self.mem is not None and self.run is not None
@@ -583,10 +614,12 @@ class SenseLabEpisode:
                 outcome.severity,
                 outcome_ref=f"{case.id}",
                 verified_by="review",
+                task_input=task_input,
                 evidence={"review_note": outcome.note[:300], "severity": outcome.severity},
                 response_text=f"decision: {decision.action} (confidence {decision.confidence:.2f}). review: {outcome.note}",
                 decision_summary=f"{case.situation}: decide:{decision.action}",
-                attributes={"case_id": case.id, "kind": case.kind, "demo": self.scenario.name},
+                attributes={"case_id": case.id, "kind": case.kind, "demo": self.scenario.name,
+                            **({"worker": self.worker} if self.worker is not None else {})},
                 causal_entry_keys=causal,
             )
             last = getattr(self.mem, "_last_trace", None)
@@ -601,7 +634,8 @@ class SenseLabEpisode:
 
 
 __all__ = [
-    "DROP", "HOLD", "NO_RECOMMENDATION", "TURNED_STREAK", "Tally", "hold_action", "noise_guard", "parse_record",
+    "DROP", "HOLD", "NO_RECOMMENDATION", "PROVEN", "PROVEN_TURNED_STREAK", "TURNED_STREAK", "Tally", "hold_action",
+    "noise_guard", "parse_record", "turned_streak",
     "BEGIN_LIMIT", "GUIDANCE_CAP_CHARS", "EpisodeTrace", "ReviewHistory", "RoutingHeaders",
     "SenseLabClient", "SenseLabEpisode", "corrections_block", "drop_policy_lines", "situation_block", "split_priors",
     "strip_retry_lines", "tag_entries",

@@ -1,0 +1,581 @@
+{
+  "metrics": {
+    "jev": {
+      "seeds": [
+        11
+      ],
+      "per_seed": {
+        "11": {
+          "n": 120,
+          "wrong": 61,
+          "dollars": 143300.0,
+          "accuracy": 0.49166666666666664,
+          "accuracy_pre": 0.5833333333333334,
+          "accuracy_post": 0.4,
+          "tacit_accuracy": 0.0,
+          "changed_accuracy": 0.0,
+          "probe_accuracy": 0.0,
+          "confidently_wrong": 0.475,
+          "churn_tacit": 0.0,
+          "recover_cycle1": null,
+          "recover_cycle2": null,
+          "mean_state_bytes": 873.375,
+          "mean_input_tokens": 877.6833333333333,
+          "jev_usd": 0.0044,
+          "errors": 0
+        }
+      },
+      "n": 120.0,
+      "n_range": [
+        120,
+        120
+      ],
+      "wrong": 61.0,
+      "wrong_range": [
+        61,
+        61
+      ],
+      "dollars": 143300.0,
+      "dollars_range": [
+        143300.0,
+        143300.0
+      ],
+      "accuracy": 0.49166666666666664,
+      "accuracy_range": [
+        0.49166666666666664,
+        0.49166666666666664
+      ],
+      "accuracy_pre": 0.5833333333333334,
+      "accuracy_pre_range": [
+        0.5833333333333334,
+        0.5833333333333334
+      ],
+      "accuracy_post": 0.4,
+      "accuracy_post_range": [
+        0.4,
+        0.4
+      ],
+      "tacit_accuracy": 0.0,
+      "tacit_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "changed_accuracy": 0.0,
+      "changed_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "probe_accuracy": 0.0,
+      "probe_accuracy_range": [
+        0.0,
+        0.0
+      ],
+      "confidently_wrong": 0.475,
+      "confidently_wrong_range": [
+        0.475,
+        0.475
+      ],
+      "churn_tacit": 0.0,
+      "churn_tacit_range": [
+        0.0,
+        0.0
+      ],
+      "recover_cycle1": null,
+      "recover_cycle1_range": null,
+      "recover_cycle2": null,
+      "recover_cycle2_range": null,
+      "mean_state_bytes": 873.375,
+      "mean_state_bytes_range": [
+        873.375,
+        873.375
+      ],
+      "mean_input_tokens": 877.6833333333333,
+      "mean_input_tokens_range": [
+        877.6833333333333,
+        877.6833333333333
+      ],
+      "jev_usd": 0.0044,
+      "jev_usd_range": [
+        0.0044,
+        0.0044
+      ],
+      "errors": 0.0,
+      "errors_range": [
+        0,
+        0
+      ],
+      "recover_cycle1_unrecovered": 1,
+      "recover_cycle2_unrecovered": 1,
+      "team": {
+        "agents": 3,
+        "wrong_per_agent": {
+          "0": 21,
+          "1": 22,
+          "2": 18
+        },
+        "tacit_first_miss_agents": 3,
+        "tacit_wrong": 42,
+        "changed_wrong": 15
+      }
+    },
+    "jev+retrieval:meta-k8": {
+      "seeds": [
+        11
+      ],
+      "per_seed": {
+        "11": {
+          "n": 120,
+          "wrong": 15,
+          "dollars": 35200.0,
+          "accuracy": 0.875,
+          "accuracy_pre": 0.8833333333333333,
+          "accuracy_post": 0.8666666666666667,
+          "tacit_accuracy": 0.8571428571428571,
+          "changed_accuracy": 0.4666666666666667,
+          "probe_accuracy": 1.0,
+          "confidently_wrong": 0.06666666666666667,
+          "churn_tacit": 0.12195121951219512,
+          "recover_cycle1": 12,
+          "recover_cycle2": 30,
+          "mean_state_bytes": 1527.7166666666667,
+          "mean_input_tokens": 1069.325,
+          "jev_usd": 0.0054,
+          "errors": 0
+        }
+      },
+      "n": 120.0,
+      "n_range": [
+        120,
+        120
+      ],
+      "wrong": 15.0,
+      "wrong_range": [
+        15,
+        15
+      ],
+      "dollars": 35200.0,
+      "dollars_range": [
+        35200.0,
+        35200.0
+      ],
+      "accuracy": 0.875,
+      "accuracy_range": [
+        0.875,
+        0.875
+      ],
+      "accuracy_pre": 0.8833333333333333,
+      "accuracy_pre_range": [
+        0.8833333333333333,
+        0.8833333333333333
+      ],
+      "accuracy_post": 0.8666666666666667,
+      "accuracy_post_range": [
+        0.8666666666666667,
+        0.8666666666666667
+      ],
+      "tacit_accuracy": 0.8571428571428571,
+      "tacit_accuracy_range": [
+        0.8571428571428571,
+        0.8571428571428571
+      ],
+      "changed_accuracy": 0.4666666666666667,
+      "changed_accuracy_range": [
+        0.4666666666666667,
+        0.4666666666666667
+      ],
+      "probe_accuracy": 1.0,
+      "probe_accuracy_range": [
+        1.0,
+        1.0
+      ],
+      "confidently_wrong": 0.06666666666666667,
+      "confidently_wrong_range": [
+        0.06666666666666667,
+        0.06666666666666667
+      ],
+      "churn_tacit": 0.12195121951219512,
+      "churn_tacit_range": [
+        0.12195121951219512,
+        0.12195121951219512
+      ],
+      "recover_cycle1": 12.0,
+      "recover_cycle1_range": [
+        12,
+        12
+      ],
+      "recover_cycle2": 30.0,
+      "recover_cycle2_range": [
+        30,
+        30
+      ],
+      "mean_state_bytes": 1527.7166666666667,
+      "mean_state_bytes_range": [
+        1527.7166666666667,
+        1527.7166666666667
+      ],
+      "mean_input_tokens": 1069.325,
+      "mean_input_tokens_range": [
+        1069.325,
+        1069.325
+      ],
+      "jev_usd": 0.0054,
+      "jev_usd_range": [
+        0.0054,
+        0.0054
+      ],
+      "errors": 0.0,
+      "errors_range": [
+        0,
+        0
+      ],
+      "recover_cycle1_unrecovered": 0,
+      "recover_cycle2_unrecovered": 0,
+      "team": {
+        "agents": 3,
+        "wrong_per_agent": {
+          "0": 4,
+          "1": 6,
+          "2": 5
+        },
+        "tacit_first_miss_agents": 3,
+        "tacit_wrong": 6,
+        "changed_wrong": 8
+      }
+    },
+    "jev+senselab": {
+      "seeds": [
+        11
+      ],
+      "per_seed": {
+        "11": {
+          "n": 120,
+          "wrong": 5,
+          "dollars": 7900.0,
+          "accuracy": 0.9583333333333334,
+          "accuracy_pre": 0.95,
+          "accuracy_post": 0.9666666666666667,
+          "tacit_accuracy": 0.9761904761904762,
+          "changed_accuracy": 0.8666666666666667,
+          "probe_accuracy": 1.0,
+          "confidently_wrong": 0.025,
+          "churn_tacit": 0.024390243902439025,
+          "recover_cycle1": 0,
+          "recover_cycle2": 6,
+          "mean_state_bytes": 3152.983333333333,
+          "mean_input_tokens": 1978.5166666666667,
+          "jev_usd": 0.01,
+          "errors": 0
+        }
+      },
+      "n": 120.0,
+      "n_range": [
+        120,
+        120
+      ],
+      "wrong": 5.0,
+      "wrong_range": [
+        5,
+        5
+      ],
+      "dollars": 7900.0,
+      "dollars_range": [
+        7900.0,
+        7900.0
+      ],
+      "accuracy": 0.9583333333333334,
+      "accuracy_range": [
+        0.9583333333333334,
+        0.9583333333333334
+      ],
+      "accuracy_pre": 0.95,
+      "accuracy_pre_range": [
+        0.95,
+        0.95
+      ],
+      "accuracy_post": 0.9666666666666667,
+      "accuracy_post_range": [
+        0.9666666666666667,
+        0.9666666666666667
+      ],
+      "tacit_accuracy": 0.9761904761904762,
+      "tacit_accuracy_range": [
+        0.9761904761904762,
+        0.9761904761904762
+      ],
+      "changed_accuracy": 0.8666666666666667,
+      "changed_accuracy_range": [
+        0.8666666666666667,
+        0.8666666666666667
+      ],
+      "probe_accuracy": 1.0,
+      "probe_accuracy_range": [
+        1.0,
+        1.0
+      ],
+      "confidently_wrong": 0.025,
+      "confidently_wrong_range": [
+        0.025,
+        0.025
+      ],
+      "churn_tacit": 0.024390243902439025,
+      "churn_tacit_range": [
+        0.024390243902439025,
+        0.024390243902439025
+      ],
+      "recover_cycle1": 0.0,
+      "recover_cycle1_range": [
+        0,
+        0
+      ],
+      "recover_cycle2": 6.0,
+      "recover_cycle2_range": [
+        6,
+        6
+      ],
+      "mean_state_bytes": 3152.983333333333,
+      "mean_state_bytes_range": [
+        3152.983333333333,
+        3152.983333333333
+      ],
+      "mean_input_tokens": 1978.5166666666667,
+      "mean_input_tokens_range": [
+        1978.5166666666667,
+        1978.5166666666667
+      ],
+      "jev_usd": 0.01,
+      "jev_usd_range": [
+        0.01,
+        0.01
+      ],
+      "errors": 0.0,
+      "errors_range": [
+        0,
+        0
+      ],
+      "recover_cycle1_unrecovered": 0,
+      "recover_cycle2_unrecovered": 0,
+      "team": {
+        "agents": 3,
+        "wrong_per_agent": {
+          "0": 5,
+          "1": 0,
+          "2": 0
+        },
+        "tacit_first_miss_agents": 1,
+        "tacit_wrong": 1,
+        "changed_wrong": 2
+      }
+    }
+  },
+  "lifecycle": {
+    "fixes": [
+      {
+        "seed": 11,
+        "id": "cc0af615",
+        "status": "test_failed",
+        "lever": "knowledge",
+        "source": "template",
+        "title": "Fix: Mismatched qualification assumptions",
+        "test": "failed",
+        "canary": null,
+        "canary_arms": "",
+        "shipped_at": null,
+        "rolled_back_at": null
+      },
+      {
+        "seed": 11,
+        "id": "bfa67c2b",
+        "status": "test_failed",
+        "lever": "knowledge",
+        "source": "repair_agent",
+        "title": "Fix: Unclear escalation loop",
+        "test": "failed",
+        "canary": null,
+        "canary_arms": "",
+        "shipped_at": null,
+        "rolled_back_at": null
+      },
+      {
+        "seed": 11,
+        "id": "c006829b",
+        "status": "test_failed",
+        "lever": "unknown",
+        "source": "repair_agent",
+        "title": "Fix: Missing rationale",
+        "test": "failed",
+        "canary": null,
+        "canary_arms": "",
+        "shipped_at": null,
+        "rolled_back_at": null
+      }
+    ],
+    "verdicts": {
+      "11": {
+        "graded": 120,
+        "failed": 19,
+        "errors": 0,
+        "judge_usd": 0.776,
+        "disagreements": 0,
+        "categories": {
+          "enterprise EMEA lead routed to AE and escalated": 2,
+          "mid-market EMEA lead routed to partner and lost": 2,
+          "personal-email disqualify and lost": 1,
+          "mid-market NA lead routed to self-serve and lost": 1,
+          "mid-market NA lead routed to self-serve and failed": 1,
+          "NA mid-market lead routed to self-serve and missed": 1,
+          "mid-market NA lead routed to self_serve and escalated": 1,
+          "NA mid-market lead routed to AE; bought self-serve": 1
+        }
+      }
+    },
+    "incidents": 3,
+    "behaviors": 5
+  },
+  "events": [
+    {
+      "seed": 11,
+      "episode": 21,
+      "fix": "c006829b",
+      "event": "testing",
+      "lever": "unknown",
+      "title": "Fix: Missing rationale"
+    },
+    {
+      "seed": 11,
+      "episode": 30,
+      "fix": "c006829b",
+      "event": "test_failed",
+      "lever": "unknown",
+      "title": "Fix: Missing rationale"
+    },
+    {
+      "seed": 11,
+      "episode": 57,
+      "fix": "bfa67c2b",
+      "event": "testing",
+      "lever": "knowledge",
+      "title": "Fix: Unclear escalation loop"
+    },
+    {
+      "seed": 11,
+      "episode": 66,
+      "fix": "bfa67c2b",
+      "event": "test_failed",
+      "lever": "knowledge",
+      "title": "Fix: Unclear escalation loop"
+    },
+    {
+      "seed": 11,
+      "episode": 79,
+      "fix": "cc0af615",
+      "event": "testing",
+      "lever": "knowledge",
+      "title": "Fix: Mismatched qualification assumptions"
+    },
+    {
+      "seed": 11,
+      "episode": 87,
+      "fix": "cc0af615",
+      "event": "test_failed",
+      "lever": "knowledge",
+      "title": "Fix: Mismatched qualification assumptions"
+    }
+  ],
+  "resume_accuracy": {},
+  "meta": {
+    "run_id": "team3b",
+    "scenario": {
+      "name": "lead_routing",
+      "title": "Inbound lead routing",
+      "actions": [
+        "route_to_ae",
+        "sdr_nurture",
+        "self_serve",
+        "partner",
+        "disqualify"
+      ],
+      "policy": [
+        {
+          "key": "policy-enterprise",
+          "text": "Enterprise leads (1000+ employees) with a corporate email and buying intent: route to an account executive."
+        },
+        {
+          "key": "policy-mid-market",
+          "text": "Mid-market leads (100-999 employees) with buying intent (demo, pricing or trial): route to an account executive."
+        },
+        {
+          "key": "policy-smb",
+          "text": "SMB leads (under 100 employees): send to self-serve signup."
+        },
+        {
+          "key": "policy-personal-email",
+          "text": "Leads from personal email addresses (gmail, yahoo, outlook, etc.): disqualify."
+        },
+        {
+          "key": "policy-low-intent",
+          "text": "Content downloads and webinar signups with no demo, pricing or trial request: SDR nurture sequence."
+        }
+      ],
+      "tacit_rule": "EMEA mid-market leads close only through a regional partner; the AE queue loses them.",
+      "change_rule": "After the pricing update, NA mid-market leads buy self-serve; routing them to an AE loses the deal.",
+      "expected_fix": "Mid-market leads in EMEA: hand to a regional partner, not an account executive.",
+      "cost_by_severity": {
+        "minor_failure": 200.0,
+        "failure": 2500.0,
+        "critical_failure": 15000.0
+      }
+    },
+    "episodes": 120,
+    "seeds": [
+      11
+    ],
+    "change_at": 60,
+    "probe_at": 90,
+    "noise": 0.1,
+    "arms": [
+      "jev",
+      "retrieval:meta-k8",
+      "senselab"
+    ],
+    "agents": 3,
+    "knobs": {
+      "policy": "auto_after_canary",
+      "canary_pct": 50,
+      "canary_min_outcomes": 5,
+      "canary_timeout_sessions": 60,
+      "look_every": 5,
+      "judge": true,
+      "judge_mode": "continuous"
+    },
+    "jev_model": "jev-1.13.0",
+    "amfs_url": "https://amfs-login.sense-lab.ai",
+    "started_at": "2026-10-13T07:45:20.025450+00:00",
+    "resumes": [],
+    "platform_budget": [
+      {
+        "before": {
+          "account_id": "redacted",
+          "monthly_usd_cap": 25.0,
+          "spent_usd": 16.17773,
+          "degrade_threshold": 0.8,
+          "period_start": "2026-10-01T00:00:00Z",
+          "updated_at": "2026-10-13T07:45:18.700001Z",
+          "remaining_usd": 8.82227,
+          "utilisation": 0.6471
+        },
+        "after": {
+          "account_id": "redacted",
+          "monthly_usd_cap": 25.0,
+          "spent_usd": 19.923333,
+          "degrade_threshold": 0.8,
+          "period_start": "2026-10-01T00:00:00Z",
+          "updated_at": "2026-10-13T08:26:26.756305Z",
+          "remaining_usd": 5.076667,
+          "utilisation": 0.7969
+        },
+        "spent_usd": 3.7456
+      }
+    ],
+    "finished_at": "2026-10-13T08:26:37.020916+00:00"
+  }
+}

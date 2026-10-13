@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A support line that learns from its calls</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f4f6fa; --panel:#ffffff; --line:#e3e7ef; --line-2:#cfd6e2; --ink:#111827; --ink-2:#4b5565; --muted:#7a859a;
+    --you:#d97706; --riley:#4f6bed; --jev:#db2777; --sl:#059669; --world:#7c3aed; --bad:#dc2626; --ok:#059669;
+    --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing:antialiased; overflow:hidden; }
+  button, select, input, textarea { font:inherit; }
+  a { color:var(--riley); text-decoration:none; }
+  .mono { font-family:var(--mono); }
+
+  .app { height:100%; display:grid; grid-template-rows:auto 1fr 236px 56px; grid-template-columns:minmax(0,1fr); }
+
+  /* header */
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; padding:10px 22px; min-height:60px; border-bottom:1px solid var(--line); background:var(--panel); min-width:0; }
+  .brand { display:flex; align-items:center; gap:12px; min-width:0; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); flex:none; }
+  .dot.live { background:var(--bad); animation:beat 1.1s infinite; } .dot.ok { background:var(--ok); }
+  @keyframes beat { 0%,100% { box-shadow:0 0 0 0 rgba(220,38,38,.45);} 70% { box-shadow:0 0 0 8px rgba(220,38,38,0);} }
+  .brand b { font-weight:600; font-size:15px; white-space:nowrap; } .brand span { color:var(--muted); font-size:12.5px; white-space:nowrap; }
+  .spacer { flex:1 1 0; min-width:10px; }
+  .ctl { display:flex; align-items:center; gap:8px; }
+  select { background:var(--panel); color:var(--ink); border:1px solid var(--line-2); border-radius:9px; padding:8px 10px; max-width:230px; outline:none; }
+  .btn { padding:9px 16px; border-radius:10px; border:1px solid transparent; cursor:pointer; font-weight:600; font-size:13.5px; background:var(--panel); color:var(--ink-2); border-color:var(--line-2); white-space:nowrap; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+  .btn:hover { color:var(--ink); border-color:#9aa6bd; }
+  .btn.go { background:var(--ok); color:#fff; border-color:transparent; } .btn.stop { background:#fef2f2; color:var(--bad); border-color:#fecaca; }
+  .btn.sm { padding:6px 10px; font-size:12px; font-weight:500; }
+  .btn:disabled { opacity:.35; cursor:default; }
+  .phone { display:flex; align-items:center; gap:10px; padding:6px 6px 6px 12px; border:1px dashed var(--line-2); border-radius:10px; font-family:var(--mono); font-size:13px; color:var(--ink-2); white-space:nowrap; }
+  @media (max-width:1500px) { .brand span { display:none; } }
+  @media (max-width:1100px) { .legend { display:none; } .btn.go { font-size:13px; } }
+  .phone .ok { color:var(--ok); font-family:Inter; font-size:12px; }
+  .tog { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink-2); cursor:pointer; white-space:nowrap; }
+  .tog input { display:none; } .tog .sw { width:32px; height:18px; border-radius:999px; background:var(--line-2); position:relative; }
+  .tog .sw::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:.15s; }
+  .tog input:checked + .sw { background:var(--you); } .tog input:checked + .sw::after { left:16px; }
+
+  /* stage */
+  .stage { position:relative; display:grid; grid-template-rows:1fr auto; min-height:0; min-width:0; background:radial-gradient(1200px 500px at 50% 0%, #ffffff 0%, var(--bg) 70%); }
+  svg.graph { width:100%; height:100%; display:block; }
+  .node rect { fill:#fff; stroke:var(--line-2); stroke-width:1.5; rx:16; transition:stroke .2s, filter .2s; filter:drop-shadow(0 1px 2px rgba(16,24,40,.06)); }
+  .node .ic { font-size:11px; font-weight:700; letter-spacing:.06em; }
+  .node .nm { fill:var(--ink); font-size:15px; font-weight:600; }
+  .node .st { fill:var(--muted); font-size:11.5px; }
+  .node .badge { fill:var(--sl); font-size:11px; font-family:var(--mono); font-weight:500; }
+  .node.on rect { stroke:var(--c); stroke-width:2.5; filter:drop-shadow(0 0 12px color-mix(in srgb, var(--c) 55%, transparent)); }
+  .node.on .st { fill:var(--ink-2); }
+  .edge { fill:none; stroke:var(--line-2); stroke-width:2; }
+  .edge.hot { stroke:var(--c); stroke-opacity:.7; }
+  .pulse circle { filter:drop-shadow(0 0 5px currentColor); }
+  .pulse text { font-size:11.5px; font-weight:600; fill:var(--ink); paint-order:stroke; stroke:#fff; stroke-width:4px; stroke-linejoin:round; }
+  .caption { padding:0 30px 18px; text-align:center; min-height:72px; }
+  .caption .m { font-size:22px; font-weight:600; letter-spacing:-.3px; line-height:1.25; transition:opacity .2s; }
+  .caption .s { color:var(--ink-2); font-size:13.5px; margin-top:4px; min-height:20px; }
+  .caption .m .ok { color:var(--ok); } .caption .m .bad { color:var(--bad); } .caption .m .jev { color:var(--jev); } .caption .m .sl { color:var(--sl); } .caption .m .riley { color:var(--riley); } .caption .m .you { color:var(--you); }
+  .legend { position:absolute; top:14px; left:22px; display:flex; gap:14px; font-size:11.5px; color:var(--muted); }
+  .legend i { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  .clock { position:absolute; top:12px; right:22px; font-family:var(--mono); font-size:13px; color:var(--ink-2); }
+  .help { position:absolute; bottom:12px; right:22px; }
+
+  /* timeline */
+  .tl { border-top:1px solid var(--line); background:var(--panel); position:relative; min-width:0; overflow:hidden; }
+  .tl svg { width:100%; height:100%; display:block; }
+  .tl .lane-name { fill:var(--ink-2); font-size:12px; font-weight:600; }
+  .tl .lane-line { stroke:var(--line); }
+  .tl .tick { stroke:var(--line); } .tl .tick-l { fill:var(--muted); font-size:10.5px; font-family:var(--mono); }
+  .tl .seg { rx:4; } .tl .seg-l { font-size:10.5px; fill:#fff; font-weight:600; } .tl .seg-l.thin { font-size:9px; }
+  .tl .mark { stroke-width:2; } .tl .mark-l { font-size:10.5px; fill:var(--ink); font-weight:500; paint-order:stroke; stroke:#fff; stroke-width:3px; stroke-linejoin:round; }
+  .tl .now { stroke:var(--bad); stroke-width:1.5; stroke-dasharray:3 3; }
+  .tl .title { position:absolute; top:8px; left:22px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+  .tl .empty { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); font-size:13px; }
+
+  /* calls strip */
+  .strip { display:flex; align-items:center; gap:8px; padding:0 22px; border-top:1px solid var(--line); overflow-x:auto; background:var(--panel); min-width:0; }
+  .strip .lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-right:6px; white-space:nowrap; }
+  .chip { display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; font-size:12px; color:var(--ink-2); cursor:pointer; white-space:nowrap; background:var(--panel); }
+  .chip.sel { border-color:#9aa6bd; color:var(--ink); } .chip i { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .chip audio { height:24px; width:120px; }
+  .chip .play { color:var(--riley); }
+
+  /* drawer */
+  .drawer { position:absolute; top:0; right:0; bottom:0; width:min(460px, 92vw); background:var(--panel); border-left:1px solid var(--line); box-shadow:-8px 0 24px rgba(16,24,40,.08); transform:translateX(100%); transition:transform .2s; overflow:auto; padding:18px 20px; z-index:4; }
+  .drawer.open { transform:none; }
+  .drawer h3 { margin:16px 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); } .drawer h3:first-child { margin-top:0; }
+  pre.slot { margin:0; white-space:pre-wrap; font-family:var(--mono); font-size:11.5px; line-height:1.5; color:var(--ink-2); background:var(--bg); padding:12px; border-radius:10px; max-height:260px; overflow:auto; }
+  .prob { display:grid; grid-template-columns:150px 1fr 40px; gap:10px; align-items:center; font-size:12.5px; margin:4px 0; color:var(--ink-2); }
+  .prob .bar { height:7px; background:var(--bg); border-radius:999px; overflow:hidden; } .prob .bar i { display:block; height:100%; background:var(--line-2); } .prob.pick { color:var(--ink); } .prob.pick .bar i { background:var(--jev); }
+  .lesson { padding:9px 11px; border-radius:9px; background:var(--bg); border-left:3px solid var(--line-2); margin-bottom:6px; font-size:12.5px; }
+  .lesson.ok { border-left-color:var(--ok); } .lesson.bad { border-left-color:var(--bad); }
+  .lesson .s { font-family:var(--mono); font-size:11px; color:var(--muted); } .lesson .a { font-weight:600; } .lesson .n { color:var(--ink-2); }
+  .rec { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-top:1px solid var(--line); color:var(--ink-2); } .rec .s { font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .drawer textarea, .drawer input, .drawer select { width:100%; background:var(--panel); color:var(--ink); border:1px solid var(--line-2); border-radius:8px; padding:8px; }
+  .row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+  .small { font-size:12px; color:var(--muted); }
+.turn{display:flex;gap:8px;margin:4px 0;line-height:1.35}.turn .n{flex:none;width:18px;height:18px;border-radius:50%;background:var(--you);color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center;margin-top:1px}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand"><span class="dot" id="dot"></span><b>Northwind support line</b><span>Vapi answers · Jev decides · SenseLab improves it, call after call</span></div>
+    <div class="spacer"></div>
+    <div class="ctl">
+      <select id="scenario"></select>
+      <button class="btn go" id="call">Call from the browser</button>
+      <button class="btn stop" id="hangup" disabled>Hang up</button>
+    </div>
+    <div class="phone"><span id="phone">no number</span><button class="btn sm" id="usephone" title="Phone calls carry no account facts; this makes the next call to the number this caller">use this caller</button><span class="ok" id="phoneok"></span></div>
+    <label class="tog" title="Off: humans save consumer cancellations. On: the bot's offer saves them. The policy says transfer either way; nobody told the agent."><input type="checkbox" id="changed"><span class="sw"></span>retention offer live</label>
+    <button class="btn" id="details">Details</button>
+  </header>
+
+  <section class="stage">
+    <div class="legend"><span><i style="background:var(--you)"></i>caller</span><span><i style="background:var(--riley)"></i>Riley (Vapi)</span><span><i style="background:var(--jev)"></i>Jev</span><span><i style="background:var(--sl)"></i>SenseLab RSI (recursive self-improvement)</span><span><i style="background:var(--world)"></i>the world</span></div>
+    <div class="clock" id="clock"></div>
+    <svg class="graph" id="graph" viewBox="0 0 1100 400" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#cfd6e2"/></marker>
+        <clipPath id="clip-node"><rect width="236" height="104" rx="16"/></clipPath>
+      </defs>
+      <!-- edges -->
+      <path class="edge" id="e-you-riley" d="M 236 125 L 350 125" style="--c:var(--you)"/>
+      <path class="edge" id="e-riley-jev" d="M 586 125 L 700 125" style="--c:var(--riley)"/>
+      <path class="edge" id="e-riley-sl" d="M 540 177 L 740 268" style="--c:var(--riley)"/>
+      <path class="edge" id="e-sl-jev" d="M 818 268 L 818 177" style="--c:var(--sl)"/>
+      <path class="edge" id="e-riley-world" d="M 468 177 L 468 268" style="--c:var(--riley)"/>
+      <path class="edge" id="e-world-sl" d="M 586 320 L 700 320" style="--c:var(--world)"/>
+      <!-- nodes -->
+      <g class="node" id="n-you" style="--c:var(--you)" transform="translate(0,73)">
+        <rect width="236" height="104"/><g clip-path="url(#clip-node)">
+        <text class="ic" x="18" y="28" fill="var(--you)">CALLER</text>
+        <text class="nm" x="18" y="56">You</text><text class="st" x="18" y="80" id="you-st">waiting for a call</text></g>
+      </g>
+      <g class="node" id="n-riley" style="--c:var(--riley)" transform="translate(350,73)">
+        <rect width="236" height="104"/><g clip-path="url(#clip-node)">
+        <text class="ic" x="18" y="28" fill="var(--riley)">VOICE AGENT</text>
+        <text class="nm" x="18" y="56">Riley</text><text class="st" x="18" y="80" id="riley-st">Vapi · GPT-4.1 · ElevenLabs</text></g>
+      </g>
+      <g class="node" id="n-jev" style="--c:var(--jev)" transform="translate(700,73)">
+        <rect width="236" height="104"/><g clip-path="url(#clip-node)">
+        <text class="ic" x="18" y="28" fill="var(--jev)">DECISION</text>
+        <text class="nm" x="18" y="56">Jev</text><text class="st" x="18" y="80" id="jev-st">decides the next step</text></g>
+      </g>
+      <g class="node" id="n-sl" style="--c:var(--sl)" transform="translate(700,268)">
+        <rect width="236" height="104"/><g clip-path="url(#clip-node)">
+        <text class="ic" x="18" y="28" fill="var(--sl)">RSI · SELF-IMPROVEMENT</text>
+        <text class="nm" x="18" y="56">SenseLab</text><text class="st" x="18" y="78" id="sl-st">loading</text>
+        <text class="badge" x="18" y="95" id="sl-badge"></text></g>
+      </g>
+      <g class="node" id="n-world" style="--c:var(--world)" transform="translate(350,268)">
+        <rect width="236" height="104"/><g clip-path="url(#clip-node)">
+        <text class="ic" x="18" y="28" fill="var(--world)">OUTCOME</text>
+        <text class="nm" x="18" y="56">The world</text><text class="st" x="18" y="80" id="world-st">survey, churn, the callback</text></g>
+      </g>
+      <g id="pulses"></g>
+    </svg>
+    <div class="caption"><div class="m" id="cap"></div><div class="s" id="sub"></div></div>
+  <aside class="drawer" id="drawer">
+    <h3>What the caller should say</h3>
+    <div id="say" style="font-size:13.5px"></div>
+    <div class="small" id="why" style="margin-top:6px"></div>
+    <h3>What SenseLab knows about this caller</h3>
+    <pre class="slot" id="cust">(none yet)</pre>
+    <h3>Same call, decided twice</h3>
+    <div id="alone" class="small">no decision yet</div>
+    <h3>Jev + SenseLab: the four actions</h3>
+    <div id="probs" class="small">no decision yet</div>
+    <h3>What SenseLab put in front of Jev</h3>
+    <pre class="slot" id="slot">(none)</pre>
+    <h3>Lessons SenseLab has drawn <span class="mono" id="mempath"></span></h3>
+    <div id="lessons" class="small">loading</div>
+    <h3>Record by situation</h3>
+    <div id="records" class="small"></div>
+    <h3>No microphone? Type the call</h3>
+    <textarea id="t-text" rows="3">You charged me $49 twice for the same period. This is the third time I'm calling about it.</textarea>
+    <div class="row"><select id="t-intent"><option>billing_dispute</option><option>cancellation</option><option>outage</option><option>upgrade</option><option>how_to</option></select><input id="t-amount" type="number" value="49" style="width:110px"><button class="btn sm" id="t-send">Decide</button></div>
+    <h3>Links</h3>
+    <div class="small"><a id="dash" target="_blank">SenseLab dashboard</a> · agent <span class="mono" id="agent"></span></div>
+  </aside>
+  </section>
+
+  <section class="tl">
+    <svg id="tl"></svg>
+    <div class="empty" id="tl-empty">The timeline fills as the call happens.</div>
+  </section>
+
+  <footer class="strip"><span class="lbl">Calls</span><div id="calls" style="display:flex;gap:8px"></div></footer>
+
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ACTION = { resolve_in_bot: "Resolve in the bot", transfer_to_agent: "Transfer to an agent", schedule_callback: "Schedule a callback", issue_credit: "Issue a credit" };
+const C = { you: "#d97706", riley: "#4f6bed", jev: "#db2777", sl: "#059669", world: "#7c3aed", bad: "#dc2626", ok: "#059669" };
+const fmtPhone = (n) => { const m = String(n).match(/^\+1(\d{3})(\d{3})(\d{4})$/); return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : n; };
+const hhmm = (s) => new Date(s * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+let SCENARIOS = [];
+const scenario = () => SCENARIOS[Number($("scenario").value)] || {};
+const caller = () => { const s = scenario(); return { name: s.name, tier: s.tier, prior_contacts_30d: s.prior_contacts_30d, tenure_months: s.tenure_months, customer_id: s.id }; };
+function showScenario() {
+  const s = scenario(); if (!s.id) return;
+  $("say").innerHTML = (s.script || []).map((q, i) => `<div class="turn"><span class="n">${i + 1}</span>“${esc(q)}”</div>`).join("") + `<div class="small" style="margin-top:4px">Riley talks in between; answer her, push back, ask why.</div>`;
+  $("why").textContent = s.why; $("t-text").value = s.script?.[0] || ""; $("t-intent").value = s.intent; $("t-amount").value = s.amount_usd;
+  $("cust").innerHTML = `<span class="small">Call as ${esc(s.name)} and SenseLab's memory of them shows here.</span>`;
+}
+function loadScenarios(personas) {
+  SCENARIOS = personas || []; $("scenario").innerHTML = "";
+  SCENARIOS.forEach((s, i) => { const o = document.createElement("option"); o.value = i; o.textContent = s.label; $("scenario").appendChild(o); });
+  showScenario();
+}
+$("scenario").onchange = showScenario; showScenario();
+
+let cfg = {}, vapi = null, seq = 0, clockOffset = 0, current = null, calls = {}, lastDecision = {}, stateCalls = [];
+const now = () => Date.now() / 1000 - clockOffset;
+async function post(url, body) { const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) }); return r.json(); }
+
+/* -- graph ---------------------------------------------------------------------------- */
+const glowTimers = {};
+function glow(node, ms) {
+  const el = $("n-" + node); el.classList.add("on");
+  clearTimeout(glowTimers[node]);
+  if (ms) glowTimers[node] = setTimeout(() => el.classList.remove("on"), ms);
+}
+function unglow(node) { clearTimeout(glowTimers[node]); $("n-" + node).classList.remove("on"); }
+function status(node, text) { text = String(text); $(node + "-st").textContent = text.length > 36 ? text.slice(0, 35) + "…" : text; }
+function pulse(edgeId, { label = "", color = "#fff", reverse = false, dur = 900, delay = 0 } = {}) {
+  setTimeout(() => {
+    const path = $(edgeId); const len = path.getTotalLength();
+    path.classList.add("hot"); path.style.setProperty("--c", color);
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g"); g.setAttribute("class", "pulse"); g.style.color = color;
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle"); c.setAttribute("r", 5.5); c.setAttribute("fill", color);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text"); t.textContent = label; t.setAttribute("dy", -11); t.setAttribute("text-anchor", "middle");
+    g.appendChild(c); g.appendChild(t); $("pulses").appendChild(g);
+    const t0 = performance.now();
+    const step = (ts) => {
+      const p = Math.min(1, (ts - t0) / dur); const e = p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      const pt = path.getPointAtLength((reverse ? 1 - e : e) * len);
+      c.setAttribute("cx", pt.x); c.setAttribute("cy", pt.y); t.setAttribute("x", pt.x); t.setAttribute("y", pt.y);
+      g.style.opacity = p > .85 ? (1 - p) / .15 : 1;
+      if (p < 1) requestAnimationFrame(step); else { g.remove(); setTimeout(() => path.classList.remove("hot"), 400); }
+    };
+    requestAnimationFrame(step);
+  }, delay);
+}
+let capTimer = null;
+function caption(main, sub = "", hold = 0) {
+  $("cap").innerHTML = main; $("sub").innerHTML = sub;
+  clearTimeout(capTimer);
+}
+
+/* -- call model ------------------------------------------------------------------------ */
+function callModel(id) {
+  return calls[id] || (calls[id] = { id, start: null, end: null, speech: { user: [], assistant: [] }, openAt: null, readyAt: null, runs: 0, runReady: {}, recall: null, noted: null, toolCall: null, decision: null, outcome: null, lines: [], caller: null, type: "webCall" });
+}
+function apply(e, live) {
+  const id = e.call_id; if (!id && e.kind !== "world_changed" && e.kind !== "agent_ready") return;
+  const c = id ? callModel(id) : null;
+  if (live && id && (e.kind === "call_started" || current == null)) current = id;
+  const isCur = c && current === c.id;
+  switch (e.kind) {
+    case "call_started": {
+      c.start = e.t; c.caller = e.caller; c.type = e.type || c.type;
+      if (live) { current = id; resetNodes(); }
+      if (live && isCur) { glow("you", 1500); pulse("e-you-riley", { label: "call connected", color: C.you }); status("you", `${c.caller.name} · ${c.caller.tier}, ${c.caller.prior_contacts_30d} prior`); status("riley", "answering"); caption(`<span class="you">Call connected.</span> Riley answers.`, `${esc(c.caller.name)}, a ${esc(c.caller.tier)} account with ${c.caller.prior_contacts_30d} contact${c.caller.prior_contacts_30d === 1 ? "" : "s"} with support this month. The account facts arrive with the call; what they want, and what happened last time, SenseLab has.`); }
+      break; }
+    case "memory_opening": {
+      c.openAt = e.t; c.runs = e.runs;
+      if (live && isCur) { pulse("e-riley-sl", { label: `opening ${e.runs} runs`, color: C.riley }); glow("sl"); status("sl", `opening ${e.runs} runs`); caption(`<span class="sl">SenseLab</span> opens a run for each of the ${e.runs} situations this caller could be in.`, `The intent is the one thing the account does not know. What earlier calls taught is fetched before the caller has finished the first sentence.`); }
+      break; }
+    case "memory_run_ready": { c.runReady[e.situation] = e.t; break; }
+    case "memory_ready": {
+      c.readyAt = e.t;
+      if (live && isCur) { unglow("sl"); status("sl", `${e.runs} runs open · ${(e.ms / 1000).toFixed(1)} s`); caption(`<span class="sl">SenseLab ready</span> in ${(e.ms / 1000).toFixed(1)} s.`, `Guidance for every possible situation is now waiting. Whatever the caller asks, the lookup costs nothing more.`); }
+      break; }
+    case "speech": {
+      const lane = c.speech[e.role]; const last = lane[lane.length - 1];
+      if (e.status === "started") { if (!last || last.t1) lane.push({ t0: e.t, t1: null }); }
+      else if (last && !last.t1) last.t1 = e.t;
+      if (live && isCur) { const n = e.role === "user" ? "you" : "riley"; if (e.status === "started") glow(n); else unglow(n); if (e.role === "assistant") status("riley", e.status === "started" ? "speaking" : "listening"); }
+      break; }
+    case "transcript": {
+      c.lines.push({ role: e.role, text: e.text, t: e.t });
+      if (live && isCur) { if (e.role === "user") pulse("e-you-riley", { label: "", color: C.you, dur: 700 }); else pulse("e-you-riley", { label: "", color: C.riley, reverse: true, dur: 700 }); $("sub").innerHTML = `<span style="color:${e.role === "user" ? C.you : C.riley}">${e.role === "user" ? "Caller" : "Riley"}:</span> “${esc(e.text)}”`; }
+      break; }
+    case "recall": {
+      c.recall = { t: e.t, ms: e.ms, contacts: e.contacts, seeded: e.seeded, name: e.name, brief: e.brief };
+      if (live && isCur) {
+        pulse("e-riley-sl", { label: "who is this?", color: C.riley, dur: 600 }); glow("sl", 2500);
+        pulse("e-riley-sl", { label: e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}` : "a new caller", color: C.sl, reverse: true, delay: 650 });
+        status("sl", e.contacts ? `knows ${e.name}: ${e.contacts} contact${e.contacts === 1 ? "" : "s"}` : `${e.name}: nothing on record`);
+        status("riley", "picking up the thread");
+        caption(e.contacts ? `<span class="sl">SenseLab</span> knows ${esc(e.name)}.` : `<span class="sl">SenseLab</span> has nothing on ${esc(e.name)} yet.`,
+          e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}, what was tried and what came of each, in ${e.ms} ms. Riley can say "is this the same charge?" instead of asking ${esc(e.name)} to explain a fourth time.` : `A first call. Riley asks what is going on; whatever happens on this call is remembered for the next one.`);
+      }
+      if (c.recall && current === c.id) $("cust").textContent = e.brief || "";
+      break; }
+    case "customer_noted": {
+      c.noted = { t: e.t, text: e.text };
+      if (live && isCur) { glow("sl", 2000); status("sl", `wrote a line in ${esc(c.recall?.name || "the caller")}'s history`); caption(`<span class="sl">SenseLab</span> remembers this call.`, `Added to ${esc(c.recall?.name || "the caller")}'s history: “${esc(e.text)}” Call again as the same person and Riley starts from here.`); }
+      break; }
+    case "tool_call": {
+      c.toolCall = e.t; c.intent = e.intent; c.situation = e.situation;
+      if (live && isCur) { pulse("e-riley-jev", { label: "decide_next_step", color: C.riley }); glow("jev"); status("riley", "asking Jev"); status("jev", "deciding"); caption(`Riley asks <span class="jev">Jev</span> what to do.`, `Intent heard: <b>${esc(e.intent.replace(/_/g, " "))}</b>. Situation: <span class="mono">${esc(e.situation)}</span>. Jev gets the written policy plus what SenseLab learned about exactly this situation.`); }
+      break; }
+    case "decision": {
+      c.decision = { t: e.t, situation: e.situation, action: e.action, confidence: e.confidence, jev_ms: e.jev_ms, memory_ms: e.memory_ms, prefetched: e.prefetched, basis: e.basis, alone: e.alone_action, alone_conf: e.alone_confidence };
+      if (live && isCur) {
+        pulse("e-sl-jev", { label: e.prefetched ? "guidance, already open" : `guidance · ${e.memory_ms} ms`, color: C.sl, dur: 700 });
+        pulse("e-riley-jev", { label: ACTION[e.action] || e.action, color: C.jev, reverse: true, delay: 650 });
+        pulse("e-you-riley", { label: "Riley says the line", color: C.riley, reverse: true, delay: 1500 });
+        setTimeout(() => { unglow("jev"); status("jev", `${ACTION[e.action] || e.action} · ${e.jev_ms} ms`); status("riley", "speaking the line"); }, 700);
+        status("sl", e.prefetched ? "guidance was waiting" : `guidance in ${e.memory_ms} ms`);
+        const differs = e.alone_action && e.alone_action !== e.action;
+        caption(`<span class="jev">Jev + SenseLab:</span> ${esc(ACTION[e.action] || e.action)} <span style="color:var(--muted);font-size:15px">${Math.round(e.confidence * 100)}% · ${e.jev_ms} ms</span>`,
+          (e.alone_action ? (differs ? `<b>Jev alone, on the written policy, would have chosen ${esc(ACTION[e.alone_action] || e.alone_action)}</b> (${Math.round(e.alone_confidence * 100)}%). ` : `Jev alone would have chosen the same. `) : "")
+          + (e.basis && e.basis !== "none" ? `The decision rested on <span class="mono">${esc(e.basis)}</span>. ` : "")
+          + `Riley speaks the line to the caller, word for word.`);
+      }
+      refreshDecision(id);
+      break; }
+    case "call_ended": {
+      c.end = e.t;
+      if (live && isCur) { unglow("you"); unglow("riley"); status("riley", "call over"); pulse("e-riley-world", { label: "call ended", color: C.riley }); glow("world", 2500); caption(`Call ended.`, `Now the world replies: did that work? In production it is the survey, the churn, the callback that did or did not happen. The demo's world answers at once.`); }
+      break; }
+    case "outcome": {
+      c.outcome = { t: e.t, success: e.success, note: e.note, cost: e.cost_usd, seal_ms: e.seal_ms, trace: e.trace_id, keys: e.causal_keys || [], alone: e.alone || null };
+      if (live && isCur) {
+        status("world", e.success ? "it worked" : `it did not work${e.cost_usd ? ` · $${Number(e.cost_usd).toLocaleString()}` : ""}`);
+        pulse("e-world-sl", { label: e.success ? "worked" : "did not work", color: e.success ? C.ok : C.bad, delay: 300 });
+        glow("sl", 3000); setTimeout(() => status("sl", "outcome sealed · lesson written"), 1100);
+        const al = e.alone; const alDiff = al && al.action && al.action !== e.action;
+        const vs = !al ? "" : alDiff
+          ? (e.success && !al.success ? `<b>Jev alone would have chosen ${esc(ACTION[al.action] || al.action)}: a miss${al.cost_usd ? ` costing $${Number(al.cost_usd).toLocaleString()}` : ""}. SenseLab avoided it.</b> `
+             : !e.success && al.success ? `Jev alone would have chosen ${esc(ACTION[al.action] || al.action)}, which would have worked; the lesson from this call corrects that. `
+             : `Jev alone would have chosen ${esc(ACTION[al.action] || al.action)}${al.success ? ", also fine" : ", also a miss"}. `)
+          : "Jev alone would have done the same. ";
+        caption(`<span class="${e.success ? "ok" : "bad"}">${e.success ? "That worked." : "That did not work."}</span> Sealed to <span class="sl">SenseLab</span>, lesson written.`, `${esc(e.note)}${e.cost_usd ? ` The miss cost $${Number(e.cost_usd).toLocaleString()}.` : ""} ${vs}The next caller in this situation gets Jev's answer with this lesson in front of it. That loop is the RSI.`);
+        setTimeout(memory, 1500); setTimeout(state, 1500);
+      }
+      break; }
+    case "recording_saved": if (live) setTimeout(state, 300); break;
+    case "world_changed": if (live) caption(`The world changed.`, `Retention offer ${e.changed ? "is live: the bot's offer now saves consumer cancellations" : "is off: humans save consumer cancellations again"}. The written policy did not change. Watch SenseLab notice.`); $("changed").checked = !!e.changed; break;
+  }
+  if (live && isCur) drawTimeline();
+}
+function resetNodes() {
+  ["you", "riley", "jev", "sl", "world"].forEach(unglow);
+  status("jev", "decides the next step"); status("world", "survey, churn, the callback"); status("riley", "Vapi · GPT-4.1 · ElevenLabs");
+}
+
+/* -- timeline -------------------------------------------------------------------------- */
+const LANES = [["you", "Caller", C.you], ["riley", "Riley", C.riley], ["jev", "Jev", C.jev], ["sl", "SenseLab RSI", C.sl]];
+function drawTimeline() {
+  const svg = $("tl"); const c = current && calls[current];
+  const W = svg.clientWidth || 1000, H = svg.clientHeight || 220, L = 96, R = 24, top = 34, lh = (H - top - 20) / LANES.length;
+  if (!c || !c.start) { svg.innerHTML = ""; $("tl-empty").style.display = ""; return; }
+  $("tl-empty").style.display = "none";
+  const end = c.end ? Math.max(c.end, (c.outcome?.t || 0)) + 1.5 : now();
+  const dur = Math.max(12, end - c.start);
+  const x = (t) => L + ((t - c.start) / dur) * (W - L - R);
+  let o = "";
+  const step = dur > 90 ? 30 : dur > 40 ? 10 : 5;
+  o += `<text class="tick-l" x="14" y="${top - 12}" style="font-family:Inter;letter-spacing:.06em">TIMELINE</text>`;
+  for (let s = 0; s <= dur; s += step) o += `<line class="tick" x1="${x(c.start + s)}" y1="${top - 8}" x2="${x(c.start + s)}" y2="${H - 16}"/><text class="tick-l" x="${x(c.start + s) + 3}" y="${top - 12}">${s}s</text>`;
+  LANES.forEach(([k, name], i) => { const y = top + i * lh; o += `<line class="lane-line" x1="${L - 10}" y1="${y + lh}" x2="${W - R}" y2="${y + lh}"/><text class="lane-name" x="14" y="${y + lh / 2 + 4}">${name}</text>`; });
+  const seg = (lane, t0, t1, color, label, alpha = 1, thin = false) => {
+    const i = LANES.findIndex((l) => l[0] === lane); const y = top + i * lh + (thin ? 4 : 8), h = thin ? 13 : lh - 16;
+    const x0 = x(t0), x1 = Math.max(x(t1 ?? (c.end || now())), x0 + 4);
+    let s = `<rect class="seg" x="${x0}" y="${y}" width="${x1 - x0}" height="${h}" fill="${color}" fill-opacity="${alpha}"/>`;
+    if (label && x1 - x0 > label.length * (thin ? 5.4 : 6.5) + 10) s += `<text class="seg-l${thin ? " thin" : ""}" x="${x0 + 6}" y="${y + h / 2 + (thin ? 3.5 : 4)}">${esc(label)}</text>`;
+    return s;
+  };
+  const mark = (lane, t, color, label, above = false) => {
+    const i = LANES.findIndex((l) => l[0] === lane); const y = top + i * lh;
+    return `<line class="mark" x1="${x(t)}" y1="${y + 4}" x2="${x(t)}" y2="${y + lh - 4}" stroke="${color}"/><text class="mark-l" x="${x(t) + 5}" y="${y + (above ? 14 : lh - 8)}">${esc(label)}</text>`;
+  };
+  c.speech.user.forEach((s) => { o += seg("you", s.t0, s.t1, C.you, "speaking"); });
+  c.speech.assistant.forEach((s) => { o += seg("riley", s.t0, s.t1, C.riley, "speaking"); });
+  const mine = c.decision && c.runReady[c.decision.situation];
+  if (c.openAt) o += seg("sl", c.openAt, c.readyAt, C.sl, `opening ${c.runs} runs${mine ? ` · this one at ${(mine - c.openAt).toFixed(1)} s` : ""}${c.readyAt ? ` · all at ${(c.readyAt - c.openAt).toFixed(1)} s` : ""}`, c.readyAt ? 1 : .55, true);
+  if (mine) { const i = 3, y = top + i * lh; o += `<line class="mark" x1="${x(mine)}" y1="${y + 2}" x2="${x(mine)}" y2="${y + 19}" stroke="#0f172a"/>`; }
+  if (c.recall) o += mark("sl", c.recall.t, C.sl, `recall: ${c.recall.contacts ? `${c.recall.contacts} contact${c.recall.contacts === 1 ? "" : "s"}` : "new caller"} · ${c.recall.ms} ms`);
+  if (c.toolCall) o += mark("riley", c.toolCall, C.riley, "", true);
+  if (c.decision) {
+    const d = c.decision; const tJ0 = d.t - d.jev_ms / 1000;
+    if (!d.prefetched && d.memory_ms > 50) o += seg("sl", tJ0 - d.memory_ms / 1000, tJ0, C.sl, `memory read ${d.memory_ms} ms`);
+    else o += mark("sl", tJ0, C.sl, "read, 0 ms");
+    o += seg("jev", Math.max(c.toolCall || tJ0, tJ0 - 0.15), d.t, C.jev, "");
+    { const i = 2, y = top + i * lh; o += `<text class="mark-l" x="${x(d.t) + 7}" y="${y + lh / 2 + 4}">with SenseLab: ${esc(ACTION[d.action] || d.action)} · ${d.jev_ms} ms${d.alone && d.alone !== d.action ? `   ·   alone: ${esc(ACTION[d.alone] || d.alone)}` : d.alone ? "   ·   alone: the same" : ""}</text>`; }
+    o += mark("riley", d.t, C.jev, "");
+  }
+  if (c.end) o += mark("you", c.end, C.riley, "hung up", true);
+  if (c.outcome) {
+    const oc = c.outcome; const t0 = oc.t - (oc.seal_ms || 0) / 1000;
+    o += seg("sl", t0, oc.t, oc.success ? C.ok : C.bad, `outcome: ${oc.success ? "worked" : "did not work"} → lesson written`);
+  }
+  if (!c.end) o += `<line class="now" x1="${x(now())}" y1="${top - 6}" x2="${x(now())}" y2="${H - 16}"/>`;
+  svg.innerHTML = o;
+}
+
+/* -- details --------------------------------------------------------------------------- */
+function refreshDecision(callId) {
+  const d = lastDecision[callId]; if (!d) return;
+  $("alone").innerHTML = d.alone_action ? `With SenseLab: <b>${esc(ACTION[d.action] || d.action)}</b> (${Math.round(d.confidence * 100)}%). Alone, on the written policy: <b>${esc(ACTION[d.alone_action] || d.alone_action)}</b> (${Math.round((d.alone_confidence || 0) * 100)}%).${d.alone_outcome ? ` The world's verdict on the alone choice: ${d.alone_outcome.success ? "would have worked" : "a miss"}${d.alone_outcome.cost_usd ? `, $${Number(d.alone_outcome.cost_usd).toLocaleString()}` : ""}.` : ""}` : "no decision yet";
+  $("probs").innerHTML = Object.entries(d.probabilities || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="prob ${k === d.action ? "pick" : ""}"><span>${esc(ACTION[k] || k)}</span><span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span><span class="mono" style="text-align:right">${Math.round(v * 100)}%</span></div>`).join("");
+  $("slot").textContent = d.memory_text || "(empty)";
+}
+async function memory() {
+  const m = await (await fetch("/api/memory")).json(); if (m.error) return;
+  $("sl-badge").textContent = `${m.lessons.length} lesson${m.lessons.length === 1 ? "" : "s"} · ${m.seen.length} record${m.seen.length === 1 ? "" : "s"}`;
+  $("lessons").innerHTML = m.lessons.map((r) => {
+    const v = String(r.value); const mm = v.match(/^When: (\S+)\. (\w+) (worked|did not work)\. ?(.*)$/s);
+    if (!mm) return `<div class="lesson"><div class="n">${esc(v)}</div></div>`;
+    return `<div class="lesson ${mm[3] === "worked" ? "ok" : "bad"}"><div class="s">${esc(mm[1])}</div><div class="a">${esc(ACTION[mm[2]] || mm[2])} ${mm[3]}</div><div class="n">${esc(mm[4])}</div></div>`;
+  }).join("") || "none yet; the first sealed outcome writes one";
+  $("records").innerHTML = m.seen.map((r) => { const mm = String(r.value).match(/^Seen on (\S+) with decide:(\w+): worked (\d+) of (\d+)/); return mm ? `<div class="rec"><span><span class="s">${esc(mm[1])}</span><br>${esc(ACTION[mm[2]] || mm[2])}</span><span>${mm[3]} of ${mm[4]}</span></div>` : ""; }).join("") || "nothing seen yet";
+}
+async function state() {
+  const st = await (await fetch("/api/state")).json();
+  stateCalls = st.calls; st.decisions.forEach((d) => { lastDecision[d.call_id] = d; });
+  $("dot").className = "dot " + (st.calls.some((c) => c.status === "in-progress") ? "live" : "ok");
+  $("changed").checked = !!st.changed;
+  $("calls").innerHTML = st.calls.slice(0, 10).map((c) => {
+    const d = lastDecision[c.id]; const o = d && d.outcome; const src = c.recording_file ? "/recordings/" + c.recording_file.split("/").pop() : c.recording_url;
+    return `<span class="chip ${c.id === current ? "sel" : ""}" data-id="${esc(c.id)}"><i style="background:${o ? (o.success ? C.ok : C.bad) : c.status === "in-progress" ? C.you : "#cfd6e2"}"></i>${hhmm(c.started)} · ${d ? esc(ACTION[d.action] || d.action) : "no decision"}${o ? (o.success ? " · worked" : " · missed") : ""}${src ? ` <audio controls preload="none" src="${esc(src)}"></audio>` : ""}</span>`;
+  }).join("");
+  $("calls").querySelectorAll(".chip").forEach((el) => { el.onclick = (ev) => { if (ev.target.tagName === "AUDIO") return; select(el.dataset.id); }; });
+  if (current) refreshDecision(current);
+}
+function select(id) {
+  current = id; const c = calls[id]; resetNodes();
+  if (c) {
+    if (c.caller) status("you", `${c.caller.name} · ${c.caller.tier}, ${c.caller.prior_contacts_30d} prior`);
+    if (c.decision) { const d = c.decision, al = c.outcome && c.outcome.alone; status("jev", `${ACTION[d.action] || d.action} · ${d.jev_ms} ms`); caption(`<span class="jev">Jev + SenseLab:</span> ${esc(ACTION[d.action] || d.action)} <span style="color:var(--muted);font-size:15px">${Math.round(d.confidence * 100)}%</span>${c.outcome ? ` · <span class="${c.outcome.success ? "ok" : "bad"}">${c.outcome.success ? "worked" : "did not work"}</span>` : ""}`, (c.outcome ? esc(c.outcome.note) + " " : "") + (d.alone && d.alone !== d.action ? `Jev alone would have chosen ${esc(ACTION[d.alone] || d.alone)}${al ? (al.success ? ", which would also have worked." : `: a miss${al.cost_usd ? ` costing $${Number(al.cost_usd).toLocaleString()}` : ""}.`) : "."}` : d.alone ? "Jev alone would have done the same." : "")); }
+    else caption(`A call at ${hhmm(c.start)}.`, "No decision point was reached.");
+    if (c.outcome) status("world", c.outcome.success ? "it worked" : "it did not work");
+    status("sl", c.readyAt ? `${c.runs} runs opened in ${(c.readyAt - c.openAt).toFixed(1)} s` : "");
+    if (c.recall) $("cust").textContent = c.recall.brief || "";
+  }
+  refreshDecision(id); drawTimeline(); state();
+}
+
+/* -- events loop ----------------------------------------------------------------------- */
+async function tick() {
+  try {
+    const r = await (await fetch(`/api/events?since=${seq}`)).json();
+    if (r.events.length) { clockOffset = Date.now() / 1000 - r.events[r.events.length - 1].t; r.events.forEach((e) => apply(e, true)); seq = r.seq; }
+  } catch (e) { /* server restarting */ }
+}
+function clock() {
+  const c = current && calls[current];
+  $("clock").textContent = c && c.start ? `${((c.end || now()) - c.start).toFixed(1)} s` : "";
+  if (c && c.start && !c.end) drawTimeline();
+}
+
+/* -- controls -------------------------------------------------------------------------- */
+$("details").onclick = () => $("drawer").classList.toggle("open");
+$("changed").onchange = (e) => post("/api/world", { changed: e.target.checked });
+$("usephone").onclick = async () => { await post("/api/profiles", caller()); $("phoneok").textContent = "registered, dial within 10 min"; setTimeout(() => { $("phoneok").textContent = ""; }, 15000); };
+$("call").onclick = async () => {
+  if (!vapi) return;
+  const prof = await post("/api/profiles", caller());
+  $("call").disabled = true; caption("Connecting…", "");
+  try { await vapi.start(cfg.assistant_id, { variableValues: prof.variable_values, metadata: { profile_id: prof.profile_id } }); }
+  catch (e) { caption("Could not start the call", esc(e?.message || e)); $("call").disabled = false; }
+};
+$("hangup").onclick = () => vapi && vapi.stop();
+$("t-send").onclick = async () => {
+  const { call_id } = await post("/api/calls", { caller: caller() });
+  await post(`/api/calls/${call_id}/decide`, { intent: $("t-intent").value, amount_usd: Number($("t-amount").value), summary: $("t-text").value, sentiment: "frustrated" });
+  await post(`/api/calls/${call_id}/end`, { ended_reason: "text-mode" });
+};
+
+async function init() {
+  cfg = await (await fetch("/api/config")).json();
+  $("phone").textContent = cfg.phone_numbers?.length ? cfg.phone_numbers.map(fmtPhone).join(" · ") : "no phone number";
+  $("mempath").textContent = cfg.entity_path; $("agent").textContent = cfg.agent_id; $("dash").href = cfg.dashboard;
+  $("changed").checked = !!cfg.changed;
+  loadScenarios(cfg.personas);
+  status("sl", "ready");
+  // history: build the models without animating, then show the latest call
+  const r = await (await fetch(`/api/events?since=0`)).json();
+  r.events.forEach((e) => apply(e, false)); seq = r.seq;
+  await state();
+  const latest = stateCalls[0]; if (latest) select(latest.id); else caption("Pick a scenario and call.", "Every call is decided twice: Jev alone on the written policy, and Jev with what SenseLab learned from earlier calls. The caller gets the second; the page shows both.");
+  if (cfg.browser_calls) {
+    try {
+      const mod = await import("https://esm.sh/@vapi-ai/web");
+      vapi = new mod.default(cfg.public_key);
+      vapi.on("call-start", () => { $("hangup").disabled = false; $("call").disabled = true; });
+      vapi.on("call-end", () => { $("hangup").disabled = true; $("call").disabled = false; });
+      vapi.on("error", (e) => { caption("Call error", esc(e?.message || JSON.stringify(e))); $("call").disabled = false; console.error(e); });
+    } catch (e) { $("call").disabled = true; $("call").textContent = "browser calls unavailable"; console.error(e); }
+  } else { $("call").disabled = true; $("call").textContent = "browser calls off"; $("drawer").classList.add("open"); }
+  setInterval(tick, 400); setInterval(clock, 200); setInterval(state, 5000); setInterval(memory, 8000); memory();
+  window.addEventListener("resize", drawTimeline);
+}
+init();
+</script>
+</body>
+</html>

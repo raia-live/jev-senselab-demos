@@ -1,4 +1,4 @@
-"""The four demos. Each module exposes ``SCENARIO``."""
+"""The demos. Each module exposes ``SCENARIO``."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import importlib
 
 from core.scenario import Scenario
 
-NAMES = ("lead_routing", "ap_invoices", "marketing", "moderation")
+NAMES = ("lead_routing", "ap_invoices", "marketing", "moderation", "call_handling")
 
 
 def load(name: str) -> Scenario:
