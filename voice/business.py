@@ -213,7 +213,9 @@ class Business:
             for s in situation.get("splits") or ()
         )
         tiers = tuple(str(t) for t in caller.get("tiers") or ("consumer",))
-        mode = str(outcomes.get("mode") or "reported")
+        # VOICE_OUTCOMES overrides the file for one run: "reported" to test as yourself, where
+        # what you say on the next call is the outcome, with the demo's business file as is.
+        mode = str(os.environ.get("VOICE_OUTCOMES") or outcomes.get("mode") or "reported").strip().lower()
         if mode not in OUTCOME_MODES:
             raise ValueError(f"outcomes.mode must be one of {OUTCOME_MODES}, not {mode!r}")
         if not intents or not actions:

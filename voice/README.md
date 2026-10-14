@@ -141,11 +141,19 @@ the retention offer is live, consumer cancellations are kept by the bot. Nobody 
 agent either rule. The page marks these outcomes "demo world".
 
 To report outcomes yourself instead (your own CRM, a survey, a person), set
-`outcomes.mode = "reported"` in the business file. Then nothing is assumed when a call ends:
-the decision waits, "Details" shows an "It worked / It did not" control for it, and
-`POST /api/outcome` with `{"decision_id", "severity", "note"}` does the same from code. The
-lesson is written the moment the outcome lands, however long that takes. In simulated mode a
-single call can still be held back with `POST /api/calls/{id}/end` and `{"auto_review": false}`.
+`outcomes.mode = "reported"` in the business file, or `VOICE_OUTCOMES=reported` for one run.
+Then nothing is assumed when a call ends: the decision waits, "Details" shows an "It worked /
+It did not" control for it, and `POST /api/outcome` with `{"decision_id", "severity", "note"}`
+does the same from code. The caller can close it too: when they ring back and say what came
+of the last step ("nobody called me", "the credit showed up"), John puts that on their file
+(`update_file`, kind `outcome`) and the open decision is sealed on their word, so what
+SenseLab learns from that call is what happened. The lesson is written the moment the outcome
+lands, however long that takes. In simulated mode a single call can still be held back with
+`POST /api/calls/{id}/end` and `{"auto_review": false}`.
+
+Testing as yourself, use reported mode. In simulated mode the demo world decides at hang-up
+whether the step worked, so a callback you never receive is on record as received, and John
+will say so on your next call; that is the simulator talking, not SenseLab.
 
 ## No microphone
 

@@ -75,9 +75,11 @@ def _caller_lines(*, tool_words: str, identify_words: str = "", file_words: str 
     identify = (f" If they say who they are, or you ask and they tell you, {identify_words}: if their file comes back, "
                 "it is what you know about them from then on; use their name and carry on as with any known caller. "
                 if identify_words else "")
-    on_file = (f" When they give you a detail for their file (a number to reach them on, an email, what to call them) or "
-               f"correct something the file says, read it back once, and once they confirm it, {file_words}, in its own turn: "
-               "that is what puts it on their record for next time. Until then it is only in this conversation."
+    on_file = (f" When they give you a detail for their file (a number to reach them on, an email, what to call them), "
+               f"correct something the file says, or tell you what came of the last step we took for them (the callback came, "
+               f"or never did), read it back once, and once they confirm it, {file_words}, in its own turn: that is what puts "
+               "it on their record for next time, and their word on how a step turned out is what the record keeps. Until "
+               "then it is only in this conversation."
                if file_words else "")
     return f"""- From the account: {{{{account}}}}.
 - Their history with us, as of the moment this call connected. This is the PAST. It tells you who they are and what \
@@ -127,7 +129,9 @@ even when a question answered from the file settles it along the way: one clarif
 - Ask one question at a time. Use details the caller has already given; never ask for them again.
 
 Backchannel policy: light. Acknowledge briefly without competing with the caller.
-Interruption policy: stop speaking when the caller interrupts. Listen, and answer what they said.
+Interruption policy: a short acknowledgement while you talk ("yeah", "uh-huh", "okay", "right", a laugh) is not an \
+interruption; keep going. Stop when the caller starts saying something of their own, listen, and answer what they said. \
+Finish the sentence you are in when you can: a sentence cut in half is worse than half a second of overlap.
 
 # What you know about this caller
 {_caller_lines(tool_words="ask the backend anything", identify_words="ask the backend to look the name up", file_words="ask the backend to put it on their file, with the detail as they gave it")}
@@ -169,6 +173,10 @@ nothing else in that turn. Their file comes back, or nothing does.
 - The caller has given a detail for their file (a number to reach them on, an email, the name they go by, a \
 correction to the notes) and confirmed your read-back: ask the backend to put it on their file, passing the detail \
 exactly as they gave it. Saying "I've got it" does not put it on file; the backend does.
+- The caller says what came of the last thing we did for them ("nobody called me", "the credit never showed up", \
+"they did call, thanks"): acknowledge it in a few words, apologise once if we let them down, and ask the backend to \
+put that outcome on their file, in their words, saying whether it worked. The file's note on that step is what we \
+hoped; the caller's word is what happened, and it wins. Then carry on with what they need today.
 - The caller has said, on this call, what they need today ({_intent_lines(b)}), and you have the one detail that needs, \
 or the file has it, or they do not have it. Ask what happens next, and pass along what the caller said, in their words. \
 A charge the file already explains, a cancellation they have given a reason for, an outage you can see in the notes: \
@@ -268,8 +276,10 @@ Your tools are identify_caller, update_file, decide_next_step and endCall. ident
 account matched this call (the assistant's file says so) and the caller has said their name. Call it with the name as \
 they said it, and return its result to the assistant word for word: it is their file now, or it says nothing matched. \
 update_file is for a detail the caller gave for their file and confirmed (a phone number, an email, the name they go \
-by, a correction to what the file says): call it with the kind and the detail exactly as given (a number as digits), \
-then tell the assistant it is on file. If the assistant asks you to put something on file, that is this tool, every \
+by, a correction to what the file says), and for what the caller says came of the last step we took for them (kind \
+outcome, worked true or false, value in their words: "nobody called me"): call it with the kind and the detail \
+exactly as given (a number as digits), then tell the assistant it is on file, and, for an outcome, what the tool says \
+it closed. If the assistant asks you to put something on file, that is this tool, every \
 time; never answer that you have noted it without calling it. Beyond that you have no lookup. Never say you will check, look up or confirm anything: facts about the caller's account are in \
 the assistant's own file, not yours. When the next step is to \
 resolve on the call, say so and tell the assistant to answer from its file: first the entry in the file that matches, \
@@ -412,15 +422,19 @@ def update_file_tool() -> dict[str, Any]:
         "function": {
             "name": "update_file",
             "description": ("Put a detail the caller gave on their file, once it has been read back and confirmed: a phone "
-                            "number to reach them on, an email, the name they go by, or a correction to what the file says "
-                            "(\"the callback never came\"). It is kept on their record for next time and for whoever acts on "
-                            "this call. Not for what they are calling about today; that is decide_next_step."),
+                            "number to reach them on, an email, the name they go by, a correction to what the file says, or "
+                            "what came of the last step we took for them (\"the callback never came\", \"the credit showed up\"; "
+                            "kind outcome, with worked). It is kept on their record for next time and for whoever acts on "
+                            "this call, and an outcome closes the earlier step on their word. Not for what they are calling "
+                            "about today; that is decide_next_step."),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "kind": {"type": "string", "enum": ["phone", "email", "name", "correction", "other"]},
+                    "kind": {"type": "string", "enum": ["phone", "email", "name", "correction", "outcome", "other"]},
                     "value": {"type": "string", "description": "The detail itself: the number as digits, the email, the name, "
-                                                               "or the correction in a sentence."},
+                                                               "the correction in a sentence, or what came of the step in the "
+                                                               "caller's words."},
+                    "worked": {"type": "boolean", "description": "For kind outcome: whether the step worked, as the caller tells it."},
                     "note": {"type": "string", "description": "Context, if any: what it is for (\"for the specialist's callback\")."},
                 },
                 "required": ["kind", "value"],

@@ -522,46 +522,45 @@ $("call").onclick = async () => {
     // Tell the server the call is on, so the runs open ahead now. (GPT-Live sends the server no
     // status update at the start, nor speech or transcript updates; the page relays those.)
     // The SDK's call-start event does not fire on GPT-Live either, so the call is live from here.
-    if (call?.id) { liveCallId = call.id; resetLiveText(); $("hangup").disabled = false; post(`/api/calls/${call.id}/start`, { profile_id: prof.profile_id }); if (cfg.stack === "live") listenToMic(call.id); }
+    if (call?.id) { liveCallId = call.id; resetLiveText(); resetMic(); $("hangup").disabled = false; post(`/api/calls/${call.id}/start`, { profile_id: prof.profile_id }); setTimeout(() => { try { vapi.startLocalAudioLevelObserver(100).catch(() => {}); } catch (e) { /* older SDK */ } }, 1500); }
   }
   catch (e) { caption("Could not start the call", esc(e?.message || e)); $("call").disabled = false; }
 };
 $("hangup").onclick = () => vapi && vapi.stop();
 
-/* -- the caller's own voice, from the microphone --------------------------------------- */
+/* -- who is speaking, from the call's own audio ------------------------------------------ */
 // On GPT-Live nothing tells the page when the caller is speaking: Vapi sends no speech
 // updates and no caller transcripts to the browser or the server, and refuses the call's
-// audio stream. The page has the microphone, so it listens itself: loudness every 100 ms,
-// a turn after 200 ms of sound, over after 700 ms of quiet, a floor that follows the room.
-// The same shape the server derives for the agent, relayed the same way.
-let mic = null;
-async function listenToMic(callId) {
-  stopMic();
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { console.warn("no microphone for the page", e); return; }
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const src = ctx.createMediaStreamSource(stream); const an = ctx.createAnalyser(); an.fftSize = 1024; src.connect(an);
-  const buf = new Float32Array(an.fftSize);
-  const m = { callId, stream, ctx, floor: 0.004, on: false, loud: 0, quiet: 0, timer: null };
-  mic = m;
-  m.timer = setInterval(() => {
-    if (liveCallId !== callId) { stopMic(); return; }
-    an.getFloatTimeDomainData(buf);
-    let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-    const rms = Math.sqrt(sum / buf.length);
-    if (rms < m.floor) m.floor = Math.max(0.004, 0.8 * m.floor + 0.2 * rms);
-    else if (!m.on && rms < 3 * m.floor) m.floor = Math.min(0.98 * m.floor + 0.02 * rms, 0.03);
-    const thresh = Math.max(0.01, 3 * m.floor);
-    if (rms >= thresh) { m.loud++; m.quiet = 0; } else { m.quiet++; m.loud = 0; }
-    if (!m.on && m.loud >= 2) { m.on = true; glow("you"); post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "user", status: "started", t: now() - 0.2 }).catch(() => {}); }
-    else if (m.on && m.quiet >= 7) { m.on = false; unglow("you"); post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "user", status: "stopped", t: now() - 0.7 }).catch(() => {}); }
-  }, 100);
+// audio stream. The SDK still has the call's audio. It reports the microphone level
+// ("local-volume-level", from the same track the call sends, so no second capture of the
+// microphone) and the agent's speech from the audio it plays ("speech-start" / "speech-end",
+// the end a second after the last sound). The caller's level goes through a small detector:
+// a turn after 200 ms above the floor, over after 700 ms under it, a floor that follows
+// the room. The same shape the server derives on the other stacks, relayed the same way.
+const mic = { on: false, loud: 0, quiet: 0, floor: 0.004 };
+let sdkSpeech = false;  // the SDK has reported the agent's speech on this call; the transcript then only carries words
+function resetMic() { mic.on = false; mic.loud = 0; mic.quiet = 0; mic.floor = 0.004; sdkSpeech = false; }
+function onMicLevel(level) {
+  const callId = liveCallId; if (!callId) return;
+  const rms = Number(level) || 0;
+  if (rms < mic.floor) mic.floor = Math.max(0.004, 0.8 * mic.floor + 0.2 * rms);
+  else if (!mic.on && rms < 3 * mic.floor) mic.floor = Math.min(0.98 * mic.floor + 0.02 * rms, 0.03);
+  const thresh = Math.max(0.01, 3 * mic.floor);
+  if (rms >= thresh) { mic.loud++; mic.quiet = 0; } else { mic.quiet++; mic.loud = 0; }
+  if (!mic.on && mic.loud >= 2) { mic.on = true; glow("you"); if (cfg.stack === "live") post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "user", status: "started", t: now() - 0.2 }).catch(() => {}); }
+  else if (mic.on && mic.quiet >= 7) { mic.on = false; unglow("you"); if (cfg.stack === "live") post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "user", status: "stopped", t: now() - 0.7 }).catch(() => {}); }
+}
+function onAgentSpeech(st) {
+  const callId = liveCallId; if (!callId) return;
+  sdkSpeech = true;
+  if (st === "started") { glow("riley"); status("riley", "speaking"); }
+  else { unglow("riley"); status("riley", "listening"); }
+  if (cfg.stack === "live") post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "assistant", status: st, t: st === "started" ? now() : now() - 1.0 }).catch(() => {});
 }
 function stopMic() {
-  const m = mic; if (!m) return; mic = null;
-  clearInterval(m.timer);
-  if (m.on) { unglow("you"); post(`/api/calls/${m.callId}/notes`, { type: "speech-update", role: "user", status: "stopped", t: now() }).catch(() => {}); }
-  m.stream.getTracks().forEach((t) => t.stop()); m.ctx.close().catch(() => {});
+  const callId = liveCallId;
+  if (mic.on && callId && cfg.stack === "live") post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "user", status: "stopped", t: now() }).catch(() => {});
+  unglow("you"); resetMic();
 }
 
 /* -- GPT-Live's transcript stream ------------------------------------------------------- */
@@ -583,7 +582,7 @@ function onLiveTranscript(m) {
   const cur = text.slice(s.flushed).trim();
   if (cur) {
     s.last = now();
-    if (!s.speaking) { s.speaking = true; s.first = s.last; post(`/api/calls/${callId}/notes`, { type: "speech-update", role, status: "started", t: s.first }).catch(() => {}); glow(role === "user" ? "you" : "riley"); if (role === "assistant") status("riley", "speaking"); }
+    if (!s.speaking) { s.speaking = true; s.first = s.last; if (!(sdkSpeech && role === "assistant")) { post(`/api/calls/${callId}/notes`, { type: "speech-update", role, status: "started", t: s.first }).catch(() => {}); glow(role === "user" ? "you" : "riley"); if (role === "assistant") status("riley", "speaking"); } }
     if (current === callId) subtitle(role, cur);
     clearTimeout(s.timer); s.timer = setTimeout(() => flushLive(role), PAUSE_MS);
   }
@@ -595,7 +594,7 @@ function flushLive(role) {
   // The words arrive faster than they are spoken (a short line lands in one piece), so the
   // stop is the later of the last words' arrival and how long the line takes to say.
   const stop = Math.max(s.last, s.first + cur.length / CHARS_PER_S);
-  if (s.speaking) { s.speaking = false; unglow(role === "user" ? "you" : "riley"); if (role === "assistant") status("riley", "listening"); if (callId) post(`/api/calls/${callId}/notes`, { type: "speech-update", role, status: "stopped", t: stop }).catch(() => {}); }
+  if (s.speaking) { s.speaking = false; if (!(sdkSpeech && role === "assistant")) { unglow(role === "user" ? "you" : "riley"); if (role === "assistant") status("riley", "listening"); if (callId) post(`/api/calls/${callId}/notes`, { type: "speech-update", role, status: "stopped", t: stop }).catch(() => {}); } }
   if (cur && callId) post(`/api/calls/${callId}/notes`, { type: "transcript", role, transcriptType: "final", transcript: cur, t: stop }).catch(() => {});
 }
 $("t-send").onclick = async () => {
@@ -629,6 +628,9 @@ async function init() {
       vapi = new mod.default(cfg.public_key);
       vapi.on("call-start", () => { $("hangup").disabled = false; $("call").disabled = true; resetLiveText(); });
       vapi.on("call-end", () => { flushLive("assistant"); flushLive("user"); stopMic(); $("hangup").disabled = true; $("call").disabled = false; liveCallId = null; });
+      vapi.on("local-volume-level", onMicLevel);                 // the caller, from the microphone the call already has
+      vapi.on("speech-start", () => onAgentSpeech("started"));  // the agent, from the audio the SDK plays
+      vapi.on("speech-end", () => onAgentSpeech("stopped"));
       vapi.on("message", (m) => {
         // On GPT-Live the server gets no speech or transcript messages from Vapi during the
         // call; the browser does, so the page relays them (see onLiveTranscript).

@@ -78,15 +78,18 @@ def seed_entries(persona: Persona, today: dt.date | None = None) -> list[tuple[s
     return rows
 
 
-def contact_entry(call_id: str, *, intent: str, summary: str, action: str, outcome_note: str, worked: bool,
+def contact_entry(call_id: str, *, intent: str, summary: str, action: str, outcome_note: str, worked: bool | None,
                   agent_name: str = "The agent", action_words: dict[str, str] | None = None,
                   today: dt.date | None = None) -> tuple[str, dict[str, Any]]:
     """The entry the agent writes after a call, from the sealed outcome. *action_words* says
-    how each action reads in a history line ("booked a specialist callback")."""
+    how each action reads in a history line ("booked a specialist callback"). *worked* None
+    is a decision whose outcome is not in yet (reported mode): the line says so, under the
+    same key, and is rewritten when the outcome lands."""
     date = _date(0, today)
     did = (action_words or {}).get(action) or action.replace("_", " ")
+    came = outcome_note.rstrip(".") if worked is not None else "not known yet; ask, and put their answer on file"
     text = (f"Called about {intent.replace('_', ' ')}: {summary.rstrip('.')}. {agent_name} {did}. "
-            f"What came of it: {outcome_note.rstrip('.')}." + ("" if worked else " It did not hold."))
+            f"What came of it: {came}." + (" It did not hold." if worked is False else ""))
     return f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}", {"date": date, "text": text, "action": action, "worked": worked}
 
 
@@ -115,7 +118,7 @@ def call_entry(call_id: str, *, caller_lines: list[str], agent_name: str = "The 
 
 
 DETAIL_KINDS = {"phone": "phone number", "email": "email", "name": "preferred name", "correction": "correction to the file",
-                "other": "note"}
+                "outcome": "what came of the last step, in the caller's words", "other": "note"}
 
 
 def detail_entry(call_id: str, *, kind: str, value: str, note: str = "", today: dt.date | None = None) -> tuple[str, dict[str, Any]]:

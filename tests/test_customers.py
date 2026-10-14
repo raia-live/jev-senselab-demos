@@ -154,6 +154,13 @@ def test_contact_entry_from_an_outcome():
                               worked=False, today=TODAY)
     assert failed["text"].endswith("Credit reversed. It did not hold.")
     assert failed["text"].startswith("Called about billing dispute: s. The agent issue credit.")  # no words given: the id
+    # Reported mode, the call just ended: the line is on file before the outcome is, under
+    # the same key, and says to ask.
+    k3, open_ = contact_entry("fake-adf2e126", intent="billing_dispute", summary="s", action="schedule_callback", outcome_note="",
+                              worked=None, agent_name="Riley", action_words=BUSINESS.action_words(), today=TODAY)
+    assert k3 == key and open_["worked"] is None
+    assert open_["text"] == ("Called about billing dispute: s. Riley booked a specialist callback. What came of it: not known yet; "
+                             "ask, and put their answer on file.")
 
 
 def test_a_call_with_no_decision_goes_on_the_record_too():
@@ -292,6 +299,46 @@ def test_the_agent_puts_a_detail_on_the_callers_record_and_the_number_in_the_boo
     assert ag.update_file("c2", {"kind": "email", "value": "sam@example.com"}).startswith("No account matched this caller")
     assert len([w for w in writes if w[0].endswith("/customers/")]) == 0
     assert ag.update_file("nope", {"kind": "email", "value": "x"}) == "No call to put this on."
+
+
+def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
+    # Outcomes are reported, so the callback booked on the earlier call is still open when
+    # the caller rings back and says nobody called. Their word seals it as a failure, the
+    # note goes on the file, and a step already sealed is left alone.
+    from voice.agent import LiveAgent
+
+    writes: list[tuple[str, str, dict]] = []
+    sealed: list[tuple[str, bool, str, str]] = []
+
+    class _Mem:
+        def write(self, entity, key, value, **_kw):
+            writes.append((entity, key, value))
+
+    class _Client:
+        def memory(self, _agent_id):
+            return _Mem()
+
+    ag = LiveAgent.__new__(LiveAgent)
+    ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
+    ag.calls, ag.events, ag._lock, ag.phonebook = {}, [], threading.Lock(), None
+    ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
+    ag.report_outcome = lambda did, outcome, source="review": sealed.append((did, outcome.success, outcome.note, source))  # type: ignore[method-assign]
+    bruno = {"name": "Bruno", "tier": "consumer", "prior_contacts_30d": 3, "tenure_months": 39, "customer_id": "bruno-andrade"}
+    earlier = SimpleNamespace(decision=SimpleNamespace(id="c0:0", call_id="c0", at=100.0, caller=bruno, action="schedule_callback"))
+    older = SimpleNamespace(decision=SimpleNamespace(id="b0:0", call_id="b0", at=50.0, caller=bruno, action="issue_credit"))
+    priya = SimpleNamespace(decision=SimpleNamespace(id="p0:0", call_id="p0", at=200.0, caller={**bruno, "customer_id": "priya-raman"}, action="transfer_to_agent"))
+    ag._pending = {"c0": [earlier], "b0": [older], "p0": [priya]}
+    ag.calls["c1"] = {"id": "c1", "caller": bruno}
+    text = ag.update_file("c1", {"kind": "outcome", "value": "nobody called me", "worked": False})
+    assert sealed == [("c0:0", False, "Caller said on a later call: nobody called me", "caller")]  # the latest of theirs, not Priya's
+    assert text.endswith("That closes the earlier step (booked a specialist callback) as did not work, on their word; "
+                         "the record for callers in their situation now says so.")
+    assert writes[-1][1].startswith("note-") and writes[-1][2]["kind"] == "outcome"
+    # Nothing open for this caller (the demo world sealed it already): the note still goes on file.
+    ag._pending = {}
+    text = ag.update_file("c1", {"kind": "outcome", "value": "they did call, thanks", "worked": "true"})
+    assert text.startswith("On file: what came of the last step, in the caller's words they did call, thanks.") and "closes" not in text
+    assert len(sealed) == 1 and writes[-1][2]["value"] == "they did call, thanks"
 
 
 def test_caller_customer_id_is_a_slug():

@@ -20,7 +20,8 @@ Routes
 Environment (``.env``): TYPESAFE_API_KEY, AMFS_API_KEY, and for Vapi VAPI_PUBLIC_KEY (the page),
 VAPI_PRIVATE_KEY (creating the assistant), optional VAPI_ASSISTANT_ID, VAPI_WEBHOOK_SECRET,
 VOICE_PUBLIC_URL (the tunnel URL Vapi can reach), VOICE_BUSINESS (the business file; default
-``voice/business.toml``), VOICE_AGENT_ID, VOICE_ENTITY_PATH, VOICE_NOISE.
+``voice/business.toml``), VOICE_AGENT_ID, VOICE_ENTITY_PATH, VOICE_NOISE, VOICE_OUTCOMES (``reported`` or
+``simulated``, overriding the business file for this run).
 """
 
 from __future__ import annotations

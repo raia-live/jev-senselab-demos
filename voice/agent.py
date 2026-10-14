@@ -154,6 +154,13 @@ def _safe(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:80]
 
 
+def _truthy(v: Any) -> bool:
+    """A tool argument that means yes: True, "true", "yes", "worked", 1."""
+    if isinstance(v, bool):
+        return v
+    return str(v or "").strip().lower() in ("true", "yes", "y", "1", "worked", "it worked", "ok")
+
+
 def _int(v: Any, default: int) -> int:
     try:
         return int(float(v))
@@ -424,8 +431,34 @@ class LiveAgent:
                 call["customer_brief"] += f"\nOn file now ({what}, given on this call): {value or note}."
         self._event("file_updated", {"call_id": call_id, "customer_id": customer_id, "kind": entry["kind"], "key": key,
                                      "value": value[:80], "note": note[:120]})
+        closed = ""
+        if entry["kind"] == "outcome":
+            closed = self._close_from_caller(call_id, customer_id, worked=_truthy(params.get("worked")), words=value)
         return (f"On file: {what} {value or note}. It is on their record now and will be there next time; "
-                "tell them so in a few words, once.")
+                f"tell them so in a few words, once.{closed}")
+
+    def _close_from_caller(self, call_id: str, customer_id: str, *, worked: bool, words: str) -> str:
+        """The caller has said what came of the last step we took for them. If that decision
+        is still open (outcomes are reported, not simulated), their word is the outcome: the
+        run is sealed with it, so what SenseLab learns from that call is what happened, not
+        what was hoped. An already-sealed decision is left as it is; the note on the file
+        says what the caller said, and the next decision sees it."""
+        with self._lock:
+            earlier = [p for cid, ps in self._pending.items() if cid != call_id for p in ps
+                       if str(p.decision.caller.get("customer_id") or "") == customer_id]
+        if not earlier:
+            return ""
+        p = max(earlier, key=lambda p: p.decision.at)
+        severity = "success" if worked else "failure"
+        outcome = Outcome(success=worked, severity=severity, note=f"Caller said on a later call: {words}"[:300],
+                          true_success=worked, cost_usd=float(self.business.cost_by_severity.get(severity, 0.0)))
+        try:
+            self.report_outcome(p.decision.id, outcome, source="caller")
+        except KeyError:
+            return ""
+        did = self.business.action_words().get(p.decision.action) or p.decision.action.replace("_", " ")
+        return (f" That closes the earlier step ({did}) as {'worked' if worked else 'did not work'}, on their word; "
+                "the record for callers in their situation now says so.")
 
     def _open_all(self, call_id: str, caller: Caller) -> None:
         """Open a run for each situation this caller could turn out to be in. The intent is
@@ -715,15 +748,17 @@ class LiveAgent:
                                "ms": round((time.perf_counter() - t0) * 1000), "brief": text[:1800]})
         return text
 
-    def _note_customer(self, d: LiveDecision, outcome: Outcome) -> None:
+    def _note_customer(self, d: LiveDecision, outcome: Outcome | None) -> None:
         """After the seal: one line in the caller's own history, so the next call from them
-        starts from what happened on this one."""
+        starts from what happened on this one. With *outcome* None (reported mode, the call
+        just ended) the line says the outcome is not in yet; the seal rewrites it."""
         customer_id = str(d.caller.get("customer_id") or "")
         if not customer_id:
             return
         key, value = cust.contact_entry(d.call_id, intent=str(d.fields.get("intent") or self.business.fallback_intent),
                                         summary=d.text.split(". ", 2)[-1][:240] if ". " in d.text else d.text[:240],
-                                        action=d.action, outcome_note=outcome.note, worked=outcome.success,
+                                        action=d.action, outcome_note=outcome.note if outcome else "",
+                                        worked=outcome.success if outcome else None,
                                         agent_name=self.business.agent_name, action_words=self.business.action_words())
         try:
             self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), key, value,
@@ -871,6 +906,8 @@ class LiveAgent:
         if not pending and call is not None:
             self._note_call(call, ended_reason)  # no decision, still a call they made
         if not auto_review or not self.business.simulated:
+            if pending:  # the outcome is not in yet; the call still goes on the record now
+                self._pool.submit(self._note_customer, pending[-1].decision, None)
             return [p.decision for p in pending]
         return [self._review(p) for p in pending]
 
