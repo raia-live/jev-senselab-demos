@@ -221,7 +221,11 @@ came back in under 400 ms and both were lost; the agent went quiet and the calle
 Answers that took 1.5 s and 4.6 s on an earlier call landed. So on that stack the server
 holds every tool answer until 1.5 s after the request came in (`VOICE_TOOL_MIN_MS`), the
 prompt tells the model a tool call is a silent turn, and the tools carry no spoken "still
-with you" filler, which would open a turn of its own.
+with you" filler, which would open a turn of its own. Two more things from real calls: the
+model's `maxTokens` is per turn and counts audio, so the 300 that guides suggest is about
+thirteen seconds of speech, after which the agent stops mid-sentence and stays stopped until
+the caller speaks (it is 1500 here, about a minute); and phone audio is narrowband, so for a
+recording use a browser call.
 
 ## Make it your business
 

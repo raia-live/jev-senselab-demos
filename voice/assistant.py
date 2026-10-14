@@ -226,7 +226,11 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
         for t in tools:
             if "messages" in t:
                 t["messages"] = [m for m in t["messages"] if m["type"] != "request-response-delayed"]
-        cfg["model"] = {"provider": "openai", "model": REALTIME_MODEL, "temperature": 0.7, "maxTokens": 300,
+        # maxTokens is per turn and, on a speech-to-speech model, counts audio tokens: 300 (the
+        # figure Vapi's guide suggests) is about thirteen seconds of talking, and a turn that
+        # hits it stops mid-sentence and stays stopped until the caller speaks. Walking
+        # someone through three earlier calls needs a minute.
+        cfg["model"] = {"provider": "openai", "model": REALTIME_MODEL, "temperature": 0.7, "maxTokens": 1500,
                         "messages": [{"role": "system", "content": system_prompt(b)}], "tools": tools}
         cfg["voice"] = {"provider": "openai", "voiceId": voice}
         # No transcriber: the model hears the audio itself. (Vapi still produces transcripts.)
