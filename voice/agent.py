@@ -82,6 +82,14 @@ class Caller:
         )
 
 
+def caller_line(c: Caller) -> str:
+    """How the decision text describes who is calling. A caller the lookup did not match has
+    no tenure and no tier we know of; the Caller defaults are for a known account."""
+    if c.customer_id:
+        return f"Caller on a {c.tier} account, {c.tenure_months} months with us"
+    return "Caller not matched to any account (no history on file; a first contact)"
+
+
 @dataclass
 class Warm:
     """The entity's briefing and entries at one moment, shared by the runs a call opens."""
@@ -339,7 +347,10 @@ class LiveAgent:
         t0 = time.perf_counter()
         # A refresh in flight (the previous call's seal just changed what is known) is worth
         # a short wait; past that, the last briefing will do and the retrieve is fresh anyway.
-        warm = self._current_warm(wait_s=6.0)
+        # Short means short: this is on the path to the first decision, and a caller who gets
+        # to the point quickly is waiting on it. (Six seconds here, under a few calls at once,
+        # was most of a ten-second silence after "let me see what I can do".)
+        warm = self._current_warm(wait_s=1.0)
         if warm is None:
             with self._lock:
                 warm = self._warm
@@ -464,18 +475,49 @@ class LiveAgent:
 
     # -- the caller ------------------------------------------------------------------------
 
+    def _seed_missing(self, mem: Any, entity: str, persona: cust.Persona) -> int:
+        """Bring the account's seeded rows in line with ``business.toml``: write the rows it
+        does not have, and rewrite (a new version, same key) the ones whose text changed. A
+        row is known by its ``seedN`` suffix (``notes`` by its key), not its date, because the
+        date in the key is computed from today and would make every row look new each
+        morning. The calls written since are left alone. Returns the rows written."""
+        have: dict[str, tuple[str, dict[str, Any]]] = {}  # tag -> (key the account has, its value)
+        for e in mem.list(entity):
+            key, value = str(getattr(e, "key", "")), getattr(e, "value", None)
+            if key == "notes" or "-seed" in key:
+                tag = key.rsplit("-seed", 1)[-1] if "-seed" in key else key
+                have[tag] = (key, value if isinstance(value, dict) else {})
+        written = 0
+        for key, value in cust.seed_entries(persona):
+            tag = key.rsplit("-seed", 1)[-1] if "-seed" in key else key
+            if tag in have:
+                old_key, old = have[tag]
+                if str(old.get("text") or "") == value["text"]:
+                    continue
+                # The same row, reworded: a new version under the key (and date) the account has.
+                key, value = old_key, {**value, "date": str(old.get("date") or value["date"])}
+            mem.write(entity, key, value, confidence=1.0, memory_type="experience")
+            written += 1
+        return written
+
+    def seed_twin(self, persona_id: str, customer_id: str) -> bool:
+        """Seed a persona's history under another customer id: a twin for test calls, so the
+        demo caller's own record is not written to by tests. True if anything was written."""
+        persona = next((p for p in self.business.personas if p.id == persona_id), None)
+        if persona is None:
+            raise KeyError(persona_id)
+        mem = self.client.memory(self.agent_id)
+        return self._seed_missing(mem, cust.customer_entity(self.entity_path, customer_id), persona) > 0
+
     def seed_customers(self) -> list[str]:
-        """Give the demo callers their seeded history, once. Returns the customers seeded."""
+        """Give the demo callers their seeded history. Returns the customers written to."""
         mem = self.client.memory(self.agent_id)
         seeded: list[str] = []
         for persona in self.business.personas:
             entity = cust.customer_entity(self.entity_path, persona.id)
             try:
-                if mem.list(entity):
-                    continue
-                for key, value in cust.seed_entries(persona):
-                    mem.write(entity, key, value, confidence=1.0, memory_type="experience")
-                seeded.append(persona.id)
+                if self._seed_missing(mem, entity, persona):
+                    seeded.append(persona.id)
             except Exception as exc:  # noqa: BLE001 - the call still works without the history
                 log.warning("seeding %s: %s", persona.id, exc)
         return seeded
@@ -571,14 +613,17 @@ class LiveAgent:
         intent = str(params.get("intent") or self.business.fallback_intent)
         if intent not in self.business.intent_ids:
             intent = self.business.fallback_intent
+        # A caller the lookup did not match has no tenure and no history; the Caller defaults
+        # are for a known account and must not be fed to Jev as facts about a stranger.
+        tenure = c.tenure_months if c.customer_id else 0
         fields = {
             "intent": intent, "tier": c.tier, "prior_contacts_30d": c.prior_contacts_30d,
-            "amount_usd": _float(params.get("amount_usd"), 0.0), "tenure_months": c.tenure_months,
+            "amount_usd": _float(params.get("amount_usd"), 0.0), "tenure_months": tenure,
             "sentiment": str(params.get("sentiment") or "calm"), "channel": "voice",
         }
         summary = " ".join(str(params.get("summary") or "").split())[:600]
         said = " ".join(str(params.get("caller_said") or "").split())[:300]
-        text = (f"Caller on a {c.tier} account, {c.tenure_months} months with us, sounds {fields['sentiment']}. "
+        text = (f"{caller_line(c)}, sounds {fields['sentiment']}. "
                 f"{c.prior_contacts_30d} contact(s) with support in the last 30 days. "
                 + (f'Caller said: "{said}" ' if said else "") + summary)
         situation = self.business.situation_of(fields)
@@ -625,7 +670,7 @@ class LiveAgent:
         live = LiveDecision(
             id=case.id, call_id=call_id, at=time.time(), caller=asdict(c), fields=fields, text=text,
             situation=situation, action=decision.action, confidence=round(decision.confidence, 3),
-            then=self.business.action(decision.action).then, basis=decision.basis,
+            then=self.business.then_for(decision.action, matched=bool(c.customer_id)), basis=decision.basis,
             probabilities={k: round(v, 3) for k, v in decision.probabilities.items()},
             memory_text=memory_text, memory_entries=list(ep.trace.guidance_entries[:12]),
             memory_mode=ep.trace.guidance_mode, memory_prefetched=prefetched, memory_ms=round(memory_ms),

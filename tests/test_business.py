@@ -115,29 +115,105 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     b = Business.from_dict(tomllib.loads(ANOTHER), path=tmp_path / "harbor.toml")
     prompt = system_prompt(b)
     assert "You are Sam, on the phones at Harbor Dental." in prompt
-    assert "{{history}}" in prompt and "{{name}}" in prompt  # filled per call by the server
+    assert "{{history}}" in prompt and "{{account}}" in prompt  # filled per call by the server
     assert "booking or moving an appointment (appointment)" in prompt
     assert "for a bill they have a question about, the amount in dollars" in prompt
     assert "Northwind" not in prompt and "John" not in prompt
     # The opening is built by the server; the prompt tells the model it has been said. The
     # decision waits for the caller's words, the close waits for the caller.
-    assert "1. Open. The greeting has been said" in prompt and "only then use endCall" in prompt
-    assert "say NOTHING in the turn you call a tool in" in prompt
+    assert "1. Open. The greeting has been said" in prompt and "endCall right after it, in the same turn" in prompt
+    assert "say NOTHING in the turn you call a tool in" in prompt and "One tool call at a time" in prompt
+    assert "call recall_customer" in prompt and "call recall_customer" not in system_prompt(b, recall=False)
     tool = decide_tool(b)
     assert tool["function"]["parameters"]["properties"]["intent"]["enum"] == ["appointment", "bill"]
     assert "amount_usd" in tool["function"]["parameters"]["properties"]
     assert "caller_said" in tool["function"]["parameters"]["required"]
     assert all(m["type"] != "request-start" for m in tool["messages"])  # nothing scripted
-    rt = assistant_config(b, server_url="https://x/vapi/webhook", secret=None)
+    # The default stack is GPT-Live: a speaker prompt and a reasoner prompt, the one decision
+    # tool plus endCall, no transcriber or speaking plans (the model listens while it talks).
+    live = assistant_config(b, server_url="https://x/vapi/webhook", secret=None)
+    assert live["model"]["model"] == "gpt-live-1" and live["voice"] == {"provider": "openai", "voiceId": "cedar"}
+    speaker, reasoner = live["model"]["speaker"]["instructions"], live["model"]["reasoner"]["instructions"]
+    assert "You are Sam, on the phones at Harbor Dental." in speaker and "{{history}}" in speaker
+    assert "Delegate to the backend when:" in speaker and "Saying goodbye does not end the call" in speaker
+    assert "Never ask for a decision from the file alone" in speaker and "NEVER mention tools" in speaker
+    assert "call decide_next_step" in reasoner and "appointment (booking or moving an appointment)" in reasoner
+    assert "return a short question for the assistant to ask" in reasoner and "call endCall" in reasoner
+    # What the fourth test run found: a goodbye the reasoner answered with text instead of
+    # endCall, a second decision for a detail added to the same problem, and a stranger told
+    # how long they had been a customer (the Caller defaults, read as facts).
+    assert "Do not return text instead of calling it" in reasoner and "One decision per problem" in reasoner
+    assert "One problem, one answer" in speaker and "{{account}}" in speaker and "{{tenure_months}}" not in speaker
+    assert "If no account matched, you do not know this person" in speaker
+    # The seventh run: three requests answered from the file and never decided. The rule is
+    # now the first thing the speaker reads, with every intent named as a trigger, and the
+    # reasoner checks for a goodbye before anything else; a 30 s hook ends a dropped one.
+    assert speaker.index("THE ONE RULE") < speaker.index("# How you speak")
+    assert "booking or moving an appointment (appointment)" in speaker.split("Delegate to the backend when:")[1]
+    assert reasoner.index("call endCall, and do nothing else") < reasoner.index("Deciding:")
+    assert live["hooks"][1]["options"]["timeoutSeconds"] == 30 and live["hooks"][1]["do"][1] == {"type": "tool", "tool": {"type": "endCall"}}
+    # The eighth run: the reasoner dropped the tool's "Why" so the speaker had no answer to
+    # "why would it work this time", and promised to "check" with no tool to check with.
+    assert 'ALWAYS pass on the tool\'s "Why"' in reasoner and "You have no lookup" in reasoner
+    assert "sort it out. There is nothing to check" in speaker and "Do not add a time, a date, a name or a job title" in speaker
+    # The ninth run: a stranger was told the charge was "a setup fee" from a file that does not
+    # exist, and Tomas asked who was calling and got no name although his file has one.
+    assert 'never guess one ("a setup fee")' in speaker and "say the name" in speaker
+    # Tenth and twelfth runs: "okay, that's fine" ended a call; "nothing else is on offer" was said out loud.
+    assert "Never end the call on acceptance" in reasoner and "notes to you, never words for the" in speaker
+    # Fifteenth run: a stranger was told the charge was "an extra seat" (the reasoner handed
+    # on "explain what the charge is" from a text written for a caller with a file); "what
+    # email do you have for me" was delegated and answered with "let me check" and silence;
+    # a file question settled Marcus's call and the request never reached the backend.
+    assert "If the tool says no account matched the caller, pass that on word for word" in reasoner
+    assert "never as lines to read out" in reasoner and "if the file does not have it, say so and ask the caller" in reasoner
+    assert '"Let me check" is never the reply' in speaker and "hand the request off in the same turn" in speaker
+    assert "A request stated on this call always reaches the backend" in speaker
+    # Sixteenth run: the fallback clause in the step text came out as a conditional read to
+    # the caller ("the file either explains it or it doesn't"). The fallback lives in the
+    # speaker's own rules; the step the reasoner relays is one plain instruction.
+    assert "Two instructions, not one conditional sentence" in reasoner
+    assert "The first thing you say is the entry in your file that matches" in speaker
+    # Twentieth run, on a clean file: "one was a duplicate and it's already been reversed",
+    # about two charges the file did not have. The step text and the speaker both name the
+    # file entry first, and a reversal the file does not record is called what it is.
+    assert "never a reversal, refund or credit the file does not record" in speaker
+    assert 'never "explain what the charge is"' in reasoner
+    # Twenty-first run: the reasoner copied the step text's example entry ("two $19 payments")
+    # into Marcus's instructions. The step text carries no example, and the reasoner is told
+    # it has never seen the file.
+    assert "never put words in its mouth" in reasoner
+    # Twenty-second run: the clarifying question carried the answer ("that could be the three
+    # seats you added"), the caller said "that's all", and the request never reached the backend.
+    assert "the question is about what they need, never the answer to it" in speaker
+    # Twenty-third run: a number read back with no question after it, the tester improvised
+    # a line, and the speaker answered nothing for sixty seconds; no hook fires when the
+    # customer spoke last.
+    assert "in the same turn ask if there is anything else" in speaker and "Silence is never a reply" in speaker
+    for a in Business.load().actions:
+        for text in (a.then, a.then_no_file):
+            assert "$" not in text and '"' not in text and "'your file" not in text, a.id
+    assert [t.get("function", {}).get("name", t["type"]) for t in live["model"]["tools"]] == ["decide_next_step", "endCall"]
+    assert all("messages" not in t for t in live["model"]["tools"])  # not spoken on GPT-Live
+    assert not any(k in live for k in ("transcriber", "startSpeakingPlan", "stopSpeakingPlan", "backchannelingEnabled", "messagePlan"))
+    assert live["hooks"][0]["on"] == "customer.speech.timeout"
+    assert assistant_config(b, server_url="https://x", secret=None, voice_id="meridian")["voice"]["voiceId"] == "meridian"
+    rt = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, stack="realtime")
     assert rt["model"]["model"] == "gpt-realtime-2" and rt["voice"] == {"provider": "openai", "voiceId": "cedar"}
+    assert rt["stopSpeakingPlan"]["numWords"] == 0  # no streaming transcriber: interrupt on voice, not words
     assert rt["firstMessageMode"] == "assistant-speaks-first"
     assert "transcriber" not in rt and rt["firstMessage"] == b.greeting and "endCallMessage" not in rt
-    # No spoken filler during a tool call on the realtime stack; the pipeline keeps it.
+    # No spoken filler during a tool call on the realtime stack; the pipeline keeps it. The
+    # realtime stack has the one decision tool (two tool calls in a turn lose an answer
+    # there); the pipeline has recall_customer as well.
     rt_msgs = [m["type"] for t in rt["model"]["tools"] for m in t.get("messages", [])]
     assert "request-response-delayed" not in rt_msgs and "request-failed" in rt_msgs
+    assert [t.get("function", {}).get("name", t["type"]) for t in rt["model"]["tools"]] == ["decide_next_step", "endCall"]
+    assert "recall_customer" not in rt["model"]["messages"][0]["content"]
     assert rt["backchannelingEnabled"] is True
     pl = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, stack="pipeline", voice_id="sarah")
     assert pl["model"]["model"] == "gpt-4.1" and pl["voice"]["voiceId"] == "sarah" and pl["transcriber"]["provider"] == "deepgram"
     assert "request-response-delayed" in [m["type"] for t in pl["model"]["tools"] for m in t.get("messages", [])]
+    assert [t.get("function", {}).get("name", t["type"]) for t in pl["model"]["tools"]] == ["recall_customer", "decide_next_step", "endCall"]
     with pytest.raises(ValueError):
         assistant_config(b, server_url="https://x", secret=None, stack="telepathy")

@@ -222,7 +222,7 @@ function loadScenarios(personas) {
 }
 $("scenario").onchange = showScenario; showScenario();
 
-let cfg = {}, vapi = null, seq = 0, clockOffset = 0, current = null, calls = {}, lastDecision = {}, stateCalls = [];
+let cfg = {}, vapi = null, seq = 0, clockOffset = 0, current = null, calls = {}, lastDecision = {}, stateCalls = [], liveCallId = null;
 const now = () => Date.now() / 1000 - clockOffset;
 async function post(url, body) { const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body || {}) }); return r.json(); }
 
@@ -481,7 +481,12 @@ $("call").onclick = async () => {
   if (!vapi) return;
   const prof = await post("/api/profiles", caller());
   $("call").disabled = true; caption("Connecting…", "");
-  try { await vapi.start(cfg.assistant_id, { firstMessage: prof.first_message, variableValues: prof.variable_values, metadata: { profile_id: prof.profile_id } }); }
+  try {
+    const call = await vapi.start(cfg.assistant_id, { firstMessage: prof.first_message, variableValues: prof.variable_values, metadata: { profile_id: prof.profile_id } });
+    // Tell the server the call is on, so the runs open ahead now. (GPT-Live sends the server no
+    // status update at the start, nor speech or transcript updates; the page relays those.)
+    if (call?.id) { liveCallId = call.id; post(`/api/calls/${call.id}/start`, { profile_id: prof.profile_id }); }
+  }
   catch (e) { caption("Could not start the call", esc(e?.message || e)); $("call").disabled = false; }
 };
 $("hangup").onclick = () => vapi && vapi.stop();
@@ -515,7 +520,11 @@ async function init() {
       const mod = await import("https://esm.sh/@vapi-ai/web");
       vapi = new mod.default(cfg.public_key);
       vapi.on("call-start", () => { $("hangup").disabled = false; $("call").disabled = true; });
-      vapi.on("call-end", () => { $("hangup").disabled = true; $("call").disabled = false; });
+      vapi.on("call-end", () => { $("hangup").disabled = true; $("call").disabled = false; liveCallId = null; });
+      vapi.on("message", (m) => {
+        if (cfg.stack !== "live" || !liveCallId) return;
+        if (m?.type === "transcript" || m?.type === "speech-update") post(`/api/calls/${liveCallId}/notes`, m).catch(() => {});
+      });
       vapi.on("error", (e) => { caption("Call error", esc(e?.message || JSON.stringify(e))); $("call").disabled = false; console.error(e); });
     } catch (e) { $("call").disabled = true; $("call").textContent = "browser calls unavailable"; console.error(e); }
   } else { $("call").disabled = true; $("call").textContent = "browser calls off"; $("drawer").classList.add("open"); }

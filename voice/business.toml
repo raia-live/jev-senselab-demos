@@ -90,14 +90,16 @@ id = "resolve_in_bot"
 label = "Resolve on the call"
 jev = "Handle it on this call: explain, adjust, apply the standard offer or walk the caller through it."
 words = "handled it on the call"
-then = "Handle it here and now: explain, adjust or walk them through it, in a few sentences, then see if that covers it."
+then = "Answer it now, from the caller's file and only from it. The first thing said is the entry in the caller's file that matches the charge, in the file's own words, then what it means and what is being done about it, in a few sentences, then see if that covers it. No entry in the file to point to means the answer is 'I don't see that in my notes', the email on the account read back, and a colleague checking it today. The answer is the handling, so no 'I'll handle this' and no 'let me check' first. Nothing beyond the file is known on this call, and nothing beyond it gets said: no reversal, refund or credit that the file does not record."
+then_no_file = "No account matched this caller, so there is no file, and nobody on this call can say what the charge or issue is: do not guess at one. Resolving it means: ask what the line says, take the email on their account, read it back, and say a colleague will check that line today and reply to that email. Say that in one go; it is the whole answer."
 
 [[actions]]
 id = "transfer_to_agent"
 label = "Transfer to an agent"
 jev = "Hand the call to a human agent now."
 words = "transferred the call to an agent"
-then = "A colleague takes it from here. There is no live queue in this demo, so say a colleague will pick it up and get back to them, take any last question, and thank them."
+then = "A colleague takes it from here. There is no live queue in this demo, so: a colleague picks it up and calls them back on the number on file within the hour; for an enterprise account that is their account manager, by name if the file has one. Say who and when, take any last question, and thank them."
+then_no_file = "A colleague takes it from here. No account matched this caller, so there is no number on file: ask for the number to call them on, read it back, and say a colleague will call them on it within the hour. Take any last question, and thank them."
 
 [[actions]]
 id = "schedule_callback"
@@ -105,6 +107,7 @@ label = "Schedule a callback"
 jev = "Book a callback from a specialist within one business day and end the call."
 words = "booked a specialist callback"
 then = "A specialist calls them back within one business day, with their account open and the authority to fix it. Confirm the number on file. If they doubt it will work this time, answer from their history: what was tried, what came of it, why this is different."
+then_no_file = "A specialist calls them back within one business day. No account matched this caller, so there is no number on file: ask for the number to call them on and read it back."
 
 [[actions]]
 id = "issue_credit"
@@ -112,6 +115,7 @@ label = "Issue a credit"
 jev = "Apply an account credit for the disputed amount on this call."
 words = "applied a credit"
 then = "The credit for the disputed amount goes on their account now. Confirm the amount and when it shows."
+then_no_file = "No account matched this caller, so the credit cannot go on anything from this call: take the email on their account, read it back, and say a colleague will apply the credit for that amount today and confirm it to that email."
 
 # -- the written policy -------------------------------------------------------------------
 # What Jev is told to do. Seeded into SenseLab as memory entries too, so the repair loop
@@ -205,7 +209,7 @@ intent = "billing_dispute"
 amount_usd = 29
 history = [
   [540, "Account opened on the business plan, five seats."],
-  [61, "Added three seats through the admin page (five to eight). No contact with support."],
+  [61, "Added three seats through the admin page (five to eight), billed as one $29 line on each invoice since. No contact with support."],
 ]
 notes = ""
 script = [
@@ -227,6 +231,7 @@ amount_usd = 0
 history = [
   [330, "Signed up on the monthly plan after a two-week trial."],
   [40, "Usage review: two logins in the last sixty days, down from near daily in the spring. No contact with support."],
+  [6, "Billing: two $19 monthly plan payments posted this month, on the 1st and again on the 2nd, from a retried card charge. Not yet reversed; no contact with support about it."],
 ]
 notes = ""
 script = [

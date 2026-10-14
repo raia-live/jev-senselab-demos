@@ -47,6 +47,10 @@ class Action:
     jev: str
     words: str
     then: str
+    # The same step for a caller the lookup did not match: there is no file to answer from,
+    # so "say what the charge is" has to become "take an email and have it checked". Empty
+    # means ``then`` serves both.
+    then_no_file: str = ""
 
 
 @dataclass(frozen=True)
@@ -158,7 +162,7 @@ class Business:
         actions = tuple(
             Action(id=str(a["id"]), label=str(a.get("label") or a["id"].replace("_", " ")),
                    jev=str(a.get("jev") or a.get("label") or a["id"]), words=str(a.get("words") or a.get("label") or a["id"]).lower(),
-                   then=str(a.get("then") or ""))
+                   then=str(a.get("then") or ""), then_no_file=str(a.get("then_no_file") or ""))
             for a in raw.get("actions") or ()
         )
         splits = tuple(
@@ -214,6 +218,14 @@ class Business:
     def action(self, action_id: str) -> Action:
         a = next((a for a in self.actions if a.id == action_id), None)
         return a or Action(id=action_id, label=action_id.replace("_", " "), jev="", words=action_id.replace("_", " "), then="")
+
+    def then_for(self, action_id: str, *, matched: bool) -> str:
+        """What happens now, for a caller we matched to an account or for one we did not.
+        A stranger has no file, so the words that lean on one would send the agent guessing."""
+        a = self.action(action_id)
+        if not matched and a.then_no_file:
+            return a.then_no_file
+        return a.then
 
     def action_labels(self) -> dict[str, str]:
         return {a.id: a.label for a in self.actions}

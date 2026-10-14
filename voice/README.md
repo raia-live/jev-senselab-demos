@@ -24,15 +24,18 @@ for people in your situation, and "why would it work this time?" gets what actua
 the last three times. Call twice as the same person and the second call starts from the first.
 
 Vapi runs the call: the phone or browser audio and the speech. By default the speech is
-OpenAI's realtime model (`gpt-realtime-2`), which listens and talks directly, with no
-transcription step in between; that is what makes it sound like a person on a line rather
-than text read aloud ("The voice", below). This folder is the server Vapi talks to, the page
-you call from, and a simulator for when you have no microphone.
+GPT-Live (`gpt-live-1`), OpenAI's full-duplex model as Vapi runs it: a speaker that hears
+and talks and keeps listening while it talks, and a reasoner it hands work to, which calls
+our tools and passes the answer back while the conversation carries on. No transcription
+step in between; that is what makes it sound like a person on a line rather than text read
+aloud ("The voice", below). This folder is the server Vapi talks to, the page you call from,
+a simulator for when you have no microphone, and a set of scripted test calls that Vapi
+plays as the caller.
 
-Nothing the caller hears is scripted. John is given a character and a few rules (look the
-caller up before answering the substance, ask Jev before promising anything, never mention
-the machinery), and talks. Jev's decision comes back to the model as what happens next and
-what to get across, and John puts it in his own words. The business itself (Northwind Cloud,
+Nothing the caller hears is scripted. John is given a character and one rule (he never
+decides what happens about a caller's problem; the backend does, and he asks it before he
+promises anything), and talks. Jev's decision comes back as what happens next, what to get
+across and why, and John puts it in his own words. The business itself (Northwind Cloud,
 its intents, actions, policy and demo callers) is one file, `voice/business.toml`; swap it
 for yours and the same agent answers for your company ("Make it your business", below).
 
@@ -172,28 +175,47 @@ record a browser call.
 
 ## How the conversation is shaped
 
-The system prompt (`voice/assistant.py`, `system_prompt`) is a character and the shape of a
-call, not a flowchart: who John is on the phone, how he reacts before he acts, what he never
-says, what he knows about the person calling (their account facts and their history, filled
-in per call), and six beats a call goes through. The opening is the one line the server
-writes (`voice/customers.py`, `opening`), from the file; left to the realtime model it
-greeted a known caller as a stranger and asked for their name. From the caller's first words
-the model is on its own. It listens for why they are calling today, and the prompt is blunt that the file is the past
-and not today's request: a question about history is answered from the file and is never a
-reason to call a tool. He checks he has it and gets the one detail he needs. He decides,
-through Jev, only once the caller has said on this call what they need; the tool requires
-the caller's own words. He delivers the decision with the reason. And he closes slowly:
-repeats back what was arranged, asks if there is anything else, waits, and only hangs up
-after the caller says they are done. Those last two came out of a real call where the agent
-decided from the file before the caller had stated a problem and hung up the moment it had a
-phone number.
+On GPT-Live there are two prompts (`voice/assistant.py`, `speaker_prompt` and
+`reasoner_prompt`). The speaker's is a character and the shape of a call, not a flowchart:
+who John is on the phone, how he reacts before he acts, what he never says, what he knows
+about the person calling (their account facts and their history, filled in per call), and
+six beats a call goes through. It opens with the one rule, because without it the model
+answered callers from their file and never asked: John never decides what happens about a
+caller's problem. Every request goes to the backend before he answers it, even when the
+file has notes on it; the file is what was said before, the backend says what happens now.
+What he handles himself is who they are, their history, one clarifying question, pushback
+on a decision already made, and small talk. The reasoner's prompt is shorter: when the
+speaker hands over, work out whether the caller is done (then end the call and nothing
+else), otherwise call `decide_next_step` once per problem and hand back what was decided,
+what happens now, and the reason, in plain words the speaker can say. The reasoner has no
+lookup of its own; questions about the account go back to the speaker's file.
 
-The only scripted audio is a "still with you" if a lookup takes more than a couple of
-seconds. The rest is Vapi's conversational settings: backchannels while the caller is
-talking, a short wait plus smart endpointing so a pause mid-sentence is not taken for the
-end of a turn, two words from the caller interrupt John but a cough does not, and a word if
-the line goes quiet. The model runs at temperature 0.7 so two calls do not sound alike. All
-of it is in `assistant_config`.
+The opening is the one line the server writes (`voice/customers.py`, `opening`), from the
+file; left to the model it greeted a known caller as a stranger and asked for their name.
+From the caller's first words the model is on its own. It listens for why they are calling
+today, and the prompt is blunt that the file is the past and not today's request: a question
+about history is answered from the file and is never a reason to hand over. He checks he
+has it and gets the one detail he needs. He decides, through Jev, only once the caller has
+said on this call what they need; the tool requires the caller's own words. He delivers the
+decision with the reason, and "why would it work this time?" gets what has and has not
+worked for callers in their situation, with the counts. And he closes slowly: repeats back
+what was arranged, asks if there is anything else, waits, and hangs up only after the caller
+says they are done. Saying goodbye does not end a GPT-Live call; the reasoner has to call
+`endCall`, and a silence hook hangs up if the caller has gone.
+
+Most of those rules came out of test calls ("Test calls", below). The agent explained a
+charge it should have asked about, promised to "check" something with no tool to check
+with, told a stranger their charge was "a setup fee" from a file that did not exist, kept a
+call open after the caller said goodbye, ended one on "okay, that's fine", and could not
+name the account manager because five test calls the same day had pushed the account facts
+out of the brief. Later runs added a stranger told the charge was "an extra seat added last
+month" (the step text said "say what the charge is, from the file", and there was no file;
+each action now has a second text for a caller nobody matched, and the server picks it),
+"what email do you have for me?" answered with "let me check" and twenty seconds of
+silence (not on file means say so and ask), and a speaker that read the reasoner's
+instructions out loud ("the file either explains it or it doesn't"), so the reasoner now
+writes instructions, not lines, and the step text has no conditionals in it. Each has a
+line in the prompt or a fix in the code, and a test.
 
 John looks the caller up again when they turn out to be calling about something else, so
 the situation record is for the right situation. Questions about their own history he
@@ -201,31 +223,75 @@ answers from the prompt, where it already is.
 
 ## The voice
 
-Two stacks, chosen with `VOICE_STACK`:
+Three stacks, chosen with `VOICE_STACK`:
 
-- `realtime` (default): OpenAI's `gpt-realtime-2` hears the caller and speaks back
-  directly. There is no speech-to-text step and no text-to-speech step, so it carries tone,
-  pace and hesitation the way a person does, reacts mid-sentence, and does not read
-  punctuation aloud. This is the same kind of model behind ChatGPT's voice mode. Voices:
-  `marin`, `cedar` (the default), `alloy`, `echo`, `shimmer`; set `VAPI_VOICE_ID`.
+- `live` (default): GPT-Live (`gpt-live-1`), as Vapi runs it. A speaker hears the caller
+  and talks back directly, and keeps listening while it talks, so it can be interrupted
+  mid-word and can carry on a conversation while a reasoner (`gpt-5.6-terra`, low reasoning
+  effort) works a tool call for it. No speech-to-text step and no text-to-speech step, so it
+  carries tone, pace and hesitation the way a person does. Voices: `cedar` (the default),
+  `marin`, `alloy`, `echo`, `shimmer` and the newer set (`quartz`, `ripple`, `vesper`,
+  `willow`, `stone`, `gleam`, `meridian`, `bossa`, `tempo`, `beacon`, `delta`, `cinder`,
+  `ash`, `ballad`, `coral`, `sage`, `verse`); set `VAPI_VOICE_ID`.
+- `realtime`: the earlier speech-to-speech model (`gpt-realtime-2`), one prompt, turn by
+  turn. Voices: `marin`, `cedar`, `alloy`, `echo`, `shimmer`.
 - `pipeline`: Deepgram transcribes, GPT-4.1 writes, ElevenLabs (`eleven_turbo_v2_5`)
   speaks. More control over each stage and any ElevenLabs voice (`VAPI_VOICE_ID`, with
   `VAPI_VOICE_PROVIDER=11labs`), at the cost of a text hop in the middle. Needs ElevenLabs
   connected to your Vapi account.
 
-Jev's decision works the same on both: a tool call from the model, answered by this server.
-One thing the realtime stack needs that the pipeline does not: a tool answer that reaches
-Vapi while the model's turn is still open is dropped (Vapi logs "An unexpected error
-occurred." against the tool, and the model never hears it). On one real call both answers
-came back in under 400 ms and both were lost; the agent went quiet and the caller hung up.
-Answers that took 1.5 s and 4.6 s on an earlier call landed. So on that stack the server
-holds every tool answer until 1.5 s after the request came in (`VOICE_TOOL_MIN_MS`), the
-prompt tells the model a tool call is a silent turn, and the tools carry no spoken "still
-with you" filler, which would open a turn of its own. Two more things from real calls: the
-model's `maxTokens` is per turn and counts audio, so the 300 that guides suggest is about
-thirteen seconds of speech, after which the agent stops mid-sentence and stays stopped until
-the caller speaks (it is 1500 here, about a minute); and phone audio is narrowband, so for a
-recording use a browser call.
+Jev's decision works the same on all three: a tool call, answered by this server. Two
+things GPT-Live does differently, both found on real calls and visible in Vapi's call logs:
+
+- Vapi sends the server nothing before the first tool call: no status update when the call
+  starts, no speech or transcript messages (a `gpt-realtime-2` call sends well over a
+  hundred). A phone call is unaffected, because the number asks the server who should
+  answer. A browser call would be unknown to the server until its first decision, so the
+  runs could not open ahead and the caller waited 3 to 6 s at the decision point. The page
+  therefore registers the call itself the moment the Vapi SDK connects
+  (`POST /api/calls/{id}/start` with the chosen profile), and relays the SDK's transcript
+  and speech events to `POST /api/calls/{id}/notes`, which is what the page's timeline and
+  the caller's wait are measured from. The test harness does the same.
+- The speaker has no tools. It delegates to the reasoner, and anything the reasoner does
+  not do, does not happen: a goodbye without `endCall` leaves the line open. The reasoner's
+  prompt checks for a goodbye before anything else, and a `customer.speech.timeout` hook
+  (30 s of silence) says goodbye and ends the call as a last resort.
+
+On the `realtime` stack a tool answer that reaches Vapi while the model's turn is still open
+is dropped, so the server holds every tool answer until 1.5 s after the request came in
+(`VOICE_TOOL_MIN_MS`, 0 on the other stacks). On every stack phone audio is narrowband, so
+for a recording use a browser call.
+
+## Test calls
+
+`voice/testcalls.py` runs scripted calls against the live agent through Vapi Simulations:
+Vapi plays the caller, an AI tester following a script, on a real voice call, and every
+webhook goes through the running server, so SenseLab is read, Jev decides and the outcome is
+sealed exactly as on a call from you. Five scenarios, each one thing a caller obviously
+needs: Bruno's fourth call about the same $49 (does John know him, recount the history,
+give a reason when pushed back on, read the number back, close slowly), a caller nobody has
+a record of (is John honest about being automated, does he invent nothing), Priya changing
+topic mid-call, Tomas's enterprise outage (a name and a time), and Marcus's plain question
+answered from the file (and only from it: one run had John call his $29 "a storage
+overage" when the file said three seats, so the judge now fails any charge the file does
+not name). Each scenario has judge criteria that Vapi grades from the
+transcript and a set of our own checks on the call record and the server's events: every
+tool answer delivered, one tool call per turn, our answers within 6 s, the caller's wait on
+a hand-off within 10 s, the decision made only after the caller said why they were calling,
+no internal names said aloud, the call ended by the right side, and the outcome sealed.
+
+```
+uv run python -m voice.testcalls                  # every scenario, as voice calls, about six minutes
+uv run python -m voice.testcalls --only bruno     # one of them
+uv run python -m voice.testcalls --report <run>   # the report for an earlier run
+```
+
+It needs the server running and `VAPI_PRIVATE_KEY`. The demo callers' records are not
+written to: a scenario with a history calls as a twin (`<persona>-sim`) seeded with the same
+history. Vapi bills the simulated calls like any other call, a few cents a minute each. One
+difference from a real call: the tester speaks first and the assistant's opening line is
+dropped, so John's first words in these transcripts are his reply to the caller, which is
+also what a caller who talks over the greeting gets.
 
 ## Make it your business
 
@@ -248,7 +314,9 @@ The server rebuilds the Vapi assistant from the file on start (`python -m voice.
   by how common they are; the first ones are ready first.
 - `[[actions]]`: what the agent can do at the decision point. `jev` is what Jev decides
   between; `then` is what the agent gets across once it is chosen (in its own words, so
-  write it as facts, not a line); `words` is how it reads in a caller's history.
+  write it as facts, not a line, and without conditionals: the speaker reads those out);
+  `then_no_file` is the same step for a caller nobody matched, who has no file to answer
+  from (leave it out and `then` serves both); `words` is how it reads in a caller's history.
 - `[[policy]]`: your written rules, one per line. Jev follows them unless memory says a
   rule has stopped working for a situation.
 - `[situation]`: how calls are grouped for learning. Intent and tier by default; add a split
@@ -292,6 +360,7 @@ voice/customers.py   the per-caller memory: seeded history, the brief the agent 
 voice/server.py      FastAPI: /vapi/webhook, the page, /api/*
 voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice stack, server URL); --number
 voice/simulate.py    the scenario's callers, sent as Vapi tool calls
+voice/testcalls.py   scripted voice calls through Vapi Simulations, with judge criteria and our own checks
 voice/web/index.html the page
 demos/call_handling/ the demo's scenario: the batch harness runs it, and it reviews the live agent's decisions
 ```

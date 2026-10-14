@@ -65,12 +65,13 @@ class Config:
         self.entity_path = (os.environ.get("VOICE_ENTITY_PATH") or self.business.entity_path).strip()
         self.noise = float(os.environ.get("VOICE_NOISE") or 0.0)
         self.repair_loop = (os.environ.get("VOICE_REPAIR_LOOP") or "1").strip() not in ("0", "false", "no")
-        self.stack = (os.environ.get("VOICE_STACK") or "realtime").strip()
+        self.stack = (os.environ.get("VOICE_STACK") or va.DEFAULT_STACK).strip()
         # On the realtime stack a tool result that comes back while the model's turn is still
         # open is dropped by the platform ("An unexpected error occurred."), and the model
         # never hears it. Both tool answers on one real call came back in under 400 ms and
         # were lost; the ones that took 1.5 s and 4.6 s on an earlier call landed. So on that
         # stack a tool answer is held until this many ms have passed since the call came in.
+        # GPT-Live's reasoner waits for the answer like any tool caller; no floor there.
         default_floor = "1500" if self.stack == "realtime" else "0"
         self.tool_floor_ms = int(os.environ.get("VOICE_TOOL_MIN_MS") or default_floor)
         self.phone_numbers: list[str] = []
@@ -154,22 +155,40 @@ def caller_from_call(call: dict[str, Any]) -> Caller:
     return _agent().caller_from(profile_from_call(call))
 
 
+NO_ACCOUNT = ("No account matched this caller. There is no name, plan, tenure or history on file, so state none; "
+              "whatever is known about them comes from this call.")
+
+
 def variable_values(profile: dict[str, Any]) -> dict[str, str]:
-    """What the prompt's ``{{...}}`` are filled with: the account facts and the history. A
-    caller we could not match has no name, and the prompt greets them as a stranger."""
+    """What the prompt's ``{{...}}`` are filled with: the account facts (``{{account}}``, one
+    sentence) and the history. A caller we could not match has no name, and gets the
+    no-account sentence instead of the defaults a ``Caller`` carries, so the model has
+    nothing to mistake for facts about them."""
     out = {k: str(v) for k, v in profile.items() if k in (*OUR_KEYS, "history") and k != "profile_id"}
-    if not out.get("name"):
+    if not out.get("name") or out["name"] == "unknown":
         out["name"] = "unknown"
+        out["account"] = NO_ACCOUNT
+        out["history"] = ""
+    else:
+        out["account"] = (f"name {out['name']}, {out.get('tier', 'consumer')} plan, {out.get('prior_contacts_30d', '0')} "
+                          f"contact(s) with support in the last 30 days, {out.get('tenure_months', '?')} months with us")
     return out
 
 
-def tool_result(d: Any, business: Business, *, record: str = "") -> str:
-    """What the conversational model gets back from ``decide_next_step``: the decision, what
-    to get across, and why (the situation's record, so the agent can say what has and has not
-    worked for people like this caller). The model puts it in its own words; the decision
-    itself is not up for discussion, and the result says so. It does not end the call: the
-    close is the model's, and the prompt has it wait for the caller."""
+def tool_result(d: Any, business: Business, *, record: str = "", stack: str = "live") -> str:
+    """What comes back from ``decide_next_step``: the decision, what happens now, and why
+    (the situation's record, so the agent can say what has and has not worked for people
+    like this caller). The decision itself is not up for discussion, and the result says
+    so. It does not end the call: the close is the model's, and the prompt has it wait for
+    the caller. On GPT-Live the reader is the reasoner, which hands facts to the speaker, so
+    the result is plain facts; on the one-model stacks the reader is the voice itself, and
+    the result also says how to deliver it."""
     label = business.action(d.action).label
+    if stack == "live":
+        why = f" Why: {record}" if record else ""
+        return (f"Decided: {label.lower()} ({d.action}). What happens now: {d.then}{why} Instructions for the "
+                f"assistant, not words for the caller: this is the one next step on this call, offer nothing else; "
+                f"any detail taken from the caller (a number, a time) is repeated back to them once.")
     why = f" Why, in plain words and without the numbers: {record}" if record else ""
     return (f"Next step: {d.action}. Decided: {label.lower()}. This is what happens on this call; do not offer, "
             f"hint at or agree to anything else. {d.then}{why} Say it the way you would to a friend, in a sentence "
@@ -177,9 +196,9 @@ def tool_result(d: Any, business: Business, *, record: str = "") -> str:
             f"back. Do not end the call until they have said they are done.")
 
 
-def tool_reply(tc: dict[str, Any], d: Any, business: Business, *, record: str = "") -> dict[str, Any]:
+def tool_reply(tc: dict[str, Any], d: Any, business: Business, *, record: str = "", stack: str = "live") -> dict[str, Any]:
     """One entry of ``results``. No scripted line: the model tells the caller in its own words."""
-    return {"toolCallId": tc.get("id"), "name": "decide_next_step", "result": tool_result(d, business, record=record)}
+    return {"toolCallId": tc.get("id"), "name": "decide_next_step", "result": tool_result(d, business, record=record, stack=stack)}
 
 
 @app.post("/vapi/webhook")
@@ -233,7 +252,7 @@ async def vapi_webhook(request: Request) -> JSONResponse:
                     args = {"summary": args}
             if name == "decide_next_step":
                 d = ag.decide(call_id, dict(args or {}), caller=caller_from_call(call))
-                results.append(tool_reply(tc, d, ag.business, record=ag.situation_record_words(d.situation)))
+                results.append(tool_reply(tc, d, ag.business, record=ag.situation_record_words(d.situation), stack=cfg.stack))
             elif name == "recall_customer":
                 text = ag.recall(call_id, dict(args or {}), caller=caller_from_call(call))
                 results.append({"toolCallId": tc.get("id"), "name": name, "result": text})
@@ -295,7 +314,7 @@ def api_config() -> dict[str, Any]:
         "public_key": cfg.public_key, "assistant_id": cfg.assistant_id, "agent_id": cfg.agent_id,
         "entity_path": cfg.entity_path, "dashboard": S.DASHBOARD_URL, "browser_calls": bool(cfg.public_key and cfg.assistant_id),
         "noise": cfg.noise, "changed": _agent().changed, "phone_numbers": cfg.phone_numbers,
-        "business": cfg.business.public(),
+        "business": cfg.business.public(), "stack": cfg.stack,
     }
 
 
@@ -329,13 +348,28 @@ async def api_profiles(request: Request) -> dict[str, Any]:
     body = await request.json()
     ag = _agent()
     pid = uuid.uuid4().hex[:10]
-    c = ag.caller_from(body)
+    # ``{"stranger": true}``: a caller we have no record of, greeted as one (the test calls use it).
+    c = Caller(name="") if body.get("stranger") else ag.caller_from(body)
     history, first = await run_in_threadpool(ag.intro_for, c)
     profiles[pid] = {"profile_id": pid, "registered": time.time(), **asdict(c), "history": history, "first_message": first}
     for old in [k for k, v in profiles.items() if time.time() - v["registered"] > 3600]:
         del profiles[old]
     return {"profile_id": pid, "first_message": first,
             "variable_values": {"profile_id": pid, **variable_values(profiles[pid])}}
+
+
+@app.post("/api/twins")
+async def api_twins(request: Request) -> dict[str, Any]:
+    """Seed a demo caller's history under another customer id, for test calls
+    (``voice/testcalls.py``): ``{"persona_id": "bruno-andrade", "customer_id": "bruno-sim-1"}``.
+    The demo caller's own record stays untouched by what the tests do."""
+    body = await request.json()
+    ag = _agent()
+    try:
+        seeded = await run_in_threadpool(ag.seed_twin, str(body.get("persona_id") or ""), str(body.get("customer_id") or ""))
+    except KeyError as exc:
+        raise HTTPException(404, f"no persona {exc}") from exc
+    return {"customer_id": body.get("customer_id"), "seeded_now": seeded}
 
 
 @app.post("/api/world")
@@ -352,6 +386,38 @@ async def api_calls(request: Request) -> dict[str, Any]:
     call_id = str(body.get("call_id") or new_call_id())
     _agent().call_started(call_id, _agent().caller_from(body.get("caller")), call_type="text")
     return {"call_id": call_id}
+
+
+@app.post("/api/calls/{call_id}/start")
+async def api_call_start(call_id: str, request: Request) -> dict[str, Any]:
+    """The page says a browser call has connected (``{"profile_id": ...}``). On the classic
+    stacks Vapi's ``status-update`` says the same a moment later and this is a no-op; on
+    GPT-Live that message never comes (nor do speech and transcript updates: only tool calls
+    and the end-of-call report reach the server), so without this the server would first
+    hear of the call at its first tool call, and the runs opened ahead would open then."""
+    body = await request.json() if await request.body() else {}
+    ag = _agent()
+    if call_id in ag.calls:
+        return {"call_id": call_id, "known": True}
+    prof = profiles.get(str(body.get("profile_id") or ""), {})
+    ag.call_started(call_id, ag.caller_from(prof) if prof.get("name") else Caller(name=""), call_type="webCall",
+                    brief=str(prof.get("history") or "") or None)
+    return {"call_id": call_id, "known": False}
+
+
+@app.post("/api/calls/{call_id}/notes")
+async def api_call_notes(call_id: str, request: Request) -> dict[str, Any]:
+    """A ``transcript`` or ``speech-update`` message relayed by the page from the browser
+    SDK, in Vapi's own shape. The page relays only on GPT-Live, where the server gets none
+    of them from Vapi; the timeline is the same either way."""
+    msg = await request.json()
+    ag = _agent()
+    typ = str(msg.get("type") or "")
+    if typ == "speech-update":
+        ag.note_speech(call_id, str(msg.get("role") or ""), str(msg.get("status") or ""))
+    elif typ == "transcript" and str(msg.get("transcriptType") or "final") == "final":
+        ag.note_transcript(call_id, str(msg.get("role") or ""), str(msg.get("transcript") or ""))
+    return {}
 
 
 @app.post("/api/calls/{call_id}/decide")

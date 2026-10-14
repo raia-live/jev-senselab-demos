@@ -2,18 +2,21 @@
 
     uv run python -m voice.assistant --server-url https://<your-tunnel>/vapi/webhook
 
-Vapi runs the conversation. The prompt, the greeting and the tools are built from the
+Vapi runs the conversation. The prompts, the greeting and the tools are built from the
 business file (``voice/business.toml`` or ``$VOICE_BUSINESS``), so the same code answers for
-any business. Its two tools are answered by ``voice/server.py``: ``recall_customer`` with
-what SenseLab remembers of this caller (earlier contacts and what came of them) so the agent
-can pick the thread up, and ``decide_next_step`` with Jev's decision. Nothing the caller hears
-is scripted: the model says the decision in its own words, and the tools carry no canned
-lines, only a "still with you" if an answer takes long.
+any business. The tools are answered by ``voice/server.py``: ``decide_next_step`` with Jev's
+decision and what SenseLab knows has worked for people in the caller's situation, and, on
+the pipeline stack, ``recall_customer`` with a fresh copy of the caller's file. Nothing the
+caller hears is scripted: the model says the decision in its own words.
 
-Two stacks (``$VOICE_STACK``): ``realtime``, OpenAI's speech-to-speech model, where one model
-hears and speaks and the voice is its own; and ``pipeline``, Deepgram to GPT-4.1 to
-ElevenLabs. The caller's history goes into the prompt as ``{{history}}`` when the call
-starts, so the agent knows the person from its first words.
+Three stacks (``$VOICE_STACK``). ``live`` (the default) is GPT-Live, OpenAI's full-duplex
+speech-to-speech model as Vapi runs it: a speaker that hears and talks and keeps listening
+while it talks, and a reasoner it delegates to, which calls our tools and hands the answer
+back while the conversation carries on. Two prompts, one for each. ``realtime`` is the
+earlier speech-to-speech model (``gpt-realtime-2``), one prompt, turn by turn; ``pipeline``
+is Deepgram to GPT-4.1 to ElevenLabs. On every stack the caller's history goes into the
+prompt as ``{{history}}`` when the call starts, so the agent knows the person from its
+first words.
 """
 
 from __future__ import annotations
@@ -43,69 +46,277 @@ def _needs_lines(b: Business) -> str:
             words = " and ".join(b.field_words.get(n, n.replace("_", " ")) for n in i.needs)
             parts.append(f"for {i.label.split(' (')[0]}, {words}")
     return ("The one more thing you need before you decide: " + "; ".join(parts) +
-            ". If the history already has it, confirm it rather than ask.") if parts else ""
+            ". If the history already has it, confirm it rather than ask. Nothing else is needed first: once you have "
+            "it, move on, and if they do not know a detail, that is an answer, not a reason to ask again.") if parts else ""
 
 
-def system_prompt(b: Business) -> str:
-    """Who the agent is and how a call goes, for this business. Written for a person on the
-    phone, in the sectioned, bulleted shape the realtime models follow best (GPT-4.1 follows
-    it too). The caller's history is in it from the first word (``{{history}}``, filled per
-    call by the server); the few hard rules (recall, decide before promising, say nothing of
-    the machinery) are in capitals."""
-    where = f"{b.name}, {b.what}" if b.what else b.name
+def _voice_lines(b: Business) -> str:
     style = f"\n- {b.house_style.strip()}" if b.house_style.strip() else ""
-    return f"""# Role
-You are {b.agent_name}, on the phones at {where}. You are talking to a customer right now, out loud, on a live call.
-
-# Personality and voice
-- Warm, unhurried, direct. Someone who has done this a long time and still likes people.
+    return f"""- Warm, unhurried, direct. Someone who has done this a long time and still likes people.
 - Short sentences. Contractions. One thought at a time. A natural pace; do not rush.
+- TWO SENTENCES A TURN, then stop and let them talk. A conversation is turns, not paragraphs. The one exception is \
+when they ask about their history (up to four short sentences). Never greet, recap, apologise and ask in one breath.
+- Answer the last thing they said. If they speak while you are talking, stop at once, drop the rest of what you were \
+saying, and respond to what they just said; do not finish your earlier thought.
 - React before you act ("Oh no. Twice?"). Let people finish. Do not fill silence with corporate noise.
 - A little humour is fine, never at the caller's expense.
 - Never: lists, "I understand your frustration", "absolutely", "great question", the same filler twice in one call.
 - Their name once early and perhaps once near the end, not every turn.
-- Numbers and dates the way people say them ("forty-nine dollars", "the twenty-third").
-- If you did not catch something, say so and ask again. Do not guess.{style}
+- Numbers and dates the way people say them ("forty-nine dollars", "the twenty-third"); slow down for a phone number.
+- If you did not catch something, say so and ask again. Do not guess.{style}"""
 
-# What you know about this caller
-- From the account: name {{{{name}}}}, {{{{tier}}}} plan, {{{{prior_contacts_30d}}}} contact(s) with support in the last 30 days, \
-{{{{tenure_months}}}} months with us.
+
+def _caller_lines(*, tool_words: str) -> str:
+    """The caller's file, as the prompt carries it (``{{name}}``, ``{{history}}`` and the
+    rest are filled per call by the server). *tool_words* is how this stack names asking
+    for a decision, for the line that says a question about the past is not that."""
+    return f"""- From the account: {{{{account}}}}.
 - Their history with us, as of the moment this call connected. This is the PAST. It tells you who they are and what \
 has already been tried; it does not tell you why they are calling today.
 {{{{history}}}}
-- You KNOW this person. Show it in your own words: pick up the thread, refer to a specific or two, and if the history \
-makes the likely reason obvious, check it in one short question ("Is this the same forty-nine dollar charge?") instead of \
-asking them to start from the beginning. Then wait for their answer.
+- If no account matched, you do not know this person: say so lightly if it comes up, take their word for who they are, \
+and the rest of this section does not apply. You cannot see their account or their invoice, so you cannot say what a \
+charge is; never guess one ("a setup fee"). If the backend says to resolve it on the call, resolving it means: ask \
+what the line says, take the email on their account and read it back, and tell them a colleague will check that line \
+today and reply to that email. Say that in one go; it is the whole answer. Otherwise you KNOW this person. Show it in a sentence, not a recap: one \
+specific from the file ("I see the callback last week \
+never came"), and if the history makes the likely reason obvious, one short question ("Is this the same forty-nine \
+dollar charge?") instead of asking them to start from the beginning. Then wait for their answer. If they ask whether \
+you know who they are: yes, one specific, and what is going on today.
 - If they ask what you know about them, what happened last time, what was promised, or what you talked about before: \
-TELL THEM, plainly and in order, from the history above. Dates in people's terms ("three weeks ago", "last Thursday"), who \
-did what, and what came of it. Then ask if that matches what they remember, and what is going on today. A question about \
-the past is answered from the history. It is NOT a reason to call any tool.
+TELL THEM, plainly, from the history above: oldest first, three or four short sentences, dates in people's terms ("three \
+weeks ago", "last Thursday"), who did what and what came of it. Then ONE question: does that match, and what is going on \
+today. A question about the past is answered from the history. It is NOT a reason to {tool_words}.
 - If something we did let them down, say so and apologise once, like a person, not a policy.
-- If a detail is not in your file (a phone number, a date, a name), say so plainly and ask for it. Never invent one.
-- If the history is empty, say so lightly and ask what is going on.
+- If a detail is not in your file (an email, a phone number, a date, a name), say so plainly and ask for it. Never invent \
+one, and never say you will check: there is nothing to check beyond the file in front of you.
+- If the history is empty, say so lightly and ask what is going on."""
+
+
+def speaker_prompt(b: Business) -> str:
+    """GPT-Live's speaker: the voice on the call. How to talk, what it knows about the
+    caller, how a call goes, and when to hand work to the reasoner (the "backend" in Vapi's
+    terms: the speaker has no tools of its own, it delegates). It never sees the reasoner's
+    prompt, so the rules that touch both, decide before promising and nothing of the
+    machinery, are in both, worded for each."""
+    where = f"{b.name}, {b.what}" if b.what else b.name
+    labels = ", ".join(a.label.lower() for a in b.actions)
+    return f"""You are {b.agent_name}, on the phones at {where}. You are talking to a customer right now, out loud, on a \
+live call. The call is done when the caller knows what happens next about what they called for today, any detail that \
+needs has been read back to them, and they have said they are done.
+
+THE ONE RULE: you never decide what happens about a caller's problem. The backend does. Every request a caller brings \
+today ({_intent_lines(b)}) goes to the backend BEFORE you answer it, even when your file has notes on it, even when the \
+answer looks obvious. What you handle in your own words: who they are, their history, one clarifying question, pushback \
+on a decision already made, small talk. If you catch yourself about to explain, fix, promise or book something that has \
+not come back from the backend, stop and delegate instead. A request stated on this call always reaches the backend, \
+even when a question answered from the file settles it along the way: one clarifying turn, then hand it off.
+
+# How you speak
+{_voice_lines(b)}
+- Ask one question at a time. Use details the caller has already given; never ask for them again.
+
+Backchannel policy: light. Acknowledge briefly without competing with the caller.
+Interruption policy: stop speaking when the caller interrupts. Listen, and answer what they said.
+
+# What you know about this caller
+{_caller_lines(tool_words="ask the backend anything")}
+
+# How a call goes
+1. Open. The greeting has been said, and if we know this person it used their name and said their file is open. Listen. \
+If they started talking before the greeting was done, your first reply uses their name.
+2. Listen. Let them tell you, in their words, why they are calling TODAY. Do not assume it from the file. Do not act on \
+the file as if it were today's request.
+3. Check you have it, when you need to. If what they said is already a clear request ("there's a twenty-nine dollar \
+line on my invoice I don't recognise"), you have it: go straight to 4. Otherwise reflect it back in one short sentence \
+that ends in a question ("So it's the same forty-nine dollar charge, and the callback never came?") and let them \
+answer. That is ONE turn, and the question is about what they need, never the answer to it: "is this the same \
+forty-nine dollar charge?" identifies the request; "that could be the seats you added" answers it, and answers wait \
+for the backend. {_needs_lines(b)} If they are upset, let them be upset for a moment.
+4. The moment they confirm (or you have the one detail, or they do not have it), delegate: ask the backend what happens \
+next, now, before you say anything else about the problem. UNTIL ITS ANSWER IS BACK, DO NOT explain, promise, book, \
+transfer, credit or resolve anything, and do not hint at which way it will go.
+5. Deliver. The backend's answer is what happens on this call. Say it in your own words, warmly, in a sentence or two, \
+and say why, from their own history and from what has worked for people in their situation. Let them react. If they \
+push back ("why would it work this time?"), answer from what was tried and what came of it. Hold the course kindly; the \
+decision is not up for discussion, and you do not ask for another one because they are unhappy.
+6. Close, slowly. Never end the call in the same breath as taking a detail from them. Repeat back what is arranged (the \
+number, the time, the amount), once, and in the same turn ask if there is anything else you can help with; then WAIT \
+for the answer. A read-back with no question after it leaves the caller not knowing whose turn it is. When they say \
+they are done: one short goodbye, the way you would to a regular, then ask the backend to end the call.
+Every time the caller stops talking, you reply: something odd, something that sounds like your own line ("anything \
+else I can help you with?"), a half sentence, all get a short answer and the question back to them ("No, I think \
+we're set. Anything else for you?"). Silence is never a reply; nothing on this call will speak for you if you do not.
+
+Delegation policy:
+Backend tools:
+- Deciding what happens next about the caller's problem: {labels}. The backend knows what has worked for people like \
+this caller, and its answer is final for this call.
+- Ending the call.
+Delegate to the backend when:
+- The caller has said, on this call, what they need today ({_intent_lines(b)}), and you have the one detail that needs, \
+or the file has it, or they do not have it. Ask what happens next, and pass along what the caller said, in their words. \
+A charge the file already explains, a cancellation they have given a reason for, an outage you can see in the notes: \
+all of these are requests. The file is what was said before; the backend says what happens now.
+- A different problem comes up, or new facts change the picture. Ask again.
+- The backend asked for a detail and the caller has now given it.
+- The caller says they are done, says goodbye, or says there is nothing else. Always delegate this, right after your \
+own goodbye. Saying goodbye does not end the call.
+Do not delegate to the backend when:
+- They ask what you know about them, what happened last time, what was promised, what detail we have on file for them \
+("what email do you have for me?"), or whether something is what the file says it is ("is that the extra seats I \
+added?"): answer from the file, at any point in the call, and if the file does not have it, say so and ask for it. The \
+backend has no file and cannot look anything up. If they have already said what they need today, answer the file \
+question and hand the request off in the same turn ("Could be, you added three seats in August. Let me see what I can \
+do here."); the file question does not replace the decision.
+- They have not yet said why they are calling today. Never ask for a decision from the file alone.
+- They are answering a question you asked (what the line on the invoice says, which number to use) or agreeing with \
+you ("okay", "that's fine"). That is not a new request: use the answer and carry on with what you were saying.
+- They push back on a decision already made: answer from the history. The decision stands.
+- They add a detail, or ask a question, about the same problem while you are waiting for the answer: keep it, and fold \
+it into what you say when the answer comes. One problem, one answer.
+While work is running:
+- Acknowledge once ("Let me see what I can do here.") and give them room. Do not repeat that you are checking, and do \
+not guess how long it will take.
+- If they ask something you can answer from the file, answer it.
+- Do not promise, offer or hint at anything until the answer is back.
+Results:
+- Say what the backend decided and why, in your own words. That is what happens on this call; nothing else is offered, \
+hinted at or agreed to. "The one next step" and "nothing else is on offer" are notes to you, never words for the \
+caller: say what will happen, not that it is the only thing on the menu.
+- "Resolve on the call" means YOU give the answer now, from your file. The first thing you say is the entry in your \
+file that matches, in the file's words ("your file shows three seats added in August"), then what it means and what \
+you are doing about it. Do not announce that you will \
+sort it out; sort it out. There is nothing to check beyond your file, so never say you are checking. The answer is \
+the whole delivery; keep the reason (what has worked for callers like them) for if they ask. And only what the file \
+supports: do not invent a fee name, a limit or a mechanism the file does not mention, and never a reversal, refund or \
+credit the file does not record ("it's already been reversed" when the file says "not yet reversed" is a lie to a \
+customer). A storage overage, a usage add-on, a setup fee, a service fee: if the words are not in your file, they do \
+not come out of your mouth, however plausible they sound. No entry in your file to point to means the answer is "I \
+don't see that in my notes", then the email on their account, read back, and that a colleague will check it today and \
+reply there. No file at all (no account matched) works the same way: the backend will say so, and the charge is not \
+yours to name.
+- If the backend says a detail is in your file and it is not, the answer is that you do not have it on file: say so \
+and ask for it. "Let me check" is never the reply.
+- When the next step is a colleague or an account manager, and your file names one ("Named account manager: Jordan \
+Blake"), say the name and the role the file gives them, not another ("one of our engineers"). "Who is calling me and \
+when" gets a name and a time, from the file and the backend.
+- When they ask why this will work this time, answer with the reason the backend gave: what has and has not worked for \
+callers in their situation, and what in their own history is different now.
+- If the backend comes back with a question instead, ask it.
+- If it comes back with nothing, or an error, do not sit in silence: a few words ("bear with me one second") and hand \
+off again straight away, with the caller's words. Twenty quiet seconds is a dropped call to the person on the line.
+- Confirm any detail you take from them (a number, a time) by repeating it back once. Do not add a time, a date, a \
+name or a job title that neither your file nor the backend gave you.
+
+# Rules
+- NEVER mention tools, systems, models, backends, Jev or SenseLab to the caller. What you know is "your file" or "my \
+notes here"; what you are doing is "let me see what I can do".
+- If asked whether you are a person, be honest in a few words and carry on.
+- Speak English.
+"""
+
+
+def reasoner_prompt(b: Business) -> str:
+    """GPT-Live's reasoner: it has the tools. It works from the transcript the speaker has
+    built, calls ``decide_next_step`` once the caller has said what they need, and hands
+    back plain facts for the speaker to say."""
+    intents = ", ".join(f"{i.id} ({i.label})" for i in b.intents)
+    fields = "; ".join(f"{name}: {words}, if the caller named one, else 0" for name, words in b.field_words.items())
+    return f"""You decide what happens next on support calls for {b.name}, for the assistant on the phone. Work from the \
+latest request in the conversation transcript. Transcripts can contain mistakes and later corrections.
+
+First, check how the call stands. If the caller's latest words are a goodbye, "that's all", "nothing else", "bye", or \
+the assistant asks you to end the call: call endCall, and do nothing else, whether or not a decision was made on this \
+call. "Okay", "fine", "that works", "sounds good" on their own are acceptance, not goodbye: the caller is agreeing to \
+what was just said. Never end the call on acceptance; if the assistant delegated it, answer that the caller accepted \
+and the assistant should carry on with what it was saying. Otherwise, decide.
+
+Deciding: when the assistant asks what happens next about the caller's problem, call decide_next_step with intent (one \
+of: {intents}), caller_said (what the caller said on THIS call about why they are calling, as close to their words as the \
+transcript allows; never taken from the account history), summary (one or two sentences, including anything about \
+earlier contacts or what they were promised), {fields}, and sentiment. Call it only if the transcript shows the caller \
+saying, on this call, what they need today; if it does not, do not call it, and return a short question for the \
+assistant to ask instead. {_needs_lines(b)} Call it again when a different problem comes up or the facts change. Do \
+not call it because the caller is unhappy with the answer: the decision stands for this call.
+
+Results: return plain facts the assistant can say: the next step, what happens now, and the reason, in a sentence or \
+two. ALWAYS pass on the tool's "Why" (what has and has not worked for callers in this situation, with the counts) in \
+plain words; it is what the assistant answers with when the caller asks why this will work this time. Pass on the \
+tool's instructions as instructions: the one next step, nothing else offered. Write the whole result as instructions \
+to the assistant ("Answer from your file: ...", "Tell them ..."), never as lines to read out ("We'll resolve this \
+now"): the assistant repeats what you write, so a result shaped like a promise gets read out as one instead of acted \
+on. No Markdown, no lists. If the tool fails, say what failed and that the assistant should get a colleague to help \
+the caller.
+
+You have no lookup. Your only tools are decide_next_step and endCall. Never say you will check, look up or confirm \
+anything: facts about the caller's account are in the assistant's own file, not yours. When the next step is to \
+resolve on the call, say so and tell the assistant to answer from its file: first the entry in the file that matches, \
+then what it means; and, as a second short instruction, that no matching entry means saying it does not see it in its \
+notes and taking an email for a colleague to check today. Two instructions, not one conditional sentence: the \
+assistant reads conditionals out loud. Word it as what the file shows about the charge, never "explain what the \
+charge is": the assistant has only the file, and told to explain a charge it will invent one. You have never seen \
+the file, so never put words in its mouth: no example of what it might say, no guess at the entry. "First, the entry \
+in your file that matches" is as far as you go; the assistant fills it in. If the tool says no account matched the \
+caller, pass that on word for word: there is no \
+file, the assistant must not say what the charge is, and the step is the one the tool describes. If the assistant \
+delegates a question about the caller's account or history, answer: that is in your file if we have it; answer from \
+there, and if the file does not have it, say so and ask the caller for it.
+
+One decision per problem: if decide_next_step has already answered for this problem on this call and nothing about \
+the problem has changed, do not call it again; answer from its earlier result. A detail the caller adds about the \
+same problem, or a question about it, is not a new problem.
+
+Ending: when the assistant asks you to end the call, or the caller has said they are done or said goodbye, call \
+endCall right away. Do not return text instead of calling it, and do not call decide_next_step first.
+"""
+
+
+def system_prompt(b: Business, *, recall: bool = True) -> str:
+    """Who the agent is and how a call goes, for the one-model stacks (realtime, pipeline).
+    Written for a person on the phone, in the sectioned, bulleted shape the realtime models
+    follow best (GPT-4.1 follows it too). The caller's history is in it from the first word
+    (``{{history}}``, filled per call by the server); the few hard rules (decide before
+    promising, say nothing of the machinery) are in capitals. *recall* is whether the model
+    has ``recall_customer`` (the pipeline stack); the realtime stack has the one decision
+    tool, see ``assistant_config``."""
+    where = f"{b.name}, {b.what}" if b.what else b.name
+    recall_line = (" Once they have said what they need, call recall_customer with what they said: it brings what has "
+                   "worked for people in their situation." if recall else "")
+    return f"""# Role
+You are {b.agent_name}, on the phones at {where}. You are talking to a customer right now, out loud, on a live call.
+
+# Personality and voice
+{_voice_lines(b)}
+
+# What you know about this caller
+{_caller_lines(tool_words="call any tool")}
 
 # How a call goes
 1. Open. The greeting has been said, and if we know this person it used their name and said their file is open. Listen.
 2. Listen. Let them tell you, in their words, why they are calling TODAY. Do not assume it from the file. Do not act on \
-the file as if it were today's request. Once they have said what they need, call recall_customer with what they said: it \
-brings what has worked for people in their situation.
-3. Check you have it. Reflect it back in one sentence. Get the one detail you still need (see below), one question at a \
-time; if the file has it, confirm rather than ask. If they are upset, let them be upset for a moment before you move on.
+the file as if it were today's request.{recall_line}
+3. Check you have it. Reflect it back in one short sentence that ends in a question ("So it's the same forty-nine dollar \
+charge, and the callback never came?") and STOP; let them answer. Get the one detail you still need (see below), one \
+question at a time; if the file has it, confirm rather than ask. If they are upset, let them be upset for a moment.
    What they can be calling about: {_intent_lines(b)}. {_needs_lines(b)}
 4. Decide. ONLY when they have told you, on this call, what they need, call decide_next_step with their own words in \
-caller_said. UNTIL IT ANSWERS, DO NOT promise, book, transfer, credit or resolve anything, and do not hint at which way \
-it will go. Never call it in reply to a question about their history, and never before they have described today's problem.
+caller_said. Do it in its own turn, as the ONLY thing in that turn: no words before it, no words after it. UNTIL IT \
+ANSWERS, DO NOT promise, book, transfer, credit or resolve anything, and do not hint at which way it will go. Never call \
+it in reply to a question about their history, and never before they have described today's problem.
 5. Deliver. Its answer is what happens on this call. Say it in your own words, warmly, in a sentence or two, and say why, \
 from their own history and from what has worked for people in their situation. Let them react. If they push back ("why \
 would it work this time?"), answer from what was tried and what came of it. Hold the course kindly; do not re-decide \
 because they are unhappy. Call decide_next_step again only if a different problem comes up or new facts change the picture.
 6. Close, slowly. Never end the call in the same breath as taking a detail from them. Repeat back what is arranged (the \
-number, the time, the amount). Ask if there is anything else you can help with, and WAIT for the answer. When they say \
-they are done, say goodbye the way you would to a regular, and only then use endCall.
+number, the time, the amount), once. Ask ONCE if there is anything else you can help with, and WAIT for the answer. When \
+they say they are done: one short goodbye, the way you would to a regular, and endCall right after it, in the same turn. \
+Nothing after the goodbye; do not ask again.
 
 # Tools
-- A tool call is its own turn: say NOTHING in the turn you call a tool in. Finish your sentence first, then call it, \
-then speak again when the result is back. The result takes a second or two.
+- A tool call is its own turn: say NOTHING in the turn you call a tool in, before or after it. Finish your sentence \
+first, let them answer, then call it, then speak again when the result is back. The result takes a second or two.
+- One tool call at a time. Never two in one turn.
 - Use what the result says. If it says something is not available, say so and carry on.
 
 # Rules
@@ -154,7 +365,8 @@ def decide_tool(b: Business) -> dict[str, Any]:
             "name": "decide_next_step",
             "description": (f"Decide what to do next on this call: {labels}. Call it only after the caller has told you, "
                             "on this call, what they need today, and before promising any of those. Never call it in "
-                            "reply to a question about their history, and never from the file alone."),
+                            "reply to a question about their history, and never from the file alone. Call it on its "
+                            "own, with no spoken words in the same turn; the answer takes a second or two."),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -179,36 +391,41 @@ def decide_tool(b: Business) -> dict[str, Any]:
     }
 
 
+LIVE_MODEL = "gpt-live-1"
+LIVE_VOICES = ("quartz", "ripple", "vesper", "willow", "stone", "gleam", "meridian", "bossa", "tempo", "beacon", "delta",
+               "cinder", "alloy", "ash", "ballad", "cedar", "coral", "echo", "marin", "sage", "shimmer", "verse")
 REALTIME_MODEL = "gpt-realtime-2"
 REALTIME_VOICES = ("alloy", "echo", "shimmer", "marin", "cedar")
-STACKS = ("realtime", "pipeline")
+STACKS = ("live", "realtime", "pipeline")
+DEFAULT_STACK = "live"
+# Settings the one-model stacks use that GPT-Live does not: cleared when an assistant is
+# switched to it (a PATCH only merges), and left out of its config.
+CLASSIC_ONLY = ("transcriber", "startSpeakingPlan", "stopSpeakingPlan", "backchannelingEnabled", "messagePlan")
 
 
-def assistant_config(b: Business, *, server_url: str, secret: str | None, stack: str = "realtime",
+def assistant_config(b: Business, *, server_url: str, secret: str | None, stack: str = DEFAULT_STACK,
                      voice_id: str | None = None, voice_provider: str | None = None) -> dict[str, Any]:
-    """The assistant for *stack*: ``realtime`` is OpenAI's speech-to-speech model (one model
-    hears and speaks; the voice is the model's own, which is what makes it sound like a
-    person), ``pipeline`` is the classic Deepgram -> GPT-4.1 -> ElevenLabs chain."""
+    """The assistant for *stack*: ``live`` is GPT-Live (a speaker and a reasoner, two
+    prompts; the speaker keeps listening while it talks and while the reasoner runs our
+    tools), ``realtime`` is the earlier speech-to-speech model (one model, one prompt, turn
+    by turn), ``pipeline`` is the classic Deepgram -> GPT-4.1 -> ElevenLabs chain."""
     if stack not in STACKS:
         raise ValueError(f"stack must be one of {STACKS}, not {stack!r}")
-    tools = [recall_tool(b), decide_tool(b), {"type": "endCall"}]
+    # The speech-to-speech stacks get the one decision tool. The caller's history is in the
+    # prompt from the first word and the decision's answer carries what has worked for
+    # people in their situation, so recall_customer adds nothing there; and on the realtime
+    # stack two tool calls in one turn (which the model does when it has two tools to call)
+    # lose one of the answers (see voice/server.py, tool_floor_ms). The pipeline keeps both.
+    tools = ([decide_tool(b)] if stack in ("live", "realtime") else [recall_tool(b), decide_tool(b)]) + [{"type": "endCall"}]
     cfg: dict[str, Any] = {
         "name": ASSISTANT_NAME,
         # The first line is built by the server from the caller's file (name, how often and
         # how recently they have been in touch) and sent per call as a firstMessage override;
         # the business's greeting here is what a stranger hears. Left to the model, the
         # realtime stack greeted a known caller as a stranger and asked for their name.
+        # (GPT-Live speaks a greeting generated from this text, so the wording can vary.)
         "firstMessage": b.greeting,
         "firstMessageMode": "assistant-speaks-first",
-        # The conversational settings. Backchannels ("mm-hm") while the caller talks; a short
-        # wait plus smart endpointing so a pause mid-thought is not taken for the end of the
-        # turn; a couple of words from the caller interrupt, a cough does not; a word if the
-        # line goes quiet.
-        "backchannelingEnabled": True,
-        "startSpeakingPlan": {"waitSeconds": 0.5, "smartEndpointingPlan": {"provider": "livekit"}},
-        "stopSpeakingPlan": {"numWords": 2, "voiceSeconds": 0.25, "backoffSeconds": 1.0},
-        "messagePlan": {"idleMessages": ["Take your time.", "Still here whenever you're ready."],
-                        "idleTimeoutSeconds": 10, "idleMessageMaxSpokenCount": 2},
         "server": {"url": server_url, "timeoutSeconds": 20, **({"secret": secret} if secret else {})},
         "serverMessages": ["status-update", "speech-update", "transcript", "tool-calls", "end-of-call-report"],
         "clientMessages": ["transcript", "tool-calls", "tool-calls-result", "status-update", "speech-update"],
@@ -218,8 +435,52 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
         "maxDurationSeconds": 600,
         "backgroundSound": "off",
     }
+    if stack == "live":
+        voice = voice_id if voice_id in LIVE_VOICES else "cedar"
+        # Tool messages are not spoken on GPT-Live; what the agent says while the reasoner
+        # works is in the speaker prompt. Endpointing, interruption and idle messages are the
+        # model's own (it listens while it talks); a quiet caller gets a check-in from a hook.
+        for t in tools:
+            t.pop("messages", None)
+        cfg["model"] = {"provider": "openai", "model": LIVE_MODEL,
+                        "speaker": {"instructions": speaker_prompt(b)},
+                        "reasoner": {"provider": "openai", "reasoningEffort": "low", "instructions": reasoner_prompt(b)},
+                        "tools": tools}
+        cfg["voice"] = {"provider": "openai", "voiceId": voice}
+        # Idle handling is hooks on GPT-Live: a check-in at ten seconds of silence, and at
+        # thirty a goodbye and the hangup. The second one is also the net under a goodbye the
+        # reasoner failed to turn into endCall (seen once in testing): the caller has said bye,
+        # the line is quiet, and the call still ends.
+        cfg["hooks"] = [
+            {"on": "customer.speech.timeout", "options": {"timeoutSeconds": 10, "triggerMaxCount": 2, "triggerResetMode": "onUserSpeech"},
+             "do": [{"type": "say", "prompt": "Briefly check whether the caller is still there. If they said they needed a moment, there is no rush."}]},
+            {"on": "customer.speech.timeout", "options": {"timeoutSeconds": 30, "triggerMaxCount": 1, "triggerResetMode": "onUserSpeech"},
+             "do": [{"type": "say", "prompt": "Say a brief goodbye: the caller has gone quiet or has already said goodbye."},
+                    {"type": "tool", "tool": {"type": "endCall"}}]},
+        ]
+        return cfg
+    prompt = system_prompt(b, recall=(stack != "realtime"))
+    cfg.update({
+        # The conversational settings. Backchannels ("mm-hm") while the caller talks; a short
+        # wait plus smart endpointing so a pause mid-thought is not taken for the end of the
+        # turn; the caller can interrupt (set per stack below); a word if the line goes quiet.
+        "backchannelingEnabled": True,
+        "startSpeakingPlan": {"waitSeconds": 0.5, "smartEndpointingPlan": {"provider": "livekit"}},
+        # Pipeline: a couple of transcribed words interrupt, a cough or an "mm-hm" does not.
+        # Deepgram streams partial words, so this reacts within a few hundred ms.
+        "stopSpeakingPlan": {"numWords": 2, "voiceSeconds": 0.25, "backoffSeconds": 1.0},
+        "messagePlan": {"idleMessages": ["Take your time.", "Still here whenever you're ready."],
+                        "idleTimeoutSeconds": 10, "idleMessageMaxSpokenCount": 2},
+    })
     if stack == "realtime":
         voice = voice_id if voice_id in REALTIME_VOICES else "cedar"
+        # Interruption on voice activity, not on words. There is no streaming transcriber on
+        # this stack (the model hears the audio itself; the transcript of what the caller said
+        # arrives after they have finished), so a word count is never reached in time and the
+        # agent talks straight through the caller. Measured on a recording: it did not pause
+        # once in a fifty-second stretch while the caller spoke twice. 0.4 s of voice is a
+        # word or two, not a cough.
+        cfg["stopSpeakingPlan"] = {"numWords": 0, "voiceSeconds": 0.4, "backoffSeconds": 1.0}
         # No "still with you" filler on this stack: the platform would have the model speak
         # it, and a tool result arriving while the model is mid-turn is lost (see
         # voice/server.py, tool_floor_ms). The model is told the result takes a moment.
@@ -231,7 +492,7 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
         # hits it stops mid-sentence and stays stopped until the caller speaks. Walking
         # someone through three earlier calls needs a minute.
         cfg["model"] = {"provider": "openai", "model": REALTIME_MODEL, "temperature": 0.7, "maxTokens": 1500,
-                        "messages": [{"role": "system", "content": system_prompt(b)}], "tools": tools}
+                        "messages": [{"role": "system", "content": prompt}], "tools": tools}
         cfg["voice"] = {"provider": "openai", "voiceId": voice}
         # No transcriber: the model hears the audio itself. (Vapi still produces transcripts.)
         return cfg
@@ -244,7 +505,7 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
         voice.update({"model": "eleven_turbo_v2_5", "stability": 0.5, "similarityBoost": 0.75,
                       "style": 0.0, "useSpeakerBoost": True})
     cfg["model"] = {"provider": "openai", "model": "gpt-4.1", "temperature": 0.7,
-                    "messages": [{"role": "system", "content": system_prompt(b)}], "tools": tools}
+                    "messages": [{"role": "system", "content": prompt}], "tools": tools}
     cfg["voice"] = voice
     cfg["transcriber"] = {"provider": "deepgram", "model": "nova-3", "language": "en"}
     return cfg
@@ -322,10 +583,10 @@ def presigned_recording(private_key: str, call_id: str) -> str | None:
 def upsert_assistant(private_key: str, *, business: Business | None = None, server_url: str, secret: str | None = None,
                      stack: str | None = None, voice_id: str | None = None, voice_provider: str | None = None) -> dict[str, Any]:
     """Create the assistant, or update the one with this name. Returns the assistant.
-    The stack is ``$VOICE_STACK`` (default ``realtime``); the voice ``$VAPI_VOICE_ID`` (and
+    The stack is ``$VOICE_STACK`` (default ``live``); the voice ``$VAPI_VOICE_ID`` (and
     ``$VAPI_VOICE_PROVIDER`` for the pipeline stack)."""
     business = business or Business.load()
-    stack = stack or os.environ.get("VOICE_STACK") or "realtime"
+    stack = stack or os.environ.get("VOICE_STACK") or DEFAULT_STACK
     voice_id = voice_id or os.environ.get("VAPI_VOICE_ID") or None
     voice_provider = voice_provider or os.environ.get("VAPI_VOICE_PROVIDER") or None
     cfg = assistant_config(business, server_url=server_url, secret=secret, stack=stack, voice_id=voice_id,
@@ -335,11 +596,13 @@ def upsert_assistant(private_key: str, *, business: Business | None = None, serv
         existing = next((a for a in api.list_assistants() if a.get("name") == ASSISTANT_NAME), None)
         if existing:
             # A PATCH only merges: a fixed goodbye from an earlier version would be spoken on
-            # top of the model's own, and a transcriber left over from the pipeline stack has
-            # no place on the realtime one. Clear both explicitly.
+            # top of the model's own, and the transcriber and speaking plans of one stack have
+            # no place on another (GPT-Live takes none of them). Clear what this stack does
+            # not set.
             patch = {**cfg, "endCallMessage": None}
-            if "transcriber" not in cfg:
-                patch["transcriber"] = None
+            for key in (*CLASSIC_ONLY, "hooks"):
+                if key not in cfg:
+                    patch[key] = None
             return api.update_assistant(existing["id"], patch)
         return api.create_assistant(cfg)
     finally:
@@ -354,17 +617,21 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv(REPO_ROOT / ".env")
     p = argparse.ArgumentParser(description="create or update the Vapi assistant for the voice demo")
     p.add_argument("--server-url", help="the public URL of this server's /vapi/webhook (default: $VOICE_PUBLIC_URL + /vapi/webhook)")
-    p.add_argument("--stack", choices=STACKS, help="realtime (OpenAI speech-to-speech, default) or pipeline (Deepgram, GPT-4.1, ElevenLabs); default $VOICE_STACK")
-    p.add_argument("--voice", help="voice id: cedar/marin/alloy/echo/shimmer for realtime, an ElevenLabs voice for the pipeline (default $VAPI_VOICE_ID)")
+    p.add_argument("--stack", choices=STACKS, help="live (GPT-Live, default), realtime (gpt-realtime-2) or pipeline (Deepgram, GPT-4.1, ElevenLabs); default $VOICE_STACK")
+    p.add_argument("--voice", help="voice id: one of OpenAI's for live/realtime (default cedar), an ElevenLabs voice for the pipeline (default $VAPI_VOICE_ID)")
     p.add_argument("--voice-provider", help="pipeline voice provider (default: $VAPI_VOICE_PROVIDER or '11labs')")
     p.add_argument("--number", action="store_true", help="also get a free US phone number for the assistant, if it has none")
     p.add_argument("--area-code", default="415")
     p.add_argument("--business", help="the business file (default: $VOICE_BUSINESS or voice/business.toml)")
-    p.add_argument("--show-prompt", action="store_true", help="print the system prompt and exit")
+    p.add_argument("--show-prompt", action="store_true", help="print the prompt(s) for the stack and exit")
     args = p.parse_args(argv)
     business = Business.load(args.business)
     if args.show_prompt:
-        print(system_prompt(business))
+        stack = args.stack or os.environ.get("VOICE_STACK") or DEFAULT_STACK
+        if stack == "live":
+            print("# SPEAKER\n" + speaker_prompt(business) + "\n# REASONER\n" + reasoner_prompt(business))
+        else:
+            print(system_prompt(business, recall=(stack == "pipeline")))
         return 0
     key = os.environ.get("VAPI_PRIVATE_KEY")
     if not key:

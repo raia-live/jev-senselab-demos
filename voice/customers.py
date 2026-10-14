@@ -142,6 +142,43 @@ def _nice_date(iso: str, today: dt.date | None = None) -> str:
     return d.strftime("%b %-d") + ("" if d.year == today.year else f", {d.year}")
 
 
+_TOPIC = re.compile(r"^Called about ([^:]+):")
+_CAME_OF_IT = re.compile(r"What came of it: (.+)$")
+
+
+def history_lines(contacts: list[dict[str, Any]], today: dt.date | None = None, *, recent_groups: int = 4) -> list[str]:
+    """The earlier contacts as lines, most recent first, sized for a prompt however long the
+    record gets. The account's own history (the seeded entries: the plan, the named account
+    manager, the incident two weeks ago) is always there in full. What the agent wrote after
+    its own calls is folded: several calls on one day about one thing become one line saying
+    how many, what was done and what came of it, and only the latest *recent_groups* of those
+    are kept. Otherwise a caller who rings five times about an outage pushes their account
+    manager's name out of the brief, and the agent cannot name them when asked."""
+    today = today or dt.date.today()
+    seeded = [c for c in contacts if c.get("seeded")]
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for c in contacts:
+        if c.get("seeded"):
+            continue
+        m = _TOPIC.match(c["text"])
+        groups.setdefault((c["date"], m.group(1) if m else ""), []).append(c)
+    rows: list[tuple[str, str]] = [(c["date"], f"{_nice_date(c['date'], today)}: {c['text']}") for c in seeded]
+    for (date, topic), cs in list(groups.items())[:recent_groups]:
+        if len(cs) == 1 or not topic:
+            rows.append((date, f"{_nice_date(date, today)}: {cs[0]['text']}"))
+            continue
+        latest = cs[0]["text"]
+        outcomes = []
+        for c in cs:
+            m = _CAME_OF_IT.search(c["text"])
+            if m and m.group(1) not in outcomes:
+                outcomes.append(m.group(1))
+        rows.append((date, f"{_nice_date(date, today)}: called {len(cs)} times about {topic}. "
+                           f"Most recent: {latest} Earlier the same day: {' / '.join(outcomes[1:4]) or 'the same'}"))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    return [r[1] for r in rows]
+
+
 def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today: dt.date | None = None) -> str:
     """What the conversational model gets back from ``recall_customer``: the account facts, the
     earlier contacts and what came of them, the notes, and what has worked for callers in the
@@ -155,8 +192,7 @@ def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today
              f"{max(caller.prior_contacts_30d, recent)} contact(s) with support in the last 30 days."]
     if contacts:
         lines.append("Earlier contacts, most recent first:")
-        for c in contacts[:6]:
-            lines.append(f"- {_nice_date(c['date'], today)}: {c['text']}")
+        lines.extend(f"- {c}" for c in history_lines(contacts, today))
     else:
         lines.append("No earlier contacts on record: this is the first time we hear from them.")
     if memory and memory.notes:
