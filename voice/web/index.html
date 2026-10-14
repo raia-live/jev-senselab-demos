@@ -313,7 +313,7 @@ function apply(e, live) {
       break; }
     case "tool_call": {
       c.toolCall = e.t; c.intent = e.intent; c.situation = e.situation;
-      if (live && isCur) { pulse("e-riley-jev", { label: "decide_next_step", color: C.riley }); glow("jev"); status("riley", "asking Jev"); status("jev", "deciding"); caption(`${esc(AGENT)} asks <span class="jev">Jev</span> what to do.`, `Intent heard: <b>${esc(e.intent.replace(/_/g, " "))}</b>. Situation: <span class="mono">${esc(e.situation)}</span>. Jev gets the written policy plus what SenseLab learned about exactly this situation.`); }
+      if (live && isCur) { pulse("e-riley-jev", { label: "decide_next_step", color: C.riley }); glow("jev"); status("riley", "asking Jev"); status("jev", "deciding"); caption(`${esc(AGENT)} asks <span class="jev">Jev</span> what to do.`, `${e.said ? `Caller said: “${esc(e.said)}”. ` : ""}Intent heard: <b>${esc(e.intent.replace(/_/g, " "))}</b>. Situation: <span class="mono">${esc(e.situation)}</span>. Jev gets the written policy plus what SenseLab learned about exactly this situation.`); }
       break; }
     case "decision": {
       c.decision = { t: e.t, situation: e.situation, action: e.action, confidence: e.confidence, jev_ms: e.jev_ms, memory_ms: e.memory_ms, prefetched: e.prefetched, basis: e.basis, alone: e.alone_action, alone_conf: e.alone_confidence };

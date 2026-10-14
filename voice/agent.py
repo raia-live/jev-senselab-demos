@@ -571,10 +571,13 @@ class LiveAgent:
             "sentiment": str(params.get("sentiment") or "calm"), "channel": "voice",
         }
         summary = " ".join(str(params.get("summary") or "").split())[:600]
+        said = " ".join(str(params.get("caller_said") or "").split())[:300]
         text = (f"Caller on a {c.tier} account, {c.tenure_months} months with us, sounds {fields['sentiment']}. "
-                f"{c.prior_contacts_30d} contact(s) with support in the last 30 days. {summary}")
+                f"{c.prior_contacts_30d} contact(s) with support in the last 30 days. "
+                + (f'Caller said: "{said}" ' if said else "") + summary)
         situation = self.business.situation_of(fields)
-        self._event("tool_call", {"call_id": call_id, "intent": intent, "situation": situation, "summary": summary[:160]})
+        self._event("tool_call", {"call_id": call_id, "intent": intent, "situation": situation, "summary": summary[:160],
+                                  "said": said[:160]})
         n = len(self.decisions)
         # In simulated mode the scenario knows the hidden right answer (for the review when
         # the call ends); in reported mode there is none, the outcome will say.

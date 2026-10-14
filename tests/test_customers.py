@@ -41,7 +41,7 @@ def test_brief_reads_as_prose_with_recent_first():
     assert text.startswith("Caller: Dana. Consumer plan, customer for 39 months. 3 contact(s)")
     assert "- 5 days ago: Called a third time" in text
     assert "- Sep 23:" in text
-    assert "Notes: Prefers" in text
+    assert "Notes: Mobile on file: (650) 555-0142." in text
     assert "what has worked: a scheduled specialist callback" in text
     assert "before decide_next_step has answered" in text
 

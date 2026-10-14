@@ -13,8 +13,8 @@
 name = "Northwind Cloud"
 # One phrase about the company, for the agent's own sense of where it works.
 what = "a small software company"
-agent_name = "Riley"
-greeting = "Hi, thanks for calling Northwind Cloud, this is Riley. What can I help you with?"
+agent_name = "John"
+greeting = "Hi, thanks for calling Northwind Cloud, this is John. What can I help you with?"
 # Anything particular about how your people talk to customers. Plain prose; optional.
 house_style = ""
 
@@ -82,7 +82,7 @@ amount_usd = "the amount in dollars"
 
 # -- actions: what the agent can do at the decision point ---------------------------------
 # "jev" is the description Jev decides between. "words" is how the action reads in a
-# caller's history ("Riley booked a specialist callback"). "then" is what the agent gets
+# caller's history ("John booked a specialist callback"). "then" is what the agent gets
 # across once the action is chosen, in its own words.
 
 [[actions]]
@@ -183,7 +183,7 @@ history = [
   [12, "Called again about the same $49 duplicate. A $49 credit was applied on the call. What came of it: finance reversed the credit eight days later as unsupported, and the caller was not told."],
   [5, "Called a third time, upset that the credit had vanished. Transferred to an agent; 31 minutes in the queue. The agent said a billing specialist would call back. What came of it: no callback was made."],
 ]
-notes = "Prefers to be called back on the mobile number on file, afternoons."
+notes = "Mobile on file: (650) 555-0142. Prefers callbacks on it, afternoons."
 script = [
   "Hi. I'm calling about my bill. Again.",
   "Yes, that one. And last time someone promised to call me back and nobody did.",
@@ -191,8 +191,8 @@ script = [
   "Fine. Will the credit come back too, or is that gone?",
   "Okay. Thanks.",
 ]
-why = "The written policy says a small billing dispute is resolved on the call. For Dana that has been tried, and a credit, and a transfer; each time she called back. Only the outcomes of those calls can teach the agent that, and only a memory of Dana lets Riley say so instead of asking her to explain a fourth time."
-pushback = "Riley has what was tried and what came of it, so 'why would it work this time' gets a real answer."
+why = "The written policy says a small billing dispute is resolved on the call. For Dana that has been tried, and a credit, and a transfer; each time she called back. Only the outcomes of those calls can teach the agent that, and only a memory of Dana lets John say so instead of asking her to explain a fourth time."
+pushback = "John has what was tried and what came of it, so 'why would it work this time' gets a real answer."
 
 [[personas]]
 id = "marcus-oyelaran"

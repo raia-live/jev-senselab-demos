@@ -146,23 +146,31 @@ def caller_from_call(call: dict[str, Any]) -> Caller:
 
 
 def variable_values(profile: dict[str, Any]) -> dict[str, str]:
-    """What the prompt's ``{{...}}`` are filled with: the account facts and the history."""
-    return {k: str(v) for k, v in profile.items() if k in (*OUR_KEYS, "history") and k != "profile_id"}
+    """What the prompt's ``{{...}}`` are filled with: the account facts and the history. A
+    caller we could not match has no name, and the prompt greets them as a stranger."""
+    out = {k: str(v) for k, v in profile.items() if k in (*OUR_KEYS, "history") and k != "profile_id"}
+    if not out.get("name"):
+        out["name"] = "unknown"
+    return out
 
 
-def tool_result(d: Any, business: Business) -> str:
-    """What the conversational model gets back from ``decide_next_step``: the decision, and
-    what to get across. The model puts it in its own words; the decision itself is not up
-    for discussion, and the result says so."""
+def tool_result(d: Any, business: Business, *, record: str = "") -> str:
+    """What the conversational model gets back from ``decide_next_step``: the decision, what
+    to get across, and why (the situation's record, so the agent can say what has and has not
+    worked for people like this caller). The model puts it in its own words; the decision
+    itself is not up for discussion, and the result says so. It does not end the call: the
+    close is the model's, and the prompt has it wait for the caller."""
     label = business.action(d.action).label
+    why = f" Why, in plain words and without the numbers: {record}" if record else ""
     return (f"Next step: {d.action}. Decided: {label.lower()}. This is what happens on this call; do not offer, "
-            f"hint at or agree to anything else. {d.then} Say it the way you would to a friend, in a sentence "
-            f"or two, then let them respond. When there is nothing else, say goodbye and end the call.")
+            f"hint at or agree to anything else. {d.then}{why} Say it the way you would to a friend, in a sentence "
+            f"or two, with the reason, then let them respond. Confirm any detail you take from them by repeating it "
+            f"back. Do not end the call until they have said they are done.")
 
 
-def tool_reply(tc: dict[str, Any], d: Any, business: Business) -> dict[str, Any]:
+def tool_reply(tc: dict[str, Any], d: Any, business: Business, *, record: str = "") -> dict[str, Any]:
     """One entry of ``results``. No scripted line: the model tells the caller in its own words."""
-    return {"toolCallId": tc.get("id"), "name": "decide_next_step", "result": tool_result(d, business)}
+    return {"toolCallId": tc.get("id"), "name": "decide_next_step", "result": tool_result(d, business, record=record)}
 
 
 @app.post("/vapi/webhook")
@@ -191,7 +199,8 @@ async def vapi_webhook(request: Request) -> JSONResponse:
         # account facts and history can go into the prompt (a phone call carries none of
         # ours). Pre-open the runs now too, before the caller has spoken.
         prof = profile_from_call(call)
-        caller = ag.caller_from(prof)
+        # Nobody registered on the page: a stranger, greeted as one (no name, no history).
+        caller = ag.caller_from(prof) if prof.get("name") else Caller(name="")
         history = str(prof.get("history") or "") or ag.brief_for(caller)
         ag.call_started(call_id, caller, call_type=str(call.get("type") or "inboundPhoneCall"), brief=history)
         return JSONResponse({"assistantId": cfg.assistant_id,
@@ -210,7 +219,7 @@ async def vapi_webhook(request: Request) -> JSONResponse:
                     args = {"summary": args}
             if name == "decide_next_step":
                 d = ag.decide(call_id, dict(args or {}), caller=caller_from_call(call))
-                results.append(tool_reply(tc, d, ag.business))
+                results.append(tool_reply(tc, d, ag.business, record=ag.situation_record_words(d.situation)))
             elif name == "recall_customer":
                 text = ag.recall(call_id, dict(args or {}), caller=caller_from_call(call))
                 results.append({"toolCallId": tc.get("id"), "name": name, "result": text})

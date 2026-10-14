@@ -15,7 +15,7 @@ DEMO = Business.load()
 
 
 def test_demo_file_matches_the_scenario():
-    assert DEMO.name == "Northwind Cloud" and DEMO.agent_name == "Riley"
+    assert DEMO.name == "Northwind Cloud" and DEMO.agent_name == "John"
     assert DEMO.simulated and DEMO.scenario.simulator is SCENARIO
     assert list(DEMO.action_ids) == SCENARIO.actions
     assert list(DEMO.policy) == SCENARIO.policy
@@ -118,13 +118,19 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     assert "{{history}}" in prompt and "{{name}}" in prompt  # filled per call by the server
     assert "booking or moving an appointment (appointment)" in prompt
     assert "for a bill they have a question about, the amount in dollars" in prompt
-    assert "Northwind" not in prompt and "Riley" not in prompt
+    assert "Northwind" not in prompt and "John" not in prompt
+    # The agent opens the call itself (by name when it knows the caller), the business's
+    # greeting is the fallback for a stranger, and the decision waits for the caller's words.
+    assert b.greeting in prompt and "1. Open. You speak first." in prompt
+    assert "only then use endCall" in prompt
     tool = decide_tool(b)
     assert tool["function"]["parameters"]["properties"]["intent"]["enum"] == ["appointment", "bill"]
     assert "amount_usd" in tool["function"]["parameters"]["properties"]
+    assert "caller_said" in tool["function"]["parameters"]["required"]
     assert all(m["type"] != "request-start" for m in tool["messages"])  # nothing scripted
     rt = assistant_config(b, server_url="https://x/vapi/webhook", secret=None)
     assert rt["model"]["model"] == "gpt-realtime-2" and rt["voice"] == {"provider": "openai", "voiceId": "cedar"}
+    assert rt["firstMessageMode"] == "assistant-speaks-first-with-model-generated-message"
     assert "transcriber" not in rt and rt["firstMessage"] == b.greeting and "endCallMessage" not in rt
     assert rt["backchannelingEnabled"] is True
     pl = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, stack="pipeline", voice_id="sarah")

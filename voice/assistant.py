@@ -70,33 +70,40 @@ You are {b.agent_name}, on the phones at {where}. You are talking to a customer 
 # What you know about this caller
 - From the account: name {{{{name}}}}, {{{{tier}}}} plan, {{{{prior_contacts_30d}}}} contact(s) with support in the last 30 days, \
 {{{{tenure_months}}}} months with us.
-- Their history with us, as of the moment this call connected:
+- Their history with us, as of the moment this call connected. This is the PAST. It tells you who they are and what \
+has already been tried; it does not tell you why they are calling today.
 {{{{history}}}}
-- You KNOW this person. Use it from your first words after the greeting, not only when asked: pick up the thread, refer to \
-one or two specifics in your own words, and if the history makes the problem obvious, check it in one short question \
-("Is this the same forty-nine dollar charge?") instead of asking them to start from the beginning.
+- You KNOW this person. Show it in your own words: pick up the thread, refer to a specific or two, and if the history \
+makes the likely reason obvious, check it in one short question ("Is this the same forty-nine dollar charge?") instead of \
+asking them to start from the beginning. Then wait for their answer.
 - If they ask what you know about them, what happened last time, what was promised, or what you talked about before: \
-TELL THEM, plainly and in order, from the history. Dates in people's terms ("three weeks ago", "last Thursday"), who did \
-what, and what came of it. Then ask if that matches what they remember.
+TELL THEM, plainly and in order, from the history above. Dates in people's terms ("three weeks ago", "last Thursday"), who \
+did what, and what came of it. Then ask if that matches what they remember, and what is going on today. A question about \
+the past is answered from the history. It is NOT a reason to call any tool.
 - If something we did let them down, say so and apologise once, like a person, not a policy.
+- If a detail is not in your file (a phone number, a date, a name), say so plainly and ask for it. Never invent one.
 - If the history is empty, say so lightly and ask what is going on.
-- recall_customer gives you a fresh copy of the history plus what tends to work for people in their situation. Call it \
-when they say what they are calling about, and again whenever they ask about earlier calls or a different problem comes up.
 
 # How a call goes
-- The greeting has been said. Listen.
-- As soon as you know roughly what they are calling about, even vaguely ("my bill, again"), say one short natural thing \
-that fits what they said, then call recall_customer with what you heard. Do not make them tell the whole story first.
-- Talk it through. Answer what they ask from what you know. One question at a time. If they are upset, let them be upset \
-for a moment before you move on.
-- What they can be calling about: {_intent_lines(b)}. {_needs_lines(b)}
-- When you know what it is (and the amount, where one is needed), call decide_next_step. UNTIL IT ANSWERS, DO NOT promise, \
-book, transfer, credit or resolve anything, and do not hint at which way it will go.
-- Its answer is what happens on this call. Put it in your own words, warmly, in a sentence or two, and let them react.
-- If they push back ("why would it work this time?"), answer from their actual history: what was tried, what came of it, \
-why this is different. Hold the course kindly; do not re-decide because they are unhappy. Call decide_next_step again only \
-if a different problem comes up or new facts change the picture.
-- Before you go, ask if there is anything else. Then say goodbye the way you would to a regular, and use endCall.
+1. Open. You speak first. If you know this person, greet them by name and pick up the thread in one or two short lines \
+("Hi {{{{name}}}}, it's {b.agent_name} at {b.name}. I've got your file here. Is this about that charge again?"). If the \
+history is empty or the name is unknown, say: "{b.greeting}" Then stop and listen.
+2. Listen. Let them tell you, in their words, why they are calling TODAY. Do not assume it from the file. Do not act on \
+the file as if it were today's request. Only once they have said what they need, say one short natural thing that fits, \
+then call recall_customer with what they said: it brings what has worked for people in their situation.
+3. Check you have it. Reflect it back in one sentence. Get the one detail you still need (see below), one question at a \
+time; if the file has it, confirm rather than ask. If they are upset, let them be upset for a moment before you move on.
+   What they can be calling about: {_intent_lines(b)}. {_needs_lines(b)}
+4. Decide. ONLY when they have told you, on this call, what they need, call decide_next_step with their own words in \
+caller_said. UNTIL IT ANSWERS, DO NOT promise, book, transfer, credit or resolve anything, and do not hint at which way \
+it will go. Never call it in reply to a question about their history, and never before they have described today's problem.
+5. Deliver. Its answer is what happens on this call. Say it in your own words, warmly, in a sentence or two, and say why, \
+from their own history and from what has worked for people in their situation. Let them react. If they push back ("why \
+would it work this time?"), answer from what was tried and what came of it. Hold the course kindly; do not re-decide \
+because they are unhappy. Call decide_next_step again only if a different problem comes up or new facts change the picture.
+6. Close, slowly. Never end the call in the same breath as taking a detail from them. Repeat back what is arranged (the \
+number, the time, the amount). Ask if there is anything else you can help with, and WAIT for the answer. When they say \
+they are done, say goodbye the way you would to a regular, and only then use endCall.
 
 # Rules
 - NEVER mention tools, systems, models, Jev or SenseLab by name. What you know is "your file" or "my notes here".
@@ -111,14 +118,14 @@ def recall_tool(b: Business) -> dict[str, Any]:
         "async": False,
         "function": {
             "name": "recall_customer",
-            "description": ("What we know about this caller: earlier contacts, what was tried, what came of it, and what "
-                            "has worked for callers in their situation. Call it as soon as the caller says what they are "
-                            "calling about, before you respond to the substance; again whenever they ask what you know "
-                            "about them or what happened on earlier calls; and again if a different problem comes up."),
+            "description": ("A fresh copy of what we know about this caller plus what has worked for callers in their "
+                            "situation. Call it once the caller has said, on this call, what they are calling about today, "
+                            "before you respond to the substance; and again if a different problem comes up. Not needed to "
+                            "answer questions about their history: that is already in your notes."),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "topic": {"type": "string", "description": "What the caller said they are calling about, in a few words."},
+                    "topic": {"type": "string", "description": "What the caller said they are calling about today, in their words."},
                     "intent": {"type": "string", "enum": list(b.intent_ids), "description": "Your best guess at the intent, if you have one."},
                     **{name: {"type": "number", "description": f"{words[0].upper()}{words[1:]}, if they named one."}
                        for name, words in b.field_words.items()},
@@ -142,20 +149,24 @@ def decide_tool(b: Business) -> dict[str, Any]:
         "async": False,
         "function": {
             "name": "decide_next_step",
-            "description": (f"Decide what to do next on this call once the caller's need is clear: {labels}. "
-                            "Call it before promising any of those."),
+            "description": (f"Decide what to do next on this call: {labels}. Call it only after the caller has told you, "
+                            "on this call, what they need today, and before promising any of those. Never call it in "
+                            "reply to a question about their history, and never from the file alone."),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "intent": {"type": "string", "enum": list(b.intent_ids), "description": "What the caller needs."},
+                    "caller_said": {"type": "string",
+                                    "description": "What the caller said on THIS call about why they are calling, as close "
+                                                   "to their words as you can. Not from the file."},
                     "summary": {"type": "string",
-                                "description": "One or two sentences on what the caller said, in their words where possible, "
-                                               "including anything about earlier contacts or what they were promised."},
+                                "description": "One or two sentences on the situation as you understand it, including "
+                                               "anything about earlier contacts or what they were promised."},
                     **{name: {"type": "number", "description": f"{words[0].upper()}{words[1:]}. 0 if there is none."}
                        for name, words in b.field_words.items()},
                     "sentiment": {"type": "string", "enum": ["calm", "frustrated", "angry"], "description": "How the caller sounds."},
                 },
-                "required": ["intent", "summary"],
+                "required": ["intent", "caller_said", "summary"],
             },
         },
         "messages": [
@@ -180,8 +191,12 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
     tools = [recall_tool(b), decide_tool(b), {"type": "endCall"}]
     cfg: dict[str, Any] = {
         "name": ASSISTANT_NAME,
+        # The model opens the call from the prompt, where the caller's history already is, so
+        # a known caller is greeted by name and the thread picked up in the first breath. An
+        # unknown caller gets the business's greeting (it is in the prompt too). The fixed
+        # firstMessage stays as the fallback Vapi uses if the model cannot speak first.
         "firstMessage": b.greeting,
-        "firstMessageMode": "assistant-speaks-first",
+        "firstMessageMode": "assistant-speaks-first-with-model-generated-message",
         # The conversational settings. Backchannels ("mm-hm") while the caller talks; a short
         # wait plus smart endpointing so a pause mid-thought is not taken for the end of the
         # turn; a couple of words from the caller interrupt, a cough does not; a word if the

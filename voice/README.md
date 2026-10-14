@@ -13,12 +13,13 @@ the first would have cost. That is the comparison the demo exists for.
 
 SenseLab also remembers the caller. Each person who rings has their own history in memory
 (earlier contacts, what was tried, what came of it). It is read before the call connects and
-goes into the prompt, so Riley knows who is on the line from the first word, and it is written
-to when the call's outcome is known. Ask her "what do you know about me?" or "what did we talk
-about last time?" and she tells you, in order. She can say "is this the same forty-nine dollar
-charge?" instead of asking someone to explain a problem for the fourth time, and can answer
-"why would it work this time?" with what actually happened the last three times. Call twice as
-the same person and the second call starts from the first.
+goes into the prompt, so John knows who is on the line from the first word, and it is written
+to when the call's outcome is known. He opens the call himself, by name, picking up the thread
+("I've got your file here. Is this about that charge again?"). Ask him "what do you know about
+me?" or "what did we talk about last time?" and he tells you, in order, from the file. When
+the decision comes he says why, from your own history and from what has and has not worked
+for people in your situation, and "why would it work this time?" gets what actually happened
+the last three times. Call twice as the same person and the second call starts from the first.
 
 Vapi runs the call: the phone or browser audio and the speech. By default the speech is
 OpenAI's realtime model (`gpt-realtime-2`), which listens and talks directly, with no
@@ -26,10 +27,10 @@ transcription step in between; that is what makes it sound like a person on a li
 than text read aloud ("The voice", below). This folder is the server Vapi talks to, the page
 you call from, and a simulator for when you have no microphone.
 
-Nothing the caller hears is scripted. Riley is given a character and a few rules (look the
+Nothing the caller hears is scripted. John is given a character and a few rules (look the
 caller up before answering the substance, ask Jev before promising anything, never mention
 the machinery), and talks. Jev's decision comes back to the model as what happens next and
-what to get across, and Riley puts it in her own words. The business itself (Northwind Cloud,
+what to get across, and John puts it in his own words. The business itself (Northwind Cloud,
 its intents, actions, policy and demo callers) is one file, `voice/business.toml`; swap it
 for yours and the same agent answers for your company ("Make it your business", below).
 
@@ -70,10 +71,12 @@ Thirty calls take about five minutes and leave SenseLab with a record for every 
 including the one the written policy gets wrong. You can watch them land on the page.
 
 Then pick Dana (consumer, third call about the same $49) and have a conversation, not a line.
-"Details" has a script with five turns; the first is just "Hi. I'm calling about my bill.
-Again." Riley looks Dana up, finds the duplicate charge, the credit finance reversed and the
-callback that never came, and asks whether this is the same charge rather than making her
-explain. Push back when the decision comes ("why would it work this time?") and Riley answers
+John speaks first, and he already has her file: he greets her by name and asks whether this
+is about that charge again rather than making her explain. Try "what do you know about me?"
+or "what did we talk about last time?" and he tells you: the duplicate charge, the credit
+finance reversed, the callback that never came. Then tell him why you are calling today
+("Details" has a script with five turns; the first is just "I'm calling about my bill.
+Again."). Push back when the decision comes ("why would it work this time?") and John answers
 from the history. The written policy says a dispute under $200 is resolved in the bot; Jev
 alone follows it, or hands the frustrated caller to a human. SenseLab's record says both of
 those lost this caller before and a specialist callback kept her. Jev with SenseLab books the
@@ -95,19 +98,19 @@ simulator for thirty calls before you record.
 
 ## What you see on the page
 
-The page is a live graph of the call: the caller, Riley (Vapi), Jev and SenseLab as boxes,
+The page is a live graph of the call: the caller, John (Vapi), Jev and SenseLab as boxes,
 with the traffic between them animated as it happens: the call connecting, SenseLab opening
-a run per possible situation, Riley asking Jev, Jev's answer going back, Riley telling the
+a run per possible situation, John asking Jev, Jev's answer going back, John telling the
 caller, the call ending, the outcome arriving and being sealed. One line under the graph
 narrates each step. Below it a timeline shows the same call second by second, one lane per
-party: who was speaking when, the moment Riley looked the caller up, the moment Riley asked
+party: who was speaking when, the moment John looked the caller up, the moment John asked
 Jev, Jev's 200 ms, SenseLab opening the runs and sealing the outcome. "Details" opens a side
-panel with the caller's script, what SenseLab knows about this caller (the text Riley got
+panel with the caller's script, what SenseLab knows about this caller (the text John got
 back), Jev's read of the four actions, the exact text SenseLab put in front of Jev, the
 lessons drawn so far and the record by situation. Earlier calls are chips along the bottom; clicking one replays its graph and
 timeline, with the recording when there is one.
 
-Every call is recorded by Vapi (stereo: you on one channel, Riley on the other). The server
+Every call is recorded by Vapi (stereo: you on one channel, John on the other). The server
 pulls the recording into `results/voice/<call_id>.wav` and the page plays it under the
 decision, with the turn-by-turn transcript. For a demo video, screen-record the page while
 you make the call, and put the stereo recording under it afterwards.
@@ -167,19 +170,30 @@ record a browser call.
 
 ## How the conversation is shaped
 
-The system prompt (`voice/assistant.py`, `system_prompt`) is a character, not a flowchart:
-who Riley is on the phone, how she reacts before she acts, what she never says, and what she
-knows about the person calling (their account facts and their history, filled in per call).
+The system prompt (`voice/assistant.py`, `system_prompt`) is a character and the shape of a
+call, not a flowchart: who John is on the phone, how he reacts before he acts, what he never
+says, what he knows about the person calling (their account facts and their history, filled
+in per call), and six beats a call goes through. He opens, by name if he knows them. He
+listens for why they are calling today, and the prompt is blunt that the file is the past
+and not today's request: a question about history is answered from the file and is never a
+reason to call a tool. He checks he has it and gets the one detail he needs. He decides,
+through Jev, only once the caller has said on this call what they need; the tool requires
+the caller's own words. He delivers the decision with the reason. And he closes slowly:
+repeats back what was arranged, asks if there is anything else, waits, and only hangs up
+after the caller says they are done. Those last two came out of a real call where the agent
+decided from the file before the caller had stated a problem and hung up the moment it had a
+phone number.
+
 The only scripted audio is a "still with you" if a lookup takes more than a couple of
 seconds. The rest is Vapi's conversational settings: backchannels while the caller is
 talking, a short wait plus smart endpointing so a pause mid-sentence is not taken for the
-end of a turn, two words from the caller interrupt Riley but a cough does not, and a word if
+end of a turn, two words from the caller interrupt John but a cough does not, and a word if
 the line goes quiet. The model runs at temperature 0.7 so two calls do not sound alike. All
 of it is in `assistant_config`.
 
-Riley looks the caller up a second time when they ask what she knows about them, bring up an
-earlier call, or turn out to be calling about something else, so the answer is what memory
-holds rather than what the prompt happened to carry.
+John looks the caller up again when they turn out to be calling about something else, so
+the situation record is for the right situation. Questions about their own history he
+answers from the prompt, where it already is.
 
 ## The voice
 

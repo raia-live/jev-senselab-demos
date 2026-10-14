@@ -150,7 +150,8 @@ def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today
     contacts = memory.contacts if memory else []
     today = today or dt.date.today()
     recent = sum(1 for c in contacts if _days_ago(c["date"], today) <= 30)
-    lines = [f"Caller: {caller.name}. {tier.capitalize()}, customer for {caller.tenure_months} months. "
+    who = caller.name or "unknown (no account matched this call)"
+    lines = [f"Caller: {who}. {tier.capitalize()}, customer for {caller.tenure_months} months. "
              f"{max(caller.prior_contacts_30d, recent)} contact(s) with support in the last 30 days."]
     if contacts:
         lines.append("Earlier contacts, most recent first:")
@@ -162,10 +163,10 @@ def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today
         lines.append(f"Notes: {memory.notes}")
     if record:
         lines.append(record)
-    lines.append("Use this to show you know what has happened: pick up the thread, refer to one or two specifics in "
-                 "your own words, and if the history makes the problem obvious confirm it in one short question "
-                 "instead of asking them to explain from the start. Do not read it out as a list. Do not promise a "
-                 "fix, a transfer, a credit or a callback before decide_next_step has answered.")
+    lines.append("Use this to show you know what has happened: pick up the thread and refer to one or two specifics in "
+                 "your own words. Do not read it out as a list. The history is the past; what the caller needs today "
+                 "is whatever they have told you on this call. Do not promise a fix, a transfer, a credit or a "
+                 "callback before decide_next_step has answered.")
     return "\n".join(lines)
 
 
