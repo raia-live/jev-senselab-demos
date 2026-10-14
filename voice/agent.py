@@ -783,9 +783,29 @@ class LiveAgent:
             p.decision.ended_reason = ended_reason
         self._event("call_ended", {"call_id": call_id, "ended_reason": ended_reason, "decisions": len(pending),
                                    "awaiting_outcome": not (auto_review and self.business.simulated)})
+        if not pending and call is not None:
+            self._note_call(call, ended_reason)  # no decision, still a call they made
         if not auto_review or not self.business.simulated:
             return [p.decision for p in pending]
         return [self._review(p) for p in pending]
+
+    def _note_call(self, call: dict[str, Any], ended_reason: str | None) -> None:
+        """A call that reached no decision goes on the caller's record too, from the words
+        on it, so the next call knows it happened. Decided calls are noted after the seal."""
+        customer_id = str((call.get("caller") or {}).get("customer_id") or "")
+        if not customer_id:
+            return
+        lines = [ln["text"] for ln in call.get("live") or [] if ln.get("role") == "user"]
+        seconds = int(round(float(call.get("ended") or time.time()) - float(call.get("started") or 0))) if call.get("started") else 0
+        key, value = cust.call_entry(call["id"], caller_lines=lines, agent_name=self.business.agent_name,
+                                     ended_reason=ended_reason, seconds=seconds)
+        try:
+            self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), key, value,
+                                                    confidence=1.0, memory_type="experience")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("customer note for %s: %s", customer_id, exc)
+            return
+        self._event("customer_noted", {"call_id": call["id"], "customer_id": customer_id, "key": key, "text": value["text"]})
 
     def _save_recording(self, call_id: str, url: str | None, fetch: Callable[[], str | None] | None) -> None:
         """Download the call's recording, trying for a couple of minutes: the file lands on

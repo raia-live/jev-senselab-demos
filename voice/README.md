@@ -95,7 +95,10 @@ them in the bot.
 The five callers come with a seeded history (`[[personas]]` in `voice/business.toml`), because
 a first demo call needs something to know; those entries are marked as seeded. Everything after
 them is written by the agent from what happened on a call. The history is kept in SenseLab at
-`<entity>/customers/<id>`, one entry per contact.
+`<entity>/customers/<id>`, one entry per contact. Every call goes on it: a decided call is
+noted after the seal, with what was done and what came of it; a call that reached no decision
+(the caller asked something and hung up) is noted at hang-up, in their words. So John can
+answer "what was my last call about?" even when the last call was that question.
 
 For a clean take, start on an empty memory: `VOICE_ENTITY_PATH=jev-demos/call_handling/take2`
 (the caller histories live under the entity, so they are re-seeded there too), then run the
@@ -259,14 +262,20 @@ things GPT-Live does differently, both found on real calls and visible in Vapi's
   caller's words come to the server inside each tool call and the end-of-call report
   (`artifact.messages`), so the caller's lines appear at each decision and at hang-up. On
   a phone call that second path is the only one for words.
-- Who is speaking, right now, comes from the call's audio. Vapi streams every call live
-  (`monitor.listenUrl` on the call record, a WebSocket of raw PCM with the caller on one
-  channel and the agent on the other), and `voice/listen.py` follows it: loudness per
-  channel every 100 ms, a turn starts after 200 ms of sound and ends after 700 ms of
-  quiet, with an adaptive noise floor so a phone line does not read as a voice. Those
-  starts and stops light the two boxes on the page and draw the timeline's lanes, on phone
-  and browser calls alike, with the timing of the audio itself. `VOICE_LISTEN=0` turns it
-  off; the page then has what the other paths give it.
+- Who is speaking, right now, is the part GPT-Live keeps to itself. On the other two
+  stacks Vapi streams every call live (`monitor.listenUrl` on the call record, a WebSocket
+  of raw PCM with the caller on one channel and the agent on the other) and
+  `voice/listen.py` follows it: loudness per channel every 100 ms, a turn starts after
+  200 ms of sound and ends after 700 ms of quiet, with an adaptive noise floor so a phone
+  line does not read as a voice. Those starts and stops light the two boxes and draw the
+  timeline's lanes with the timing of the audio itself. On GPT-Live, Vapi refuses that
+  stream (close code 1008, "This action is not supported on the full duplex harness", as
+  of October 2026), and sends no speech updates either. So on a GPT-Live browser call the
+  page does it: the agent's turns from the SDK's transcript stream, the caller's from the
+  page's own microphone, with the same loudness rule. On a GPT-Live phone call there is no
+  live signal at all; the boxes and lanes fill in at each decision and at hang-up, from the
+  turns Vapi sends with them. For a phone demo where the live flow matters, run
+  `VOICE_STACK=realtime`. `VOICE_LISTEN=0` turns the audio stream off on any stack.
 - The speaker has no tools. It delegates to the reasoner, and anything the reasoner does
   not do, does not happen: a goodbye without `endCall` leaves the line open. The reasoner's
   prompt checks for a goodbye before anything else, and a `customer.speech.timeout` hook
@@ -410,7 +419,7 @@ voice/business.py    reads it; builds the scenario Jev and SenseLab see, names s
 voice/agent.py       Jev + SenseLab per call: open ahead, recall the caller, decide, seal with the outcome, repair loop
 voice/customers.py   the per-caller memory: seeded history, the brief the agent gets, the note it writes after a call
 voice/server.py      FastAPI: /vapi/webhook, the page, /api/*
-voice/listen.py      who is speaking, from the call's live audio stream (lights the boxes, draws the lanes)
+voice/listen.py      who is speaking, from the call's live audio stream (realtime and pipeline stacks)
 voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice stack, server URL); --number
 voice/simulate.py    the scenario's callers, sent as Vapi tool calls
 voice/testcalls.py   runs the business file's [[scenarios]] as voice calls through Vapi Simulations, judge plus our own checks

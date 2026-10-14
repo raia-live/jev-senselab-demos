@@ -114,14 +114,23 @@ def start_listening(call_id: str, call: dict[str, Any] | None) -> bool:
     return True
 
 
+LOOKUP_AFTER_S = (0.3, 1.5, 4.0)  # the record gains monitor.listenUrl once the call is in progress
+
+
 async def _listen_after_lookup(call_id: str) -> None:
-    try:
-        call = await run_in_threadpool(va.fetch_call, cfg.private_key or "", call_id)
-    except Exception as exc:  # noqa: BLE001 - the page still has the SDK's stream
-        log.info("no listen stream for %s: %s", call_id, exc)
-        return
-    if call and not start_listening(call_id, call):
-        log.info("no listen stream for %s: the call record has no monitor.listenUrl", call_id)
+    for wait in LOOKUP_AFTER_S:
+        await asyncio.sleep(wait)
+        if call_id not in looked_up:  # the call ended meanwhile
+            return
+        try:
+            call = await run_in_threadpool(va.fetch_call, cfg.private_key or "", call_id)
+        except Exception as exc:  # noqa: BLE001 - the page still has the SDK's stream
+            log.info("no listen stream for %s: %s", call_id, exc)
+            return
+        if call and (call.get("monitor") or {}).get("listenUrl"):
+            start_listening(call_id, call)
+            return
+    log.info("no listen stream for %s: the call record has no monitor.listenUrl", call_id)
 
 
 def stop_listening(call_id: str) -> None:

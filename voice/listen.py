@@ -1,17 +1,24 @@
 """Who is speaking, from the call's live audio.
 
-On GPT-Live, Vapi sends the server no ``speech-update`` and no ``transcript`` while the call
-is on (only tool calls and the end-of-call report), so on a phone call nothing tells the
-page that the caller or the agent has started talking. Vapi does stream every call's audio
-live: the call's ``monitor.listenUrl`` is a WebSocket that sends a JSON header and then raw
-PCM, 16-bit little-endian, 16 kHz, two channels (the caller on channel 0, the agent on
-channel 1, as Vapi's transcriber streams are laid out). This module connects to it, measures
-the loudness of each channel in 100 ms windows, and reports a speech start after 200 ms of
-sound and a stop after 700 ms of quiet, per side, with the time it happened. That is what the
-page needs to light the boxes, and what the timeline's lanes are made of.
+Vapi streams a call's audio live: the call's ``monitor.listenUrl`` is a WebSocket that sends
+a JSON header and then raw PCM, 16-bit little-endian, 16 kHz, two channels (the caller on
+channel 0, the agent on channel 1, as Vapi's transcriber streams are laid out). This module
+connects to it, measures the loudness of each channel in 100 ms windows, and reports a
+speech start after 200 ms of sound and a stop after 700 ms of quiet, per side, with the time
+it happened. That is what the page needs to light the boxes, and what the timeline's lanes
+are made of, on stacks where Vapi's own ``speech-update`` is late or missing.
+
+Checked October 2026: on GPT-Live the stream is refused the moment it opens, with close
+code 1008 "This action is not supported on the full duplex harness". Together with the
+absence of ``speech-update`` and ``transcript`` messages on that stack, it means a GPT-Live
+phone call gives the server no live word at all on who is speaking; the page learns the turns
+at each decision and at hang-up (``artifact.messages``, see ``Agent.note_turns``). A GPT-Live
+browser call is different: the page hears both sides itself, the agent through the SDK's
+transcript stream and the caller through the microphone. The listener is left on so the
+classic stacks get it, and so a GPT-Live that starts allowing it gets it on the day.
 
 The stream carries no words. Those still come from the browser SDK (web calls) and from
-``artifact.messages`` at each tool call and at hang-up (every call), see ``Agent.note_turns``.
+``artifact.messages`` at each tool call and at hang-up (every call).
 """
 
 from __future__ import annotations
@@ -133,17 +140,22 @@ class Stream:
 
 async def listen(call_id: str, url: str, on_speech: SpeechCallback, *, on_open: Callable[[], None] | None = None) -> None:
     """Connect to the call's listen stream and report speech edges until the call ends
-    (Vapi closes the socket). Errors end the listener quietly: the page then has what the
-    other paths give it, as before."""
+    (Vapi closes the socket). *on_open* is called when audio actually starts to flow, not
+    on connect: a stack that refuses the stream closes it right after accepting it, and
+    must not count as listened to. Errors end the listener quietly: the page then has what
+    the other paths give it, as before."""
     import websockets
 
     stream = Stream(on_speech)
+    opened = False
     try:
         async with websockets.connect(url, max_size=None, open_timeout=10) as ws:
-            if on_open:
-                on_open()
             async for frame in ws:
                 if isinstance(frame, bytes):
+                    if not opened:
+                        opened = True
+                        if on_open:
+                            on_open()
                     stream.feed(frame)
                 else:
                     info = stream.header(str(frame))
@@ -153,9 +165,13 @@ async def listen(call_id: str, url: str, on_speech: SpeechCallback, *, on_open: 
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # noqa: BLE001 - the listener is a nicety
-        log.info("listen %s ended: %s: %s", call_id, type(exc).__name__, exc)
+        if "full duplex" in str(exc):
+            log.info("listen %s: Vapi does not stream GPT-Live calls (%s)", call_id, str(exc).split(";")[0])
+        else:
+            log.info("listen %s ended: %s: %s", call_id, type(exc).__name__, exc)
     finally:
-        log.info("listen %s: %d windows", call_id, stream.windows)
+        if opened:
+            log.info("listen %s: %d windows", call_id, stream.windows)
 
 
 __all__ = ["FLOOR_CAP", "FLOOR_MIN", "START_WINDOWS", "STOP_WINDOWS", "WINDOW_S", "Stream", "Vad", "listen"]

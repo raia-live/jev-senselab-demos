@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from voice.agent import Caller
 from voice.business import Business
-from voice.customers import CustomerMemory, brief, contact_entry, opening, seed_entries
+from voice.customers import CustomerMemory, brief, call_entry, contact_entry, opening, seed_entries
 
 TODAY = dt.date(2026, 10, 14)
 BUSINESS = Business.load()
@@ -145,6 +145,54 @@ def test_contact_entry_from_an_outcome():
                               worked=False, today=TODAY)
     assert failed["text"].endswith("Credit reversed. It did not hold.")
     assert failed["text"].startswith("Called about billing dispute: s. The agent issue credit.")  # no words given: the id
+
+
+def test_a_call_with_no_decision_goes_on_the_record_too():
+    # The caller rang, asked what their last call was about, and hung up. Nothing to decide,
+    # still a call they will remember making: the next call's brief says so, in their words.
+    key, value = call_entry("fake-01a13944", caller_lines=["Hey John,  what was our last call about? ", " ", "Ok thanks, bye."],
+                            agent_name="John", ended_reason="customer-ended-call", seconds=22, today=TODAY)
+    assert key == "contact-2026-10-14-a13944"
+    assert value["text"] == ("Called, no request to act on. Caller said: \"Hey John, what was our last call about?\"; "
+                             "\"Ok thanks, bye\". John answered from the file; the caller hung up after 22 s.")
+    assert value["action"] is None and value["worked"] is None
+    _, silent = call_entry("x", caller_lines=[], agent_name="John", ended_reason="silence-timed-out", today=TODAY)
+    assert silent["text"] == "Called and said nothing we could act on; the line went quiet."
+    # It reads back as an earlier contact, newest first, and the brief carries it.
+    mem = CustomerMemory.from_entries("bruno", [SimpleNamespace(key=key, value=value),
+                                                SimpleNamespace(key="contact-2026-10-01-aaaaaa", value={"date": "2026-10-01", "text": "Called about outage: x. John did y. What came of it: z.", "action": "y", "worked": True})])
+    assert [c["date"] for c in mem.contacts] == ["2026-10-14", "2026-10-01"]
+    text = brief(Caller.from_mapping({"name": "Bruno", "customer_id": "bruno", "tier": "Team"}), mem, today=TODAY)
+    assert "- today: Called, no request to act on. Caller said: \"Hey John, what was our last call about?\"" in text
+
+
+def test_the_agent_notes_a_call_that_reached_no_decision():
+    # Through the agent: call_ended with nothing pending writes the entry under the caller's
+    # entity, from the lines on the call; a decided call leaves that to the seal.
+    from voice.agent import LiveAgent
+
+    writes: list[tuple[str, str, dict]] = []
+
+    class _Mem:
+        def write(self, entity, key, value, **_kw):
+            writes.append((entity, key, value))
+
+    class _Client:
+        def memory(self, _agent_id):
+            return _Mem()
+
+    ag = LiveAgent.__new__(LiveAgent)
+    ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
+    ag.events = []
+    ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
+    call = {"id": "c-01a13944", "started": 1_700_000_000.0, "ended": 1_700_000_022.4, "caller": {"customer_id": "bruno-andrade"},
+            "live": [{"role": "assistant", "text": "Hi Bruno"}, {"role": "user", "text": "what was our last call about?"}]}
+    ag._note_call(call, "customer-ended-call")
+    assert len(writes) == 1 and writes[0][0].endswith("/customers/bruno-andrade") and writes[0][1].startswith("contact-")
+    assert "Caller said: \"what was our last call about?\"" in writes[0][2]["text"] and "after 22 s" in writes[0][2]["text"]
+    assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["call_id"] == "c-01a13944"
+    ag._note_call({"id": "c-2", "caller": {}, "live": []}, None)  # no account matched: nothing to file it under
+    assert len(writes) == 1
 
 
 def test_caller_customer_id_is_a_slug():

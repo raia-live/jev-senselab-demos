@@ -282,7 +282,7 @@ function apply(e, live) {
     case "memory_run_ready": { c.runReady[e.situation] = e.t; break; }
     case "memory_ready": {
       c.readyAt = e.t;
-      if (live && isCur) { unglow("sl"); status("sl", `${e.runs} runs open · ${(e.ms / 1000).toFixed(1)} s`); caption(`<span class="sl">SenseLab ready</span> in ${(e.ms / 1000).toFixed(1)} s.`, `Guidance for every possible situation is now waiting. Whatever the caller asks, the lookup costs nothing more.`); }
+      if (live && isCur) { unglow("sl"); status("sl", `${e.runs} runs open, guidance waiting`); caption(`<span class="sl">SenseLab ready.</span>`, `Guidance for every situation this caller could be in is waiting before they have said why they called. Whatever they ask, the decision is Jev's 200 ms.`); }
       break; }
     case "speech": {
       const lane = c.speech[e.role]; const last = lane[lane.length - 1];
@@ -309,7 +309,7 @@ function apply(e, live) {
         pulse("e-riley-sl", { label: e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}` : "a new caller", color: C.sl, reverse: true, delay: 650 });
         status("sl", e.contacts ? `knows ${e.name}: ${e.contacts} contact${e.contacts === 1 ? "" : "s"}` : `${e.name}: nothing on record`);
         status("riley", "picking up the thread");
-        const when = e.topic === "call start" ? "read before the first word, so it is in the prompt from the start" : `in ${e.ms} ms`;
+        const when = e.topic === "call start" ? "read before the first word, so it is in the prompt from the start" : "read the moment it was asked for";
         caption(e.contacts ? `<span class="sl">SenseLab</span> knows ${esc(e.name)}.` : `<span class="sl">SenseLab</span> has nothing on ${esc(e.name)} yet.`,
           e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}, what was tried and what came of each, ${when}. ${esc(AGENT)} can pick up the thread instead of asking ${esc(e.name)} to explain it all again.` : `A first call. ${esc(AGENT)} asks what is going on; whatever happens on this call is remembered for the next one.`);
       }
@@ -326,11 +326,11 @@ function apply(e, live) {
     case "decision": {
       c.decision = { t: e.t, situation: e.situation, action: e.action, confidence: e.confidence, jev_ms: e.jev_ms, memory_ms: e.memory_ms, prefetched: e.prefetched, basis: e.basis, alone: e.alone_action, alone_conf: e.alone_confidence };
       if (live && isCur) {
-        pulse("e-sl-jev", { label: e.prefetched ? "guidance, already open" : `guidance · ${e.memory_ms} ms`, color: C.sl, dur: 700 });
+        pulse("e-sl-jev", { label: e.prefetched ? "guidance, already open" : "guidance", color: C.sl, dur: 700 });
         pulse("e-riley-jev", { label: ACTION[e.action] || e.action, color: C.jev, reverse: true, delay: 650 });
         pulse("e-you-riley", { label: `${AGENT} tells the caller`, color: C.riley, reverse: true, delay: 1500 });
         setTimeout(() => { unglow("jev"); status("jev", `${ACTION[e.action] || e.action} · ${e.jev_ms} ms`); status("riley", "telling the caller"); }, 700);
-        status("sl", e.prefetched ? "guidance was waiting" : `guidance in ${e.memory_ms} ms`);
+        status("sl", e.prefetched ? "guidance was waiting" : "guidance read");
         const differs = e.alone_action && e.alone_action !== e.action;
         caption(`<span class="jev">Jev + SenseLab:</span> ${esc(ACTION[e.action] || e.action)} <span style="color:var(--muted);font-size:15px">${Math.round(e.confidence * 100)}% · ${e.jev_ms} ms</span>`,
           (e.alone_action ? (differs ? `<b>Jev alone, on the written policy, would have chosen ${esc(ACTION[e.alone_action] || e.alone_action)}</b> (${Math.round(e.alone_confidence * 100)}%). ` : `Jev alone would have chosen the same. `) : "")
@@ -402,14 +402,14 @@ function drawTimeline() {
   c.speech.user.forEach((s) => { o += seg("you", s.t0, s.t1, C.you, "speaking"); });
   c.speech.assistant.forEach((s) => { o += seg("riley", s.t0, s.t1, C.riley, "speaking"); });
   const mine = c.decision && c.runReady[c.decision.situation];
-  if (c.openAt) o += seg("sl", c.openAt, c.readyAt, C.sl, `opening ${c.runs} runs${mine ? ` · this one at ${(mine - c.openAt).toFixed(1)} s` : ""}${c.readyAt ? ` · all at ${(c.readyAt - c.openAt).toFixed(1)} s` : ""}`, c.readyAt ? 1 : .55, true);
+  if (c.openAt) o += seg("sl", c.openAt, c.readyAt, C.sl, `opening ${c.runs} runs ahead of the decision${c.readyAt ? ", all waiting" : ""}`, c.readyAt ? 1 : .55, true);
   if (mine) { const i = 3, y = top + i * lh; o += `<line class="mark" x1="${x(mine)}" y1="${y + 2}" x2="${x(mine)}" y2="${y + 19}" stroke="#0f172a"/>`; }
-  if (c.recall) o += mark("sl", c.recall.t, C.sl, `recall: ${c.recall.contacts ? `${c.recall.contacts} contact${c.recall.contacts === 1 ? "" : "s"}` : "new caller"} · ${c.recall.ms} ms`);
+  if (c.recall) o += mark("sl", c.recall.t, C.sl, `recall: ${c.recall.contacts ? `${c.recall.contacts} contact${c.recall.contacts === 1 ? "" : "s"}` : "new caller"}`);
   if (c.toolCall) o += mark("riley", c.toolCall, C.riley, "", true);
   if (c.decision) {
     const d = c.decision; const tJ0 = d.t - d.jev_ms / 1000;
-    if (!d.prefetched && d.memory_ms > 50) o += seg("sl", tJ0 - d.memory_ms / 1000, tJ0, C.sl, `memory read ${d.memory_ms} ms`);
-    else o += mark("sl", tJ0, C.sl, "read, 0 ms");
+    if (!d.prefetched && d.memory_ms > 50) o += seg("sl", tJ0 - d.memory_ms / 1000, tJ0, C.sl, "guidance read");
+    else o += mark("sl", tJ0, C.sl, "guidance was waiting");
     o += seg("jev", Math.max(c.toolCall || tJ0, tJ0 - 0.15), d.t, C.jev, "");
     { const i = 2, y = top + i * lh; o += `<text class="mark-l" x="${x(d.t) + 7}" y="${y + lh / 2 + 4}">with SenseLab: ${esc(ACTION[d.action] || d.action)} · ${d.jev_ms} ms${d.alone && d.alone !== d.action ? `   ·   alone: ${esc(ACTION[d.alone] || d.alone)}` : d.alone ? "   ·   alone: the same" : ""}</text>`; }
     o += mark("riley", d.t, C.jev, "");
@@ -466,7 +466,7 @@ function select(id) {
     if (c.decision) { const d = c.decision, al = c.outcome && c.outcome.alone; status("jev", `${ACTION[d.action] || d.action} · ${d.jev_ms} ms`); caption(`<span class="jev">Jev + SenseLab:</span> ${esc(ACTION[d.action] || d.action)} <span style="color:var(--muted);font-size:15px">${Math.round(d.confidence * 100)}%</span>${c.outcome ? ` · <span class="${c.outcome.success ? "ok" : "bad"}">${c.outcome.success ? "worked" : "did not work"}</span>` : ""}`, (c.outcome ? esc(c.outcome.note) + " " : "") + (d.alone && d.alone !== d.action ? `Jev alone would have chosen ${esc(ACTION[d.alone] || d.alone)}${al ? (al.success ? ", which would also have worked." : `: a miss${al.cost_usd ? ` costing $${Number(al.cost_usd).toLocaleString()}` : ""}.`) : "."}` : d.alone ? "Jev alone would have done the same." : "")); }
     else caption(`A call at ${hhmm(c.start)}.`, "No decision point was reached.");
     if (c.outcome) status("world", c.outcome.success ? "it worked" : "it did not work");
-    status("sl", c.readyAt ? `${c.runs} runs opened in ${(c.readyAt - c.openAt).toFixed(1)} s` : "");
+    status("sl", c.readyAt ? `${c.runs} runs opened ahead` : "");
     if (c.recall) $("cust").textContent = c.recall.brief || "";
   }
   refreshDecision(id); drawTimeline(); state();
@@ -498,11 +498,47 @@ $("call").onclick = async () => {
     // Tell the server the call is on, so the runs open ahead now. (GPT-Live sends the server no
     // status update at the start, nor speech or transcript updates; the page relays those.)
     // The SDK's call-start event does not fire on GPT-Live either, so the call is live from here.
-    if (call?.id) { liveCallId = call.id; resetLiveText(); $("hangup").disabled = false; post(`/api/calls/${call.id}/start`, { profile_id: prof.profile_id }); }
+    if (call?.id) { liveCallId = call.id; resetLiveText(); $("hangup").disabled = false; post(`/api/calls/${call.id}/start`, { profile_id: prof.profile_id }); if (cfg.stack === "live") listenToMic(call.id); }
   }
   catch (e) { caption("Could not start the call", esc(e?.message || e)); $("call").disabled = false; }
 };
 $("hangup").onclick = () => vapi && vapi.stop();
+
+/* -- the caller's own voice, from the microphone --------------------------------------- */
+// On GPT-Live nothing tells the page when the caller is speaking: Vapi sends no speech
+// updates and no caller transcripts to the browser or the server, and refuses the call's
+// audio stream. The page has the microphone, so it listens itself: loudness every 100 ms,
+// a turn after 200 ms of sound, over after 700 ms of quiet, a floor that follows the room.
+// The same shape the server derives for the agent, relayed the same way.
+let mic = null;
+async function listenToMic(callId) {
+  stopMic();
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { console.warn("no microphone for the page", e); return; }
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream); const an = ctx.createAnalyser(); an.fftSize = 1024; src.connect(an);
+  const buf = new Float32Array(an.fftSize);
+  const m = { callId, stream, ctx, floor: 0.004, on: false, loud: 0, quiet: 0, timer: null };
+  mic = m;
+  m.timer = setInterval(() => {
+    if (liveCallId !== callId) { stopMic(); return; }
+    an.getFloatTimeDomainData(buf);
+    let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    if (rms < m.floor) m.floor = Math.max(0.004, 0.8 * m.floor + 0.2 * rms);
+    else if (!m.on && rms < 3 * m.floor) m.floor = Math.min(0.98 * m.floor + 0.02 * rms, 0.03);
+    const thresh = Math.max(0.01, 3 * m.floor);
+    if (rms >= thresh) { m.loud++; m.quiet = 0; } else { m.quiet++; m.loud = 0; }
+    if (!m.on && m.loud >= 2) { m.on = true; glow("you"); post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "user", status: "started", t: now() - 0.2 }).catch(() => {}); }
+    else if (m.on && m.quiet >= 7) { m.on = false; unglow("you"); post(`/api/calls/${callId}/notes`, { type: "speech-update", role: "user", status: "stopped", t: now() - 0.7 }).catch(() => {}); }
+  }, 100);
+}
+function stopMic() {
+  const m = mic; if (!m) return; mic = null;
+  clearInterval(m.timer);
+  if (m.on) { unglow("you"); post(`/api/calls/${m.callId}/notes`, { type: "speech-update", role: "user", status: "stopped", t: now() }).catch(() => {}); }
+  m.stream.getTracks().forEach((t) => t.stop()); m.ctx.close().catch(() => {});
+}
 
 /* -- GPT-Live's transcript stream ------------------------------------------------------- */
 // What Vapi's browser SDK sends on GPT-Live: the agent's words as one growing string, a few
@@ -568,7 +604,7 @@ async function init() {
       const mod = await import("https://esm.sh/@vapi-ai/web");
       vapi = new mod.default(cfg.public_key);
       vapi.on("call-start", () => { $("hangup").disabled = false; $("call").disabled = true; resetLiveText(); });
-      vapi.on("call-end", () => { flushLive("assistant"); flushLive("user"); $("hangup").disabled = true; $("call").disabled = false; liveCallId = null; });
+      vapi.on("call-end", () => { flushLive("assistant"); flushLive("user"); stopMic(); $("hangup").disabled = true; $("call").disabled = false; liveCallId = null; });
       vapi.on("message", (m) => {
         // On GPT-Live the server gets no speech or transcript messages from Vapi during the
         // call; the browser does, so the page relays them (see onLiveTranscript).

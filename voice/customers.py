@@ -90,6 +90,30 @@ def contact_entry(call_id: str, *, intent: str, summary: str, action: str, outco
     return f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}", {"date": date, "text": text, "action": action, "worked": worked}
 
 
+_ENDINGS = {"customer-ended-call": "the caller hung up", "assistant-ended-call": "{agent} ended the call",
+            "silence-timed-out": "the line went quiet", "customer-did-not-answer": "the caller did not answer"}
+
+
+def call_entry(call_id: str, *, caller_lines: list[str], agent_name: str = "The agent", ended_reason: str | None = None,
+               seconds: int = 0, today: dt.date | None = None) -> tuple[str, dict[str, Any]]:
+    """The entry for a call that reached no decision: the caller rang, asked or said
+    something, and nothing needed deciding (or they hung up before saying why they called).
+    Every call goes on the record, so the next one can pick up the thread ("earlier today
+    you asked what your last call was about") and a caller is never told we have no trace
+    of a call they remember making. Carries the caller's own first words, since there is
+    no decision to summarise them by."""
+    date = _date(0, today)
+    said = [s for s in (" ".join(str(x).split()) for x in caller_lines) if s]
+    how = _ENDINGS.get(ended_reason or "", "the call ended").format(agent=agent_name)
+    after = f" after {seconds} s" if seconds else ""
+    if not said:
+        text = f"Called and said nothing we could act on; {how}{after}."
+    else:
+        quote = "; ".join(f"\"{s[:120].rstrip('.')}\"" for s in said[:2])
+        text = f"Called, no request to act on. Caller said: {quote}. {agent_name} answered from the file; {how}{after}."
+    return f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}", {"date": date, "text": text, "action": None, "worked": None}
+
+
 @dataclass
 class CustomerMemory:
     """What came back for one caller."""
@@ -230,4 +254,4 @@ def opening(caller: Any, memory: CustomerMemory | None, *, agent_name: str, comp
     return f"{lead} I've got your file open here. What can I do for you today?"
 
 
-__all__ = ["CustomerMemory", "Persona", "brief", "contact_entry", "customer_entity", "opening", "seed_entries"]
+__all__ = ["CustomerMemory", "Persona", "brief", "call_entry", "contact_entry", "customer_entity", "opening", "seed_entries"]

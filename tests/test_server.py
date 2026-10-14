@@ -161,25 +161,31 @@ def test_the_server_follows_the_calls_audio_when_vapi_says_where(monkeypatch):
         # The end-of-call report stops it.
         c.post("/vapi/webhook", json={"message": {"type": "end-of-call-report", "call": call, "endedReason": "customer-ended-call"}})
         assert "p1" not in server.listeners
-        # A browser call: the page knows only the id, so the record is fetched (once) for
-        # where the audio streams. A record without one is logged and let be.
-        records = {"w1": {"id": "w1", "monitor": {"listenUrl": "wss://listen/w1"}}, "w2": {"id": "w2"}}
+        # A browser call: the page knows only the id, so the record is fetched for where the
+        # audio streams. The URL appears once the call is in progress, so the lookup is
+        # retried a few times; a record that never gains one is logged and let be.
+        records = {"w1": [{"id": "w1", "monitor": {"listenUrl": "wss://listen/w1"}}],
+                   "w2": [{"id": "w2"}, {"id": "w2", "monitor": {"listenUrl": "wss://listen/w2"}}],
+                   "w3": [{"id": "w3"}]}
         fetched: list[str] = []
 
         def fake_fetch(_key: str, cid: str) -> dict[str, Any]:
             fetched.append(cid)
-            return records[cid]
+            return records[cid].pop(0) if len(records[cid]) > 1 else records[cid][0]
 
+        monkeypatch.setattr(server, "LOOKUP_AFTER_S", (0.01, 0.01, 0.01))
         monkeypatch.setattr(server.cfg, "private_key", "k")
         monkeypatch.setattr(server.va, "fetch_call", fake_fetch)
         c.post("/api/calls/w1/start", json={"profile_id": "nope"})
         c.post("/api/calls/w1/start", json={"profile_id": "nope"})
         c.post("/api/calls/w2/start", json={"profile_id": "nope"})
-        for _ in range(50):  # the lookups run off the request's path
-            if ("w1", "wss://listen/w1") in started and len(fetched) == 2:
+        c.post("/api/calls/w3/start", json={"profile_id": "nope"})
+        for _ in range(100):  # the lookups run off the request's path
+            if fetched.count("w3") == 3 and ("w2", "wss://listen/w2") in started:
                 break
             time.sleep(0.02)
-        assert fetched == ["w1", "w2"] and ("w1", "wss://listen/w1") in started and "w2" not in server.listeners
+        assert fetched.count("w1") == 1 and fetched.count("w2") == 2 and fetched.count("w3") == 3
+        assert ("w1", "wss://listen/w1") in started and ("w2", "wss://listen/w2") in started and "w3" not in server.listeners
 
 
 class _Turns:
