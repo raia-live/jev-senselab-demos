@@ -352,6 +352,9 @@ async def vapi_webhook(request: Request) -> JSONResponse:
                 if who is not None and caller_number(call):
                     ag.phonebook.remember(caller_number(call), asdict(who))
                 results.append({"toolCallId": tc.get("id"), "name": name, "result": text})
+            elif name == "update_file":
+                text = await run_in_threadpool(ag.update_file, call_id, dict(args or {}))
+                results.append({"toolCallId": tc.get("id"), "name": name, "result": text})
             else:
                 results.append({"toolCallId": tc.get("id"), "name": name, "error": f"unknown tool {name}"})
         wait = cfg.tool_floor_ms / 1000 - (time.monotonic() - t0)

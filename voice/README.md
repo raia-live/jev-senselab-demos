@@ -98,7 +98,11 @@ them is written by the agent from what happened on a call. The history is kept i
 `<entity>/customers/<id>`, one entry per contact. Every call goes on it: a decided call is
 noted after the seal, with what was done and what came of it; a call that reached no decision
 (the caller asked something and hung up) is noted at hang-up, in their words. So John can
-answer "what was my last call about?" even when the last call was that question.
+answer "what was my last call about?" even when the last call was that question. Details the
+caller gives go on the file the moment they confirm them (`update_file`: a number to reach
+them on, an email, the name they go by, a correction to what the notes say), and the next
+call's brief carries them as current, so John reads the number back instead of asking for it
+again. A new phone number also goes in the phone book, so a call from it is them.
 
 For a clean take, start on an empty memory: `VOICE_ENTITY_PATH=jev-demos/call_handling/take2`
 (the caller histories live under the entity, so they are re-seeded there too), then run the
@@ -254,7 +258,9 @@ Three stacks, chosen with `VOICE_STACK`:
   `willow`, `stone`, `gleam`, `meridian`, `bossa`, `tempo`, `beacon`, `delta`, `cinder`,
   `ash`, `ballad`, `coral`, `sage`, `verse`); set `VAPI_VOICE_ID`.
 - `realtime`: the earlier speech-to-speech model (`gpt-realtime-2`), one prompt, turn by
-  turn. Voices: `marin`, `cedar`, `alloy`, `echo`, `shimmer`.
+  turn. Voices: `marin`, `cedar`, `alloy`, `echo`, `shimmer`. It gets the decision tool
+  only: with two tools to call in one turn it drops one of the answers, so on this stack a
+  caller cannot be matched by name mid-call or have a detail put on file.
 - `pipeline`: Deepgram transcribes, GPT-4.1 writes, ElevenLabs (`eleven_turbo_v2_5`)
   speaks. More control over each stage and any ElevenLabs voice (`VAPI_VOICE_ID`, with
   `VAPI_VOICE_PROVIDER=11labs`), at the cost of a text hop in the middle. Needs ElevenLabs

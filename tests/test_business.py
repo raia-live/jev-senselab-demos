@@ -193,7 +193,7 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     for a in Business.load().actions:
         for text in (a.then, a.then_no_file):
             assert "$" not in text and '"' not in text and "'your file" not in text, a.id
-    assert [t.get("function", {}).get("name", t["type"]) for t in live["model"]["tools"]] == ["identify_caller", "decide_next_step", "endCall"]
+    assert [t.get("function", {}).get("name", t["type"]) for t in live["model"]["tools"]] == ["identify_caller", "update_file", "decide_next_step", "endCall"]
     assert all("messages" not in t for t in live["model"]["tools"])  # not spoken on GPT-Live
     assert not any(k in live for k in ("transcriber", "startSpeakingPlan", "stopSpeakingPlan", "backchannelingEnabled", "messagePlan"))
     assert live["hooks"][0]["on"] == "customer.speech.timeout"
@@ -214,7 +214,7 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     pl = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, stack="pipeline", voice_id="sarah")
     assert pl["model"]["model"] == "gpt-4.1" and pl["voice"]["voiceId"] == "sarah" and pl["transcriber"]["provider"] == "deepgram"
     assert "request-response-delayed" in [m["type"] for t in pl["model"]["tools"] for m in t.get("messages", [])]
-    assert [t.get("function", {}).get("name", t["type"]) for t in pl["model"]["tools"]] == ["identify_caller", "recall_customer", "decide_next_step", "endCall"]
+    assert [t.get("function", {}).get("name", t["type"]) for t in pl["model"]["tools"]] == ["identify_caller", "update_file", "recall_customer", "decide_next_step", "endCall"]
     with pytest.raises(ValueError):
         assistant_config(b, server_url="https://x", secret=None, stack="telepathy")
 

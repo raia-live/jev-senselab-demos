@@ -389,6 +389,44 @@ class LiveAgent:
         return (f"Matched: {caller.name}. This is their file; from here on it is what you know about this caller.\n"
                 f"{brief}"), caller
 
+    def update_file(self, call_id: str, params: dict[str, Any]) -> str:
+        """Answer ``update_file``: a detail the caller gave for their file, confirmed on the
+        call. Written to their record in SenseLab now, so it is in the brief from the first
+        word of the next call and there for whoever acts on this one. A phone number also
+        goes in the phone book, so a call from it is them. The words back are for the
+        assistant."""
+        with self._lock:
+            call = self.calls.get(call_id)
+        if call is None:
+            return "No call to put this on."
+        kind = str(params.get("kind") or "other").strip().lower()
+        value = " ".join(str(params.get("value") or "").split())
+        note = " ".join(str(params.get("note") or "").split())
+        if not value and not note:
+            return "Nothing to put on file: say what the detail is."
+        customer_id = str((call.get("caller") or {}).get("customer_id") or "")
+        if not customer_id:
+            return ("No account matched this caller, so there is no file to put it on. Keep it for this call and "
+                    "use it; it cannot be kept for next time.")
+        key, entry = cust.detail_entry(call_id, kind=kind, value=value, note=note)
+        try:
+            self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), key, entry,
+                                                    confidence=1.0, memory_type="fact")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("file update for %s: %s", customer_id, exc)
+            return "The file could not be updated just now. Use the detail on this call and say it will be noted."
+        if entry["kind"] == "phone" and getattr(self, "phonebook", None) is not None:
+            self.phonebook.remember(value, dict(call["caller"]))
+        what = cust.DETAIL_KINDS.get(entry["kind"], "note")
+        with self._lock:
+            call.setdefault("file_updates", []).append({"kind": entry["kind"], "value": value, "note": note, "t": time.time()})
+            if call.get("customer_brief"):
+                call["customer_brief"] += f"\nOn file now ({what}, given on this call): {value or note}."
+        self._event("file_updated", {"call_id": call_id, "customer_id": customer_id, "kind": entry["kind"], "key": key,
+                                     "value": value[:80], "note": note[:120]})
+        return (f"On file: {what} {value or note}. It is on their record now and will be there next time; "
+                "tell them so in a few words, once.")
+
     def _open_all(self, call_id: str, caller: Caller) -> None:
         """Open a run for each situation this caller could turn out to be in. The intent is
         what the account does not know; everything else that names the situation it does."""

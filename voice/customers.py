@@ -114,6 +114,23 @@ def call_entry(call_id: str, *, caller_lines: list[str], agent_name: str = "The 
     return f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}", {"date": date, "text": text, "action": None, "worked": None}
 
 
+DETAIL_KINDS = {"phone": "phone number", "email": "email", "name": "preferred name", "correction": "correction to the file",
+                "other": "note"}
+
+
+def detail_entry(call_id: str, *, kind: str, value: str, note: str = "", today: dt.date | None = None) -> tuple[str, dict[str, Any]]:
+    """A detail the caller gave for their file, written the moment it is confirmed on the
+    call (``update_file``): a number to reach them on, an email, what to call them, or a
+    correction to what the file says ("the callback never came"). One key per kind for the
+    details that replace each other (the phone number on file is the latest one given;
+    SenseLab keeps the earlier versions); corrections and notes each get their own."""
+    kind = kind if kind in DETAIL_KINDS else "other"
+    date = _date(0, today)
+    value, note = " ".join(str(value).split())[:200], " ".join(str(note).split())[:300]
+    key = f"detail-{kind}" if kind in ("phone", "email", "name") else f"note-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}"
+    return key, {"kind": kind, "value": value, "note": note, "date": date, "call_id": call_id}
+
+
 @dataclass
 class CustomerMemory:
     """What came back for one caller."""
@@ -121,11 +138,15 @@ class CustomerMemory:
     customer_id: str
     contacts: list[dict[str, Any]] = field(default_factory=list)  # newest first
     notes: str = ""
+    details: dict[str, dict[str, Any]] = field(default_factory=dict)  # kind -> {value, note, date}
+    remarks: list[dict[str, Any]] = field(default_factory=list)  # corrections and notes, newest first
     ms: int = 0
 
     @classmethod
     def from_entries(cls, customer_id: str, entries: list[Any], *, ms: int = 0) -> CustomerMemory:
         contacts: list[dict[str, Any]] = []
+        details: dict[str, dict[str, Any]] = {}
+        remarks: list[dict[str, Any]] = []
         notes = ""
         for e in entries:
             key, value = str(getattr(e, "key", "")), getattr(e, "value", None)
@@ -136,8 +157,16 @@ class CustomerMemory:
             elif key.startswith("contact-"):
                 contacts.append({"date": str(value.get("date") or ""), "text": str(value.get("text") or ""),
                                  "seeded": bool(value.get("seeded")), "action": value.get("action"), "worked": value.get("worked")})
+            elif key.startswith("detail-") and value.get("value"):
+                kind = key[len("detail-"):]
+                if str(value.get("date") or "") >= str(details.get(kind, {}).get("date") or ""):
+                    details[kind] = {"value": str(value["value"]), "note": str(value.get("note") or ""), "date": str(value.get("date") or "")}
+            elif key.startswith("note-") and (value.get("value") or value.get("note")):
+                remarks.append({"kind": str(value.get("kind") or "other"), "value": str(value.get("value") or ""),
+                                "note": str(value.get("note") or ""), "date": str(value.get("date") or "")})
         contacts.sort(key=lambda c: c["date"], reverse=True)
-        return cls(customer_id=customer_id, contacts=contacts, notes=notes, ms=ms)
+        remarks.sort(key=lambda r: r["date"], reverse=True)
+        return cls(customer_id=customer_id, contacts=contacts, notes=notes, details=details, remarks=remarks, ms=ms)
 
     def public(self) -> dict[str, Any]:
         return asdict(self)
@@ -214,6 +243,13 @@ def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today
     who = caller.name or "unknown (no account matched this call)"
     lines = [f"Caller: {who}. {tier.capitalize()}, customer for {caller.tenure_months} months. "
              f"{max(caller.prior_contacts_30d, recent)} contact(s) with support in the last 30 days."]
+    if memory and memory.details:
+        given = [f"{DETAIL_KINDS.get(k, k)} {d['value']} (given {_nice_date(d['date'], today)})" for k, d in memory.details.items()]
+        lines.append(f"On file, from the caller: {'; '.join(given)}. These are current; use them, do not ask for them again.")
+    if memory and memory.remarks:
+        lines.append("Corrections and notes from earlier calls, most recent first:")
+        lines.extend(f"- {_nice_date(r['date'], today)}: {(r['value'] + ('. ' + r['note'] if r['note'] else '')).rstrip('.')}."
+                     for r in memory.remarks[:4])
     if contacts:
         lines.append("Earlier contacts, most recent first:")
         lines.extend(f"- {c}" for c in history_lines(contacts, today))
@@ -254,4 +290,5 @@ def opening(caller: Any, memory: CustomerMemory | None, *, agent_name: str, comp
     return f"{lead} I've got your file open here. What can I do for you today?"
 
 
-__all__ = ["CustomerMemory", "Persona", "brief", "call_entry", "contact_entry", "customer_entity", "opening", "seed_entries"]
+__all__ = ["DETAIL_KINDS", "CustomerMemory", "Persona", "brief", "call_entry", "contact_entry", "customer_entity", "detail_entry",
+           "opening", "seed_entries"]

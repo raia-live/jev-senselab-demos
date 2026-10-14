@@ -29,6 +29,9 @@ class _Store:
 def test_numbers_are_one_spelling_and_stored_under_a_hash():
     assert pb.normalise("+1 (555) 000-1234") == "+15550001234" == pb.normalise("15550001234")
     assert pb.normalise("") == "" and pb.key_for("+1 555 000 1234") == pb.key_for("+15550001234")
+    # Said out loud, or given without a country code: ten digits are North American.
+    assert pb.normalise("six five zero, five five five, zero one nine nine") == "+16505550199" == pb.normalise("650-555-0199")
+    assert pb.normalise("1 650 555 0199") == "+16505550199" and pb.normalise("+44 20 7946 0958") == "+442079460958"
     assert pb.key_for("+15550001234").startswith("number-") and "5550001234" not in pb.key_for("+15550001234")
 
 

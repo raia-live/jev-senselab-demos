@@ -80,6 +80,10 @@ class FakeAgent:
             self._book = PhoneBook(_Store(), "john", "jev-demos/voice")
         return self._book
 
+    def update_file(self, call_id: str, params: dict[str, Any]) -> str:
+        self.notes.append(("file", call_id, params.get("kind"), params.get("value")))
+        return "On file: phone number 650 555 0199."
+
     def identify(self, call_id: str, params: dict[str, Any]) -> tuple[str, Caller | None]:
         if params.get("name") == "Bruno":
             who = Caller(name="Bruno", tier="consumer", prior_contacts_30d=3, tenure_months=39, customer_id="bruno-andrade")
@@ -249,6 +253,10 @@ def test_a_phone_number_is_remembered_once_we_know_who_it_is(monkeypatch):
     server.profiles.clear()
     c.post("/vapi/webhook", json=ring("p5", "+15550002222"))
     assert fake.calls["p5"]["caller"].name == ""
+    # A detail for the file goes to the agent, and its words go back to the reasoner.
+    r = c.post("/vapi/webhook", json={"message": {"type": "tool-calls", "call": {"id": "p2", "customer": {"number": "+15550001111"}},
+                                                  "toolCallList": [{"id": "t3", "function": {"name": "update_file", "arguments": {"kind": "phone", "value": "650 555 0199"}}}]}}).json()
+    assert ("file", "p2", "phone", "650 555 0199") in fake.notes and r["results"][0]["result"].startswith("On file: phone number")
     # A name nobody has leaves the call and the book alone.
     c.post("/vapi/webhook", json={"message": {"type": "tool-calls", "call": {"id": "p5", "customer": {"number": "+15550002222"}},
                                               "toolCallList": [{"id": "t2", "function": {"name": "identify_caller", "arguments": {"name": "Sam Ortiz"}}}]}})

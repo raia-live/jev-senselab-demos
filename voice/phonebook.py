@@ -45,9 +45,21 @@ def lookup(number: str) -> dict[str, Any] | None:  # noqa: ARG001 - yours to fil
 
 
 def normalise(number: str) -> str:
-    """One spelling per number: digits with a leading plus."""
-    digits = re.sub(r"\D", "", str(number or ""))
+    """One spelling per number: digits with a leading plus, as Vapi reports them. A number
+    a caller gives out loud ("six five zero, eight six one...") comes as words or digits
+    without a country code; ten digits are taken as North American (+1), which is where
+    the demo's number is. Change that if yours is elsewhere."""
+    text = str(number or "").lower()
+    for word, digit in _DIGIT_WORDS.items():
+        text = re.sub(rf"\b{word}\b", digit, text)
+    digits = re.sub(r"\D", "", text)
+    if len(digits) == 10:
+        digits = "1" + digits
     return f"+{digits}" if digits else ""
+
+
+_DIGIT_WORDS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
+                "seven": "7", "eight": "8", "nine": "9"}
 
 
 def key_for(number: str) -> str:

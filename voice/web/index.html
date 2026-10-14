@@ -288,6 +288,10 @@ function apply(e, live) {
         }
       }
       break; }
+    case "file_updated": {
+      (c.fileUpdates = c.fileUpdates || []).push({ t: e.t, kind: e.kind, value: e.value });
+      if (live && isCur) { glow("sl"); pulse("e-riley-sl", { label: `on file: ${esc(e.kind)}`, color: C.riley }); status("sl", `${e.kind} on file`); caption(`<span class="sl">On ${esc(c.caller.name || "the caller")}'s file:</span> ${esc(e.kind)} ${esc(e.value)}.`, `The caller gave it, ${esc(AGENT)} read it back, and it went to SenseLab the moment they confirmed. It is in the brief from the first word of their next call.`); }
+      break; }
     case "identified": {
       if (e.matched) c.caller = e.caller;
       if (live && isCur) {

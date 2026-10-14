@@ -6,7 +6,15 @@ from types import SimpleNamespace
 
 from voice.agent import Caller
 from voice.business import Business
-from voice.customers import CustomerMemory, brief, call_entry, contact_entry, opening, seed_entries
+from voice.customers import (
+    CustomerMemory,
+    brief,
+    call_entry,
+    contact_entry,
+    detail_entry,
+    opening,
+    seed_entries,
+)
 
 TODAY = dt.date(2026, 10, 14)
 BUSINESS = Business.load()
@@ -224,6 +232,66 @@ def test_a_caller_who_says_their_name_is_matched_to_an_account():
     text, who = ag.identify("c1", {"name": "Sam Ortiz"})
     assert who is None and text.startswith("No account matches the name 'Sam Ortiz'")
     assert ag.identify("nope", {"name": "Bruno"}) == ("No call to identify.", None)
+
+
+def test_a_detail_the_caller_gives_is_on_file_next_time():
+    # The caller gives a number to reach them on; it is written the moment they confirm it,
+    # and the next call's brief carries it as current, so John does not ask again.
+    key, entry = detail_entry("fake-01a13972", kind="phone", value=" 650 555 0199 ", note="for the specialist's callback", today=TODAY)
+    assert key == "detail-phone" and entry == {"kind": "phone", "value": "650 555 0199", "note": "for the specialist's callback",
+                                               "date": "2026-10-14", "call_id": "fake-01a13972"}
+    k2, corr = detail_entry("fake-01a13972", kind="correction", value="The specialist callback never came.", today=TODAY)
+    assert k2 == "note-2026-10-14-a13972" and corr["kind"] == "correction"
+    assert detail_entry("x", kind="shoe size", value="44")[0].startswith("note-")  # an unknown kind is a note
+    older = {"kind": "phone", "value": "650 555 0000", "note": "", "date": "2026-10-01", "call_id": "old"}
+    mem = CustomerMemory.from_entries("bruno", [SimpleNamespace(key="detail-phone", value=older), SimpleNamespace(key=key, value=entry),
+                                                SimpleNamespace(key=k2, value=corr),
+                                                SimpleNamespace(key="contact-2026-10-01-aaaaaa", value={"date": "2026-10-01", "text": "Called about outage: x. John did y. What came of it: z."})])
+    assert mem.details == {"phone": {"value": "650 555 0199", "note": "for the specialist's callback", "date": "2026-10-14"}}  # the latest
+    assert [r["value"] for r in mem.remarks] == ["The specialist callback never came."]
+    text = brief(Caller.from_mapping({"name": "Bruno", "customer_id": "bruno", "tier": "Team"}), mem, today=TODAY)
+    assert "On file, from the caller: phone number 650 555 0199 (given today). These are current; use them, do not ask for them again." in text
+    assert "Corrections and notes from earlier calls, most recent first:\n- today: The specialist callback never came." in text
+    assert text.index("On file") < text.index("Earlier contacts")  # the details come before the history
+
+
+def test_the_agent_puts_a_detail_on_the_callers_record_and_the_number_in_the_book():
+    from voice.agent import LiveAgent
+    from voice.phonebook import PhoneBook
+
+    writes: list[tuple[str, str, dict]] = []
+
+    class _Mem:
+        def write(self, entity, key, value, **_kw):
+            writes.append((entity, key, value))
+
+        def list(self, entity):
+            return []
+
+    class _Client:
+        def memory(self, _agent_id):
+            return _Mem()
+
+    ag = LiveAgent.__new__(LiveAgent)
+    ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
+    ag.calls, ag.events, ag._lock = {}, [], threading.Lock()
+    ag.phonebook = PhoneBook(_Client(), "john", "jev-demos/voice")
+    ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
+    ag.calls["c1"] = {"id": "c1", "caller": {"name": "Bruno", "tier": "consumer", "prior_contacts_30d": 3, "tenure_months": 39,
+                                             "customer_id": "bruno-andrade"}, "customer_brief": "Caller: Bruno."}
+    text = ag.update_file("c1", {"kind": "phone", "value": "six five zero, five five five, zero one nine nine", "note": "callback"})
+    assert text.startswith("On file: phone number six five zero, five five five, zero one nine nine.")
+    customer_writes = [w for w in writes if w[0].endswith("/customers/bruno-andrade")]
+    assert customer_writes[0][1] == "detail-phone" and customer_writes[0][2]["value"].startswith("six five zero")
+    assert ag.phonebook.who("+16505550199") == ({"name": "Bruno", "tier": "consumer", "prior_contacts_30d": 3, "tenure_months": 39,
+                                                  "customer_id": "bruno-andrade"}, "number")  # a call from it is Bruno
+    assert ag.calls["c1"]["customer_brief"].endswith("On file now (phone number, given on this call): six five zero, five five five, zero one nine nine.")
+    assert ag.events[-1][0] == "file_updated" and ag.events[-1][1]["kind"] == "phone"
+    assert ag.update_file("c1", {"kind": "phone", "value": ""}) == "Nothing to put on file: say what the detail is."
+    ag.calls["c2"] = {"id": "c2", "caller": {"name": "", "customer_id": ""}}
+    assert ag.update_file("c2", {"kind": "email", "value": "sam@example.com"}).startswith("No account matched this caller")
+    assert len([w for w in writes if w[0].endswith("/customers/")]) == 0
+    assert ag.update_file("nope", {"kind": "email", "value": "x"}) == "No call to put this on."
 
 
 def test_caller_customer_id_is_a_slug():

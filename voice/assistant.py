@@ -66,7 +66,7 @@ saying, and respond to what they just said; do not finish your earlier thought.
 - If you did not catch something, say so and ask again. Do not guess.{style}"""
 
 
-def _caller_lines(*, tool_words: str, identify_words: str = "") -> str:
+def _caller_lines(*, tool_words: str, identify_words: str = "", file_words: str = "") -> str:
     """The caller's file, as the prompt carries it (``{{name}}``, ``{{history}}`` and the
     rest are filled per call by the server). *tool_words* is how this stack names asking
     for a decision, for the line that says a question about the past is not that.
@@ -75,6 +75,10 @@ def _caller_lines(*, tool_words: str, identify_words: str = "") -> str:
     identify = (f" If they say who they are, or you ask and they tell you, {identify_words}: if their file comes back, "
                 "it is what you know about them from then on; use their name and carry on as with any known caller. "
                 if identify_words else "")
+    on_file = (f" When they give you a detail for their file (a number to reach them on, an email, what to call them) or "
+               f"correct something the file says, read it back once, and once they confirm it, {file_words}, in its own turn: "
+               "that is what puts it on their record for next time. Until then it is only in this conversation."
+               if file_words else "")
     return f"""- From the account: {{{{account}}}}.
 - Their history with us, as of the moment this call connected. This is the PAST. It tells you who they are and what \
 has already been tried; it does not tell you why they are calling today.
@@ -94,7 +98,8 @@ weeks ago", "last Thursday"), who did what and what came of it. Then ONE questio
 today. A question about the past is answered from the history. It is NOT a reason to {tool_words}.
 - If something we did let them down, say so and apologise once, like a person, not a policy.
 - If a detail is not in your file (an email, a phone number, a date, a name), say so plainly and ask for it. Never invent \
-one, and never say you will check: there is nothing to check beyond the file in front of you.
+one, and never say you will check: there is nothing to check beyond the file in front of you. If the file says "On file, \
+from the caller", those details are current: when they ask what number or email we have, read it back from there.{on_file}
 - If the history is empty, say so lightly and ask what is going on."""
 
 
@@ -125,7 +130,7 @@ Backchannel policy: light. Acknowledge briefly without competing with the caller
 Interruption policy: stop speaking when the caller interrupts. Listen, and answer what they said.
 
 # What you know about this caller
-{_caller_lines(tool_words="ask the backend anything", identify_words="ask the backend to look the name up")}
+{_caller_lines(tool_words="ask the backend anything", identify_words="ask the backend to look the name up", file_words="ask the backend to put it on their file, with the detail as they gave it")}
 
 # How a call goes
 1. Open. The greeting has been said, and if we know this person it used their name and said their file is open. Listen. \
@@ -161,6 +166,9 @@ this caller, and its answer is final for this call.
 Delegate to the backend when:
 - No account matched this call and the caller has said their name: ask the backend to look the name up, and say \
 nothing else in that turn. Their file comes back, or nothing does.
+- The caller has given a detail for their file (a number to reach them on, an email, the name they go by, a \
+correction to the notes) and confirmed your read-back: ask the backend to put it on their file, passing the detail \
+exactly as they gave it. Saying "I've got it" does not put it on file; the backend does.
 - The caller has said, on this call, what they need today ({_intent_lines(b)}), and you have the one detail that needs, \
 or the file has it, or they do not have it. Ask what happens next, and pass along what the caller said, in their words. \
 A charge the file already explains, a cancellation they have given a reason for, an outage you can see in the notes: \
@@ -256,10 +264,13 @@ now"): the assistant repeats what you write, so a result shaped like a promise g
 on. No Markdown, no lists. If the tool fails, say what failed and that the assistant should get a colleague to help \
 the caller.
 
-Your tools are identify_caller, decide_next_step and endCall. identify_caller is for one case: no account matched \
-this call (the assistant's file says so) and the caller has said their name. Call it with the name as they said it, \
-and return its result to the assistant word for word: it is their file now, or it says nothing matched. Beyond that \
-you have no lookup. Never say you will check, look up or confirm anything: facts about the caller's account are in \
+Your tools are identify_caller, update_file, decide_next_step and endCall. identify_caller is for one case: no \
+account matched this call (the assistant's file says so) and the caller has said their name. Call it with the name as \
+they said it, and return its result to the assistant word for word: it is their file now, or it says nothing matched. \
+update_file is for a detail the caller gave for their file and confirmed (a phone number, an email, the name they go \
+by, a correction to what the file says): call it with the kind and the detail exactly as given (a number as digits), \
+then tell the assistant it is on file. If the assistant asks you to put something on file, that is this tool, every \
+time; never answer that you have noted it without calling it. Beyond that you have no lookup. Never say you will check, look up or confirm anything: facts about the caller's account are in \
 the assistant's own file, not yours. When the next step is to \
 resolve on the call, say so and tell the assistant to answer from its file: first the entry in the file that matches, \
 then what it means; and, as a second short instruction, that no matching entry means saying it does not see it in its \
@@ -300,7 +311,7 @@ You are {b.agent_name}, on the phones at {where}. You are talking to a customer 
 {_voice_lines(b)}
 
 # What you know about this caller
-{_caller_lines(tool_words="call any tool", identify_words="call identify_caller with the name" if recall else "")}
+{_caller_lines(tool_words="call any tool", identify_words="call identify_caller with the name" if recall else "", file_words="call update_file with it" if recall else "")}
 
 # How a call goes
 1. Open. The greeting has been said, and if we know this person it used their name and said their file is open. Listen.
@@ -391,6 +402,36 @@ def identify_tool() -> dict[str, Any]:
     }
 
 
+def update_file_tool() -> dict[str, Any]:
+    """A detail the caller gives for their file, written to their record the moment it is
+    confirmed: a number to reach them on, an email, what to call them, a correction to
+    what the file says. It is in the brief from the first word of their next call."""
+    return {
+        "type": "function",
+        "async": False,
+        "function": {
+            "name": "update_file",
+            "description": ("Put a detail the caller gave on their file, once it has been read back and confirmed: a phone "
+                            "number to reach them on, an email, the name they go by, or a correction to what the file says "
+                            "(\"the callback never came\"). It is kept on their record for next time and for whoever acts on "
+                            "this call. Not for what they are calling about today; that is decide_next_step."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["phone", "email", "name", "correction", "other"]},
+                    "value": {"type": "string", "description": "The detail itself: the number as digits, the email, the name, "
+                                                               "or the correction in a sentence."},
+                    "note": {"type": "string", "description": "Context, if any: what it is for (\"for the specialist's callback\")."},
+                },
+                "required": ["kind", "value"],
+            },
+        },
+        "messages": [
+            {"type": "request-failed", "content": "I've got that written down here; I'll make sure it goes on your file."},
+        ],
+    }
+
+
 def decide_tool(b: Business) -> dict[str, Any]:
     labels = ", ".join(a.label.lower() for a in b.actions)
     return {
@@ -452,8 +493,8 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
     # stack two tool calls in one turn (which the model does when it has two tools to call)
     # lose one of the answers (see voice/server.py, tool_floor_ms). The pipeline keeps both.
     tools = ([decide_tool(b)] if stack in ("live", "realtime") else [recall_tool(b), decide_tool(b)]) + [{"type": "endCall"}]
-    if stack != "realtime":  # a third tool on the realtime stack would be the second call it drops
-        tools.insert(0, identify_tool())
+    if stack != "realtime":  # more tools on the realtime stack would be the second call it drops
+        tools = [identify_tool(), update_file_tool(), *tools]
     cfg: dict[str, Any] = {
         "name": ASSISTANT_NAME,
         # The first line is built by the server from the caller's file (name, how often and
