@@ -154,6 +154,18 @@ def _safe(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", name)[:80]
 
 
+OWN_RECORD_NOTE = (
+    " A line in the memory beginning 'This caller's own record' is this caller's own file, in their words: "
+    "which steps were already taken for them and how each came out. 'Did not hold, on their word' there is a "
+    "step we promised this caller that did not happen, and the policy on that applies to this call, whatever "
+    "the tally says that step has done for other callers: the tally is about others, the file is about them. "
+    "A step that held for them counts for taking it again. A step still open for them says nothing either way."
+)
+
+_NOTHING_ARRANGED = (" Nothing is arranged by this. If they still need something done about it, that is a request for "
+                     "today: decide_next_step says what happens, and no step is promised before it has answered.")
+
+
 def _truthy(v: Any) -> bool:
     """A tool argument that means yes: True, "true", "yes", "worked", 1."""
     if isinstance(v, bool):
@@ -447,7 +459,7 @@ class LiveAgent:
             earlier = [p for cid, ps in self._pending.items() if cid != call_id for p in ps
                        if str(p.decision.caller.get("customer_id") or "") == customer_id]
         if not earlier:
-            return ""
+            return self._amend_record(call_id, customer_id, worked=worked, words=words)
         p = max(earlier, key=lambda p: p.decision.at)
         severity = "success" if worked else "failure"
         outcome = Outcome(success=worked, severity=severity, note=f"Caller said on a later call: {words}"[:300],
@@ -458,7 +470,33 @@ class LiveAgent:
             return ""
         did = self.business.action_words().get(p.decision.action) or p.decision.action.replace("_", " ")
         return (f" That closes the earlier step ({did}) as {'worked' if worked else 'did not work'}, on their word; "
-                "the record for callers in their situation now says so.")
+                "the record for callers in their situation now says so." + _NOTHING_ARRANGED)
+
+    def _amend_record(self, call_id: str, customer_id: str, *, worked: bool, words: str) -> str:
+        """No open decision to seal (it was sealed already, or by an earlier run of the
+        server): the caller's word still goes on the line for the last step we took for
+        them, in place of what the file said came of it. The next call reads their word."""
+        memory = self._customer_memory(call_id, wait_s=2.0)
+        if memory is None:
+            return _NOTHING_ARRANGED
+        steps = [c for c in memory.contacts if c.get("action") and not c.get("seeded") and c.get("key")]
+        # The newest step still waiting on its outcome, else the newest whose line says otherwise.
+        last = next((c for c in steps if c.get("worked") is None), None) or next((c for c in steps if c.get("worked") is not worked), None)
+        if last is None:
+            return _NOTHING_ARRANGED
+        value = cust.amend_contact(last, worked=worked, words=words)
+        try:
+            self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), str(last["key"]), value,
+                                                    confidence=1.0, memory_type="experience")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("amending %s for %s: %s", last["key"], customer_id, exc)
+            return _NOTHING_ARRANGED
+        last.update(value)
+        did = self.business.action_words().get(str(last["action"])) or str(last["action"]).replace("_", " ")
+        self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"], "text": value["text"],
+                                       "amended": True})
+        return (f" The file's line on that step ({did}) now carries their word: it {'worked' if worked else 'did not hold'}."
+                + _NOTHING_ARRANGED)
 
     def _open_all(self, call_id: str, caller: Caller) -> None:
         """Open a run for each situation this caller could turn out to be in. The intent is
@@ -697,6 +735,25 @@ class LiveAgent:
         entries = self.client.memory(self.agent_id).list(cust.customer_entity(self.entity_path, caller.customer_id))
         return cust.CustomerMemory.from_entries(caller.customer_id, entries, ms=round((time.perf_counter() - t0) * 1000))
 
+    def _customer_memory(self, call_id: str, *, wait_s: float = 6.0) -> cust.CustomerMemory | None:
+        """The caller's record for this call, if it was fetched (a matched caller) and is back."""
+        with self._lock:
+            fut = self._customer.get(call_id)
+        if fut is None:
+            return None
+        try:
+            return fut.result(timeout=wait_s)
+        except Exception as exc:  # noqa: BLE001 - the decision goes ahead without it
+            log.warning("customer memory for %s: %s", call_id, exc)
+            return None
+
+    def record_words(self, call_id: str, situation: str) -> str:
+        """What the decision's answer says about why: the situation's record (callers like
+        this one) and, when there is one, this caller's own record with the steps."""
+        with self._lock:
+            own = str((self.calls.get(call_id) or {}).get("caller_record") or "")
+        return " ".join(x for x in (self.situation_record_words(situation), own) if x)
+
     def situation_record_words(self, situation: str) -> str:
         """The situation's record in words, for the conversational model."""
         rows = [(k[1].split(":", 1)[-1], v) for k, v in self.history.tally.items() if k[0] == situation]
@@ -720,14 +777,7 @@ class LiveAgent:
             call = self.calls[call_id]
         c = self.caller_from(call["caller"])
         t0 = time.perf_counter()
-        memory: cust.CustomerMemory | None = None
-        with self._lock:
-            fut = self._customer.get(call_id)
-        if fut is not None:
-            try:
-                memory = fut.result(timeout=6.0)
-            except Exception as exc:  # noqa: BLE001 - the brief is the account facts alone
-                log.warning("customer memory for %s: %s", c.customer_id, exc)
+        memory = self._customer_memory(call_id)
         intent = str(params.get("intent") or "")
         record = ""
         if intent in self.business.intent_ids:
@@ -819,13 +869,20 @@ class LiveAgent:
                 ep.trace.guidance_error = f"{type(exc).__name__}: {exc}"[:200]
         memory_ms = (time.perf_counter() - t0) * 1000
         memory_text = ep.trace.guidance_text
+        # This caller's own record with the steps we have taken for them (SenseLab's other
+        # half: the per-customer entries) goes in beside the situation's guidance, so a step
+        # that has already failed this caller is weighed as such.
+        own = cust.track_record(self._customer_memory(call_id, wait_s=2.0), self.business.action_words())
+        with self._lock:
+            call["caller_record"] = own
+        guided = f"{memory_text}\n{own}".strip() if own else memory_text
         # The same call decided twice: Jev alone on the written policy, and Jev with what
         # SenseLab learned from earlier calls. The second one is the one the caller gets.
         alone_fut = self._pool.submit(self.jev.decide, build_state(self.scenario, case, "", policy_in_state=True),
                                       instructions=self.scenario.jev_instructions + MEMORY_NOTE,
                                       criteria=self.scenario.jev_criteria)
-        state = build_state(self.scenario, case, memory_text, policy_in_state=True)
-        decision = self.jev.decide(state, instructions=self.scenario.jev_instructions + MEMORY_NOTE,
+        state = build_state(self.scenario, case, guided, policy_in_state=True)
+        decision = self.jev.decide(state, instructions=self.scenario.jev_instructions + MEMORY_NOTE + (OWN_RECORD_NOTE if own else ""),
                                    criteria=self.scenario.jev_criteria, basis=ep.basis_criteria())
         alone = None
         try:

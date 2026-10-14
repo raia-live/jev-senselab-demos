@@ -145,6 +145,10 @@ text = "Upgrades, plan changes and how-to questions: resolve in the bot."
 key = "policy-enterprise"
 text = "Enterprise accounts: transfer to the enterprise desk for anything other than a how-to question."
 
+[[policy]]
+key = "policy-broken-promise"
+text = "A step we promised this caller that did not happen (a callback that never came, a credit that was reversed, a fix that did not hold): transfer to an agent, whatever the amount or the plan. Do not book the same step for them again."
+
 [jev]
 instructions = "Choose what the support agent does next on this call."
 # What a failed decision looks like here, for the judge that grades each call afterwards.

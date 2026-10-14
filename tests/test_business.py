@@ -18,7 +18,10 @@ def test_demo_file_matches_the_scenario():
     assert DEMO.name == "Northwind Cloud" and DEMO.agent_name == "John"
     assert DEMO.simulated and DEMO.scenario.simulator is SCENARIO
     assert list(DEMO.action_ids) == SCENARIO.actions
-    assert list(DEMO.policy) == SCENARIO.policy
+    # The scenario's rules, plus the ones only a caller with a file can trigger (a step we
+    # promised that did not happen): the harness decides one call at a time and has no file.
+    assert list(DEMO.policy)[:len(SCENARIO.policy)] == SCENARIO.policy
+    assert [k for k, _ in DEMO.policy[len(SCENARIO.policy):]] == ["policy-broken-promise"]
     assert DEMO.scenario.jev_criteria == SCENARIO.jev_criteria
     assert DEMO.scenario.change_rule == SCENARIO.change_rule
 

@@ -344,7 +344,7 @@ async def vapi_webhook(request: Request) -> JSONResponse:
                     args = {"summary": args}
             if name == "decide_next_step":
                 d = ag.decide(call_id, dict(args or {}), caller=caller_from_call(call))
-                results.append(tool_reply(tc, d, ag.business, record=ag.situation_record_words(d.situation), stack=cfg.stack))
+                results.append(tool_reply(tc, d, ag.business, record=ag.record_words(call_id, d.situation), stack=cfg.stack))
             elif name == "recall_customer":
                 text = ag.recall(call_id, dict(args or {}), caller=caller_from_call(call))
                 results.append({"toolCallId": tc.get("id"), "name": name, "result": text})

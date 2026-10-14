@@ -14,6 +14,7 @@ from voice.customers import (
     detail_entry,
     opening,
     seed_entries,
+    track_record,
 )
 
 TODAY = dt.date(2026, 10, 14)
@@ -131,7 +132,7 @@ def test_a_caller_who_rings_five_times_does_not_push_the_account_out_of_the_brie
     caller = Caller(name="Tomas", tier="enterprise", prior_contacts_30d=1, tenure_months=30, customer_id="tomas-eriksen")
     text = brief(caller, mem, today=TODAY)
     assert "Named account manager: Jordan Blake" in text and "SSO logins failed" in text
-    assert "today: called 5 times about outage. Most recent: Called about outage: Whole team locked out." in text
+    assert "today: called 5 times about outage. Most recent (today): Called about outage: Whole team locked out." in text
     assert "Earlier the same day: Agent closed it in 10 minutes; CSAT 4/5. / Agent closed it in 11 minutes" in text
     assert text.count("Called about outage") == 1 and "Called about billing dispute: A $12 line" in text
 
@@ -246,7 +247,7 @@ def test_a_detail_the_caller_gives_is_on_file_next_time():
     # and the next call's brief carries it as current, so John does not ask again.
     key, entry = detail_entry("fake-01a13972", kind="phone", value=" 650 555 0199 ", note="for the specialist's callback", today=TODAY)
     assert key == "detail-phone" and entry == {"kind": "phone", "value": "650 555 0199", "note": "for the specialist's callback",
-                                               "date": "2026-10-14", "call_id": "fake-01a13972"}
+                                               "date": "2026-10-14", "at": "2026-10-14T00:00:00+00:00", "call_id": "fake-01a13972"}
     k2, corr = detail_entry("fake-01a13972", kind="correction", value="The specialist callback never came.", today=TODAY)
     assert k2 == "note-2026-10-14-a13972" and corr["kind"] == "correction"
     assert detail_entry("x", kind="shoe size", value="44")[0].startswith("note-")  # an unknown kind is a note
@@ -331,14 +332,91 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
     ag.calls["c1"] = {"id": "c1", "caller": bruno}
     text = ag.update_file("c1", {"kind": "outcome", "value": "nobody called me", "worked": False})
     assert sealed == [("c0:0", False, "Caller said on a later call: nobody called me", "caller")]  # the latest of theirs, not Priya's
-    assert text.endswith("That closes the earlier step (booked a specialist callback) as did not work, on their word; "
-                         "the record for callers in their situation now says so.")
+    assert ("That closes the earlier step (booked a specialist callback) as did not work, on their word; "
+            "the record for callers in their situation now says so.") in text
+    # Whatever it closed, the file update arranges nothing: the next step is the decision's.
+    assert text.endswith("decide_next_step says what happens, and no step is promised before it has answered.")
     assert writes[-1][1].startswith("note-") and writes[-1][2]["kind"] == "outcome"
-    # Nothing open for this caller (the demo world sealed it already): the note still goes on file.
-    ag._pending = {}
+    # Nothing open for this caller and no record fetched: the note still goes on file.
+    ag._pending, ag._customer = {}, {}
     text = ag.update_file("c1", {"kind": "outcome", "value": "they did call, thanks", "worked": "true"})
     assert text.startswith("On file: what came of the last step, in the caller's words they did call, thanks.") and "closes" not in text
     assert len(sealed) == 1 and writes[-1][2]["value"] == "they did call, thanks"
+    # Nothing open, but the file has the line the demo world wrote ("called back next
+    # morning; CSAT 5/5"): the caller's word replaces it, under the same key, and the step
+    # is marked as not holding. That is the 17:37 call: John told Bruno the specialist had
+    # called the next morning, from a verdict the simulator reached without him.
+    key, line = contact_entry("fake-01a13982", intent="billing_dispute", summary="s", action="schedule_callback",
+                              outcome_note="Specialist called back next morning; CSAT 5/5", worked=True, agent_name="John",
+                              action_words=BUSINESS.action_words(), today=TODAY)
+    mem = CustomerMemory.from_entries("bruno-andrade", [SimpleNamespace(key=key, value=line)])
+    fut = SimpleNamespace(result=lambda timeout=None: mem)
+    ag._customer = {"c1": fut}
+    text = ag.update_file("c1", {"kind": "outcome", "value": "nobody called back", "worked": False})
+    assert "The file's line on that step (booked a specialist callback) now carries their word: it did not hold." in text
+    amended = [w for w in writes if w[1] == key]
+    assert len(amended) == 1 and amended[0][2]["worked"] is False and amended[0][2]["at"] == line["at"]
+    assert amended[0][2]["text"] == ("Called about billing dispute: s. John booked a specialist callback. What came of it: Caller said "
+                                     "on a later call: nobody called back. It did not hold.")
+    assert "key" not in amended[0][2] and mem.contacts[0]["worked"] is False  # the in-hand record agrees
+    assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["amended"] is True
+    assert len(sealed) == 1
+    # Already saying what the caller says: nothing to rewrite.
+    n = len(writes)
+    ag.update_file("c1", {"kind": "outcome", "value": "still nothing", "worked": False})
+    assert len(writes) == n + 1 and writes[-1][1].startswith("note-")
+    # An open step (outcome not in yet) is the one their word goes on, over a sealed one above it.
+    k_open, v_open = contact_entry("fake-01a13990", intent="billing_dispute", summary="s2", action="schedule_callback",
+                                   outcome_note="", worked=None, agent_name="John", action_words=BUSINESS.action_words(), today=TODAY)
+    k_ok, v_ok = contact_entry("fake-01a13999", intent="billing_dispute", summary="s3", action="issue_credit",
+                               outcome_note="Credit stuck", worked=True, agent_name="John", action_words=BUSINESS.action_words(), today=TODAY)
+    mem = CustomerMemory.from_entries("bruno-andrade", [SimpleNamespace(key=k_ok, value=v_ok), SimpleNamespace(key=k_open, value=v_open)])
+    ag._customer = {"c1": SimpleNamespace(result=lambda timeout=None: mem)}
+    text = ag.update_file("c1", {"kind": "outcome", "value": "nobody called", "worked": False})
+    assert "(booked a specialist callback) now carries their word: it did not hold" in text
+    assert writes[-1][1] == k_open and writes[-1][2]["worked"] is False and writes[-2][1].startswith("note-")
+
+
+def test_calls_on_one_day_sort_by_the_minute_and_the_brief_says_how_long_ago():
+    # Two calls on one day: the one at 17:36 is the most recent, whatever order the store
+    # returns them in, and the brief says "3 minutes ago" rather than "today", so John can
+    # say "we spoke a few minutes ago" instead of counting contacts at a caller who just hung up.
+    t1 = dt.datetime(2026, 10, 14, 8, 23, tzinfo=dt.UTC)
+    t2 = dt.datetime(2026, 10, 14, 8, 36, tzinfo=dt.UTC)
+    now = dt.datetime(2026, 10, 14, 8, 39, tzinfo=dt.UTC)
+    k1, v1 = contact_entry("call-aaaaa1", intent="billing_dispute", summary="first", action="schedule_callback",
+                           outcome_note="Specialist called back next morning", worked=True, agent_name="John",
+                           action_words=BUSINESS.action_words(), today=TODAY, now=t1)
+    k2, v2 = contact_entry("call-bbbbb2", intent="billing_dispute", summary="second", action="schedule_callback",
+                           outcome_note="", worked=None, agent_name="John", action_words=BUSINESS.action_words(), today=TODAY, now=t2)
+    assert v1["at"] == "2026-10-14T08:23:00+00:00"
+    mem = CustomerMemory.from_entries("bruno-andrade", [SimpleNamespace(key=k1, value=v1), SimpleNamespace(key=k2, value=v2)])
+    assert [c["key"] for c in mem.contacts] == [k2, k1]
+    caller = Caller(name="Bruno", tier="consumer", prior_contacts_30d=3, tenure_months=39, customer_id="bruno-andrade")
+    text = brief(caller, mem, today=TODAY, now=now)
+    assert ("- today: called 2 times about billing dispute. Most recent (3 minutes ago): Called about billing dispute: second. "
+            "John booked a specialist callback. What came of it: not known yet; ask, and put their answer on file. "
+            "Earlier the same day: Specialist called back next morning.") in text
+    # The opening says we just spoke, instead of the count they heard three minutes ago.
+    line = opening(caller, mem, agent_name="John", company="Northwind Cloud", greeting="g", today=TODAY, now=now)
+    assert line == "Hi Bruno, it's John at Northwind Cloud. We spoke 3 minutes ago; I've still got your file open here. What's going on?"
+    assert opening(caller, mem, agent_name="John", company="N", greeting="g", today=TODAY, now=t2 + dt.timedelta(seconds=50)).startswith(
+        "Hi Bruno, it's John at N. We spoke just now;")
+    # Two hours on, back to the count.
+    later = opening(caller, mem, agent_name="John", company="N", greeting="g", today=TODAY, now=now + dt.timedelta(hours=2))
+    assert "most recently today" in later
+    # The caller's own record with the steps, for the decision and for the "why".
+    assert track_record(mem, BUSINESS.action_words(), today=TODAY, now=now) == (
+        "This caller's own record with these steps: booked a specialist callback 2 times (most recently 3 minutes ago); "
+        "it held 1 time, 1 still open.")
+    mem.contacts[0]["worked"] = False
+    assert track_record(mem, BUSINESS.action_words(), today=TODAY, now=now).endswith(
+        "it did not hold 1 time, on their word, held 1 time.")
+    assert track_record(None) == "" and track_record(CustomerMemory(customer_id="x")) == ""
+    # A seeded row (date only) sorts as the start of its day, after what was written that day.
+    seeded = SimpleNamespace(key="contact-2026-10-14-seed1", value={"date": "2026-10-14", "text": "Signed up.", "seeded": True})
+    mem2 = CustomerMemory.from_entries("b", [seeded, SimpleNamespace(key=k1, value=v1)])
+    assert [c["key"] for c in mem2.contacts] == [k1, "contact-2026-10-14-seed1"]
 
 
 def test_caller_customer_id_is_a_slug():

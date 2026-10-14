@@ -102,7 +102,19 @@ answer "what was my last call about?" even when the last call was that question.
 caller gives go on the file the moment they confirm them (`update_file`: a number to reach
 them on, an email, the name they go by, a correction to what the notes say), and the next
 call's brief carries them as current, so John reads the number back instead of asking for it
-again. A new phone number also goes in the phone book, so a call from it is them.
+again. A new phone number also goes in the phone book, so a call from it is them. Entries
+carry the time they were written, so two calls on one day sort in the order they happened and
+a caller back within the hour hears "we spoke 3 minutes ago" instead of the contact count
+they heard last time.
+
+The caller's own record also goes into the decision. Beside what SenseLab knows about callers
+like this one, Jev gets a line on this one: which steps were taken for them and how each
+came out, in their words ("booked a specialist callback 2 times; it did not hold 1 time, on
+their word"). The business file has a rule for that case (a step we promised that did not
+happen: transfer to an agent), and only a decision with the file can apply it; the same
+call without SenseLab books the callback again. The "why" John gives the caller carries both
+records, and the prompt has him say he can see the last one did not come, not that it works
+for most people.
 
 For a clean take, start on an empty memory: `VOICE_ENTITY_PATH=jev-demos/call_handling/take2`
 (the caller histories live under the entity, so they are re-seeded there too), then run the
@@ -147,8 +159,10 @@ It did not" control for it, and `POST /api/outcome` with `{"decision_id", "sever
 does the same from code. The caller can close it too: when they ring back and say what came
 of the last step ("nobody called me", "the credit showed up"), John puts that on their file
 (`update_file`, kind `outcome`) and the open decision is sealed on their word, so what
-SenseLab learns from that call is what happened. The lesson is written the moment the outcome
-lands, however long that takes. In simulated mode a single call can still be held back with
+SenseLab learns from that call is what happened. If nothing is open (the decision was sealed
+already, or by an earlier run of the server), the line on their file for that step is
+rewritten with their word instead: the caller's word wins over a verdict reached without
+them. The lesson is written the moment the outcome lands, however long that takes. In simulated mode a single call can still be held back with
 `POST /api/calls/{id}/end` and `{"auto_review": false}`.
 
 Testing as yourself, use reported mode. In simulated mode the demo world decides at hang-up

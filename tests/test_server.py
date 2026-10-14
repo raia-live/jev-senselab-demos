@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 import voice.agent as agent  # noqa: E402
 import voice.server as server  # noqa: E402
 from voice.agent import Caller, caller_line
+from voice.business import Business
 
 
 def test_the_decision_does_not_describe_a_stranger_with_a_known_accounts_defaults():
@@ -83,6 +85,16 @@ class FakeAgent:
     def update_file(self, call_id: str, params: dict[str, Any]) -> str:
         self.notes.append(("file", call_id, params.get("kind"), params.get("value")))
         return "On file: phone number 650 555 0199."
+
+    def decide(self, call_id: str, params: dict[str, Any], *, caller: Caller | None = None) -> Any:
+        self.notes.append(("decide", call_id, params.get("intent")))
+        return SimpleNamespace(action="schedule_callback", situation="billing_dispute/consumer/repeat/small",
+                               then="A billing specialist will call you within one business day.")
+
+    def record_words(self, call_id: str, situation: str) -> str:
+        return (f"For callers in this situation ({situation}), what has worked: a scheduled specialist callback (6 of 7). "
+                "This caller's own record with these steps: booked a specialist callback 2 times (most recently 3 minutes ago); "
+                "it did not hold 1 time, on their word, 1 still open.")
 
     def identify(self, call_id: str, params: dict[str, Any]) -> tuple[str, Caller | None]:
         if params.get("name") == "Bruno":
@@ -296,6 +308,26 @@ class _Turns:
 
     def _event(self, kind: str, data: dict[str, Any]) -> None:
         self.events.append({"kind": kind, **data})
+
+
+def test_the_decisions_answer_carries_the_callers_own_record(monkeypatch):
+    # The "why" the speaker gets is the situation's record and this caller's own: a step
+    # that already failed them is said as such, not as what works for most people.
+    fake = FakeAgent()
+    monkeypatch.setattr(server, "agent", fake)
+    monkeypatch.setattr(server.cfg, "webhook_secret", None)
+    monkeypatch.setattr(server.cfg, "listen", False)
+    monkeypatch.setattr(server.cfg, "tool_floor_ms", 0)
+    fake.note_turns = lambda *a, **k: 0  # type: ignore[attr-defined]
+    fake.business = Business.load()  # type: ignore[attr-defined]
+    fake.calls["w1"] = {"caller": Caller(name="Bruno", customer_id="bruno-andrade")}
+    c = TestClient(server.app)
+    r = c.post("/vapi/webhook", json={"message": {"type": "tool-calls", "call": {"id": "w1"}, "toolCallList": [
+        {"id": "t9", "function": {"name": "decide_next_step", "arguments": {"intent": "billing_dispute", "caller_said": "nobody called"}}}]}}).json()
+    out = r["results"][0]["result"]
+    assert out.startswith("Decided: schedule a callback (schedule_callback). What happens now: A billing specialist")
+    assert "Why: For callers in this situation" in out and "did not hold 1 time, on their word" in out
+    assert fake.notes[-1] == ("decide", "w1", "billing_dispute")
 
 
 def test_turns_from_the_artifact_fill_in_what_the_page_did_not_relay():

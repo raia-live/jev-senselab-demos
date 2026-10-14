@@ -68,6 +68,27 @@ def _date(days_ago: int, today: dt.date | None = None) -> str:
     return ((today or dt.date.today()) - dt.timedelta(days=days_ago)).isoformat()
 
 
+def _stamp(today: dt.date | None = None, now: dt.datetime | None = None) -> str:
+    """When an entry was written, to the second, so two calls on one day sort in the order
+    they happened and the brief can say "12 minutes ago". A fixed *today* without *now*
+    (tests) stamps midnight."""
+    if now is not None:
+        return now.astimezone(dt.UTC).isoformat(timespec="seconds")
+    if today is not None:
+        return f"{today.isoformat()}T00:00:00+00:00"
+    return dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+
+
+def _minutes_since(at: str, now: dt.datetime | None = None) -> float | None:
+    try:
+        then = dt.datetime.fromisoformat(at)
+    except ValueError:
+        return None
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=dt.UTC)
+    return ((now or dt.datetime.now(dt.UTC)) - then).total_seconds() / 60
+
+
 def seed_entries(persona: Persona, today: dt.date | None = None) -> list[tuple[str, dict[str, Any]]]:
     """The seeded history as (key, value) rows, oldest first."""
     rows: list[tuple[str, dict[str, Any]]] = []
@@ -80,7 +101,7 @@ def seed_entries(persona: Persona, today: dt.date | None = None) -> list[tuple[s
 
 def contact_entry(call_id: str, *, intent: str, summary: str, action: str, outcome_note: str, worked: bool | None,
                   agent_name: str = "The agent", action_words: dict[str, str] | None = None,
-                  today: dt.date | None = None) -> tuple[str, dict[str, Any]]:
+                  today: dt.date | None = None, now: dt.datetime | None = None) -> tuple[str, dict[str, Any]]:
     """The entry the agent writes after a call, from the sealed outcome. *action_words* says
     how each action reads in a history line ("booked a specialist callback"). *worked* None
     is a decision whose outcome is not in yet (reported mode): the line says so, under the
@@ -90,7 +111,22 @@ def contact_entry(call_id: str, *, intent: str, summary: str, action: str, outco
     came = outcome_note.rstrip(".") if worked is not None else "not known yet; ask, and put their answer on file"
     text = (f"Called about {intent.replace('_', ' ')}: {summary.rstrip('.')}. {agent_name} {did}. "
             f"What came of it: {came}." + (" It did not hold." if worked is False else ""))
-    return f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}", {"date": date, "text": text, "action": action, "worked": worked}
+    return (f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}",
+            {"date": date, "at": _stamp(today, now), "text": text, "action": action, "worked": worked})
+
+
+def amend_contact(contact: dict[str, Any], *, worked: bool, words: str) -> dict[str, Any]:
+    """The same contact line with the caller's word on what came of it in place of what the
+    file said. Written back under the contact's own key: the caller's word wins over a
+    verdict the system reached without them."""
+    came = f"Caller said on a later call: {words.rstrip('.')}."
+    text = _CAME_OF_IT.sub(lambda _m: f"What came of it: {came}", contact["text"]).rstrip()
+    if "What came of it:" not in text:
+        text = f"{text} What came of it: {came}"
+    if not worked and not text.endswith("It did not hold."):
+        text += " It did not hold."
+    out = {k: v for k, v in contact.items() if k not in ("key", "seeded")}
+    return {**out, "text": text, "worked": worked}
 
 
 _ENDINGS = {"customer-ended-call": "the caller hung up", "assistant-ended-call": "{agent} ended the call",
@@ -98,7 +134,7 @@ _ENDINGS = {"customer-ended-call": "the caller hung up", "assistant-ended-call":
 
 
 def call_entry(call_id: str, *, caller_lines: list[str], agent_name: str = "The agent", ended_reason: str | None = None,
-               seconds: int = 0, today: dt.date | None = None) -> tuple[str, dict[str, Any]]:
+               seconds: int = 0, today: dt.date | None = None, now: dt.datetime | None = None) -> tuple[str, dict[str, Any]]:
     """The entry for a call that reached no decision: the caller rang, asked or said
     something, and nothing needed deciding (or they hung up before saying why they called).
     Every call goes on the record, so the next one can pick up the thread ("earlier today
@@ -114,14 +150,16 @@ def call_entry(call_id: str, *, caller_lines: list[str], agent_name: str = "The 
     else:
         quote = "; ".join(f"\"{s[:120].rstrip('.')}\"" for s in said[:2])
         text = f"Called, no request to act on. Caller said: {quote}. {agent_name} answered from the file; {how}{after}."
-    return f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}", {"date": date, "text": text, "action": None, "worked": None}
+    return (f"contact-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}",
+            {"date": date, "at": _stamp(today, now), "text": text, "action": None, "worked": None})
 
 
 DETAIL_KINDS = {"phone": "phone number", "email": "email", "name": "preferred name", "correction": "correction to the file",
                 "outcome": "what came of the last step, in the caller's words", "other": "note"}
 
 
-def detail_entry(call_id: str, *, kind: str, value: str, note: str = "", today: dt.date | None = None) -> tuple[str, dict[str, Any]]:
+def detail_entry(call_id: str, *, kind: str, value: str, note: str = "", today: dt.date | None = None,
+                 now: dt.datetime | None = None) -> tuple[str, dict[str, Any]]:
     """A detail the caller gave for their file, written the moment it is confirmed on the
     call (``update_file``): a number to reach them on, an email, what to call them, or a
     correction to what the file says ("the callback never came"). One key per kind for the
@@ -131,7 +169,7 @@ def detail_entry(call_id: str, *, kind: str, value: str, note: str = "", today: 
     date = _date(0, today)
     value, note = " ".join(str(value).split())[:200], " ".join(str(note).split())[:300]
     key = f"detail-{kind}" if kind in ("phone", "email", "name") else f"note-{date}-{re.sub(r'[^A-Za-z0-9]', '', call_id)[-6:]}"
-    return key, {"kind": kind, "value": value, "note": note, "date": date, "call_id": call_id}
+    return key, {"kind": kind, "value": value, "note": note, "date": date, "at": _stamp(today, now), "call_id": call_id}
 
 
 @dataclass
@@ -158,21 +196,29 @@ class CustomerMemory:
             if key == "notes":
                 notes = str(value.get("text") or "")
             elif key.startswith("contact-"):
-                contacts.append({"date": str(value.get("date") or ""), "text": str(value.get("text") or ""),
-                                 "seeded": bool(value.get("seeded")), "action": value.get("action"), "worked": value.get("worked")})
+                contacts.append({"key": key, "date": str(value.get("date") or ""), "at": str(value.get("at") or ""),
+                                 "text": str(value.get("text") or ""), "seeded": bool(value.get("seeded")),
+                                 "action": value.get("action"), "worked": value.get("worked")})
             elif key.startswith("detail-") and value.get("value"):
                 kind = key[len("detail-"):]
                 if str(value.get("date") or "") >= str(details.get(kind, {}).get("date") or ""):
                     details[kind] = {"value": str(value["value"]), "note": str(value.get("note") or ""), "date": str(value.get("date") or "")}
             elif key.startswith("note-") and (value.get("value") or value.get("note")):
                 remarks.append({"kind": str(value.get("kind") or "other"), "value": str(value.get("value") or ""),
-                                "note": str(value.get("note") or ""), "date": str(value.get("date") or "")})
-        contacts.sort(key=lambda c: c["date"], reverse=True)
-        remarks.sort(key=lambda r: r["date"], reverse=True)
+                                "note": str(value.get("note") or ""), "date": str(value.get("date") or ""),
+                                "at": str(value.get("at") or "")})
+        # Newest first, to the second where the entry says; a seeded row (date only) sorts as
+        # the start of its day.
+        contacts.sort(key=_when_key, reverse=True)
+        remarks.sort(key=_when_key, reverse=True)
         return cls(customer_id=customer_id, contacts=contacts, notes=notes, details=details, remarks=remarks, ms=ms)
 
     def public(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _when_key(row: dict[str, Any]) -> str:
+    return str(row.get("at") or "") or f"{row.get('date', '')}T00:00:00"
 
 
 def _days_ago(iso: str, today: dt.date) -> int:
@@ -198,11 +244,25 @@ def _nice_date(iso: str, today: dt.date | None = None) -> str:
     return d.strftime("%b %-d") + ("" if d.year == today.year else f", {d.year}")
 
 
+def _nice_when(row: dict[str, Any], today: dt.date | None = None, now: dt.datetime | None = None) -> str:
+    """``_nice_date`` with the minutes for a row written today: "just now", "12 minutes
+    ago", else "today"."""
+    when = _nice_date(str(row.get("date") or ""), today)
+    if when == "today" and row.get("at"):
+        mins = _minutes_since(str(row["at"]), now)
+        if mins is not None and 0 <= mins < 2:
+            return "just now"
+        if mins is not None and mins < 90:
+            return f"{int(mins)} minutes ago"
+    return when
+
+
 _TOPIC = re.compile(r"^Called about ([^:]+):")
 _CAME_OF_IT = re.compile(r"What came of it: (.+)$")
 
 
-def history_lines(contacts: list[dict[str, Any]], today: dt.date | None = None, *, recent_groups: int = 4) -> list[str]:
+def history_lines(contacts: list[dict[str, Any]], today: dt.date | None = None, *, recent_groups: int = 4,
+                  now: dt.datetime | None = None) -> list[str]:
     """The earlier contacts as lines, most recent first, sized for a prompt however long the
     record gets. The account's own history (the seeded entries: the plan, the named account
     manager, the incident two weeks ago) is always there in full. What the agent wrote after
@@ -221,7 +281,7 @@ def history_lines(contacts: list[dict[str, Any]], today: dt.date | None = None, 
     rows: list[tuple[str, str]] = [(c["date"], f"{_nice_date(c['date'], today)}: {c['text']}") for c in seeded]
     for (date, topic), cs in list(groups.items())[:recent_groups]:
         if len(cs) == 1 or not topic:
-            rows.append((date, f"{_nice_date(date, today)}: {cs[0]['text']}"))
+            rows.append((_when_key(cs[0]), f"{_nice_when(cs[0], today, now)}: {cs[0]['text']}"))
             continue
         latest = cs[0]["text"]
         outcomes = []
@@ -229,13 +289,48 @@ def history_lines(contacts: list[dict[str, Any]], today: dt.date | None = None, 
             m = _CAME_OF_IT.search(c["text"])
             if m and m.group(1) not in outcomes:
                 outcomes.append(m.group(1))
-        rows.append((date, f"{_nice_date(date, today)}: called {len(cs)} times about {topic}. "
-                           f"Most recent: {latest} Earlier the same day: {' / '.join(outcomes[1:4]) or 'the same'}"))
+        rows.append((_when_key(cs[0]), f"{_nice_date(date, today)}: called {len(cs)} times about {topic}. "
+                                       f"Most recent ({_nice_when(cs[0], today, now)}): {latest} "
+                                       f"Earlier the same day: {' / '.join(outcomes[1:4]) or 'the same'}"))
     rows.sort(key=lambda r: r[0], reverse=True)
     return [r[1] for r in rows]
 
 
-def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today: dt.date | None = None) -> str:
+def track_record(memory: CustomerMemory | None, action_words: dict[str, str] | None = None, *,
+                 today: dt.date | None = None, now: dt.datetime | None = None) -> str:
+    """This caller's own record with the steps we have taken for them, for the decision: how
+    many times each was taken and how each fared, the caller's word included. What has worked
+    for callers like them is one thing; a step that has already failed this caller twice is
+    another, and the decision should see both."""
+    if memory is None:
+        return ""
+    by_action: dict[str, list[dict[str, Any]]] = {}
+    for c in memory.contacts:
+        if c.get("action") and not c.get("seeded"):
+            by_action.setdefault(str(c["action"]), []).append(c)
+    if not by_action:
+        return ""
+    parts = []
+    for action, cs in by_action.items():
+        did = (action_words or {}).get(action) or action.replace("_", " ")
+        n = len(cs)
+        held = sum(1 for c in cs if c.get("worked") is True)
+        failed = sum(1 for c in cs if c.get("worked") is False)
+        open_ = n - held - failed
+        how = []
+        if failed:
+            how.append(f"did not hold {failed} time{'s' if failed != 1 else ''}, on their word")
+        if held:
+            how.append(f"held {held} time{'s' if held != 1 else ''}")
+        if open_:
+            how.append(f"{open_} still open")
+        parts.append(f"{did} {n} time{'s' if n != 1 else ''} (most recently {_nice_when(cs[0], today, now)}); "
+                     f"it {', '.join(how)}")
+    return "This caller's own record with these steps: " + "; ".join(parts) + "."
+
+
+def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today: dt.date | None = None,
+          now: dt.datetime | None = None) -> str:
     """What the conversational model gets back from ``recall_customer``: the account facts, the
     earlier contacts and what came of them, the notes, and what has worked for callers in the
     same situation. Prose it can draw on, not a form to read out."""
@@ -251,11 +346,11 @@ def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today
         lines.append(f"On file, from the caller: {'; '.join(given)}. These are current; use them, do not ask for them again.")
     if memory and memory.remarks:
         lines.append("Corrections and notes from earlier calls, most recent first:")
-        lines.extend(f"- {_nice_date(r['date'], today)}: {(r['value'] + ('. ' + r['note'] if r['note'] else '')).rstrip('.')}."
+        lines.extend(f"- {_nice_when(r, today, now)}: {(r['value'] + ('. ' + r['note'] if r['note'] else '')).rstrip('.')}."
                      for r in memory.remarks[:4])
     if contacts:
         lines.append("Earlier contacts, most recent first:")
-        lines.extend(f"- {c}" for c in history_lines(contacts, today))
+        lines.extend(f"- {c}" for c in history_lines(contacts, today, now=now))
     else:
         lines.append("No earlier contacts on record: this is the first time we hear from them.")
     if memory and memory.notes:
@@ -270,7 +365,7 @@ def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today
 
 
 def opening(caller: Any, memory: CustomerMemory | None, *, agent_name: str, company: str, greeting: str,
-            today: dt.date | None = None) -> str:
+            today: dt.date | None = None, now: dt.datetime | None = None) -> str:
     """The first thing the caller hears, built from the file rather than left to the model:
     a known caller is greeted by name and told, in a clause, that their history is in hand
     (how many times they have been in touch, how recently), then asked what is going on
@@ -285,6 +380,10 @@ def opening(caller: Any, memory: CustomerMemory | None, *, agent_name: str, comp
     n = max(len(recent), int(caller.prior_contacts_30d or 0))
     lead = f"Hi {caller.name}, it's {agent_name} at {company}."
     if contacts and n:
+        when = _nice_when(contacts[0], today, now)
+        if when == "just now" or when.endswith("minutes ago"):
+            # Back within the hour: say so, and skip the count they heard last time.
+            return f"{lead} We spoke {when}; I've still got your file open here. What's going on?"
         when = _nice_date(contacts[0]["date"], today)
         when = when if when in ("today", "yesterday") or when.endswith("ago") else f"on {when}"
         times = {1: "once", 2: "twice", 3: "three times", 4: "four times", 5: "five times"}.get(n, f"{n} times")
@@ -293,5 +392,5 @@ def opening(caller: Any, memory: CustomerMemory | None, *, agent_name: str, comp
     return f"{lead} I've got your file open here. What can I do for you today?"
 
 
-__all__ = ["DETAIL_KINDS", "CustomerMemory", "Persona", "brief", "call_entry", "contact_entry", "customer_entity", "detail_entry",
-           "opening", "seed_entries"]
+__all__ = ["DETAIL_KINDS", "CustomerMemory", "Persona", "amend_contact", "brief", "call_entry", "contact_entry", "customer_entity",
+           "detail_entry", "opening", "seed_entries", "track_record"]

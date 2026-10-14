@@ -341,6 +341,7 @@ function apply(e, live) {
       break; }
     case "customer_noted": {
       c.noted = { t: e.t, text: e.text };
+      if (live && isCur && e.amended) { glow("sl", 2000); status("sl", `rewrote the line on the last step`); caption(`<span class="sl">SenseLab</span> takes the caller's word.`, `The file said one thing about the last step; ${esc(c.recall?.name || "the caller")} said another. The line now reads: “${esc(e.text)}”`); break; }
       if (live && isCur) { glow("sl", 2000); status("sl", `wrote a line in ${esc(c.recall?.name || "the caller")}'s history`); caption(`<span class="sl">SenseLab</span> remembers this call.`, `Added to ${esc(c.recall?.name || "the caller")}'s history: “${esc(e.text)}” Call again as the same person and ${esc(AGENT)} starts from here.`); }
       break; }
     case "tool_call": {
