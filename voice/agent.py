@@ -14,12 +14,11 @@ through ``voice/business.py``; nothing here is Northwind's. In the demo the same
 same actions, same policy, same situation labels, same review, so a batch run and the live
 agent can share an entity path and what the batch run learned is what the live agent knows.
 
-Latency: ``Run.begin`` is two reads of the SenseLab API, a few seconds on a hosted account
-(``voice/README.md`` has measurements). A caller will not wait that long for an answer,
-so the server opens runs ahead of the decision: when a call starts it begins one run per
-situation the caller could be in (the account tells us tier and prior contacts; the
-intent is what we do not know yet) and the tool call picks the one that matches. A run
-that is begun and never completed is two reads; nothing is left open on the platform.
+Latency: the server opens runs ahead of the decision so the caller never waits on a
+lookup: when a call starts it begins one run per situation the caller could be in (the
+account tells us tier and prior contacts; the intent is what we do not know yet) and the
+tool call picks the one that matches. A run that is begun and never completed is a read;
+nothing is left open on the platform.
 """
 
 from __future__ import annotations
@@ -465,6 +464,19 @@ class LiveAgent:
             self._event("speech", {"call_id": call_id, "role": "assistant" if role in ("assistant", "bot") else "user",
                                    "status": "started" if status == "started" else "stopped", **({"t": t} if t else {})})
 
+    def set_listening(self, call_id: str, on: bool = True) -> None:
+        """The call's live audio is being followed (``voice/listen.py``): speech starts and
+        stops come from it for both sides, so the same from the page are ignored and the
+        turns reported after the fact carry words only, not lane segments."""
+        if call_id in self.calls:
+            with self._lock:
+                self.calls[call_id]["listening"] = on
+            self._event("listening", {"call_id": call_id, "on": on})
+
+    def is_listening(self, call_id: str) -> bool:
+        call = self.calls.get(call_id)
+        return bool(call and call.get("listening"))
+
     def note_transcript(self, call_id: str, role: str, text: str, *, t: float | None = None) -> None:
         """A final transcript line from Vapi, kept on the call and announced."""
         text = " ".join(str(text or "").split())
@@ -491,6 +503,7 @@ class LiveAgent:
         with self._lock:
             call = self.calls[call_id]
             live = call.setdefault("live", [])
+            listened = bool(call.get("listening"))  # the lanes already have these from the audio
             said = {who: squash(" ".join(ln["text"] for ln in live if ln["role"] == who)) for who in ("assistant", "user")}
             for m in messages:
                 if not isinstance(m, dict) or m.get("role") not in ("bot", "user"):
@@ -504,7 +517,8 @@ class LiveAgent:
                 t1 = float(m["endTime"]) / 1000 if m.get("endTime") else t0 + float(m.get("duration") or max(1.0, len(text) / 15))
                 said[who] += key
                 live.append({"role": who, "text": text, "t": t1})
-                new.append({"call_id": call_id, "role": who, "text": text[:300], "t0": round(t0, 3), "t1": round(max(t1, t0 + 0.3), 3)})
+                new.append({"call_id": call_id, "role": who, "text": text[:300], "t0": round(t0, 3), "t1": round(max(t1, t0 + 0.3), 3),
+                            "listened": listened})
         for row in sorted(new, key=lambda r: r["t0"]):
             self._event("turn", row)
         return len(new)

@@ -42,6 +42,7 @@ from core import settings as S
 from core.scenario import SEVERITIES, Outcome
 
 from . import assistant as va
+from . import listen as li
 from .agent import Caller, LiveAgent, new_call_id
 from .business import Business
 
@@ -74,6 +75,8 @@ class Config:
         # GPT-Live's reasoner waits for the answer like any tool caller; no floor there.
         default_floor = "1500" if self.stack == "realtime" else "0"
         self.tool_floor_ms = int(os.environ.get("VOICE_TOOL_MIN_MS") or default_floor)
+        # Follow each call's live audio for who is speaking (voice/listen.py). VOICE_LISTEN=0 turns it off.
+        self.listen = (os.environ.get("VOICE_LISTEN") or "1").strip() not in ("0", "false", "no")
         self.phone_numbers: list[str] = []
 
 
@@ -81,6 +84,51 @@ cfg = Config()
 app = FastAPI(title="Jev + SenseLab voice demo", docs_url=None, redoc_url=None)
 agent: LiveAgent | None = None
 profiles: dict[str, dict[str, Any]] = {}  # profile id -> caller facts registered by the page
+listeners: dict[str, asyncio.Task[None]] = {}  # call id -> the task following its live audio
+looked_up: set[str] = set()  # calls whose record was fetched for the listen URL (once each)
+
+
+def start_listening(call_id: str, call: dict[str, Any] | None) -> bool:
+    """Follow the call's live audio for speech starts and stops, if Vapi told us where it
+    streams (``call.monitor.listenUrl``, on the call record). Webhook messages carry the
+    record; when the one in hand has no monitor (the page knows only the call's id), the
+    record is fetched once, off the request's path. On GPT-Live this is the only live word
+    on who is speaking; on the other stacks Vapi's ``speech-update`` says the same and the
+    audio is a second opinion with better timing."""
+    if not cfg.listen or call_id in listeners:
+        return False
+    url = ((call or {}).get("monitor") or {}).get("listenUrl")
+    if not url:
+        if cfg.private_key and call_id not in looked_up:
+            looked_up.add(call_id)
+            asyncio.get_running_loop().create_task(_listen_after_lookup(call_id))
+        return False
+    ag = _agent()
+
+    def on_speech(role: str, status: str, at: float) -> None:
+        ag.note_speech(call_id, role, status, t=at)
+
+    task = asyncio.get_running_loop().create_task(li.listen(call_id, str(url), on_speech, on_open=lambda: ag.set_listening(call_id)))
+    listeners[call_id] = task
+    task.add_done_callback(lambda _t: listeners.pop(call_id, None))
+    return True
+
+
+async def _listen_after_lookup(call_id: str) -> None:
+    try:
+        call = await run_in_threadpool(va.fetch_call, cfg.private_key or "", call_id)
+    except Exception as exc:  # noqa: BLE001 - the page still has the SDK's stream
+        log.info("no listen stream for %s: %s", call_id, exc)
+        return
+    if call and not start_listening(call_id, call):
+        log.info("no listen stream for %s: the call record has no monitor.listenUrl", call_id)
+
+
+def stop_listening(call_id: str) -> None:
+    looked_up.discard(call_id)
+    task = listeners.pop(call_id, None)
+    if task is not None and not task.done():
+        task.cancel()
 
 
 @app.on_event("startup")
@@ -218,6 +266,8 @@ async def vapi_webhook(request: Request) -> JSONResponse:
             prof = profile_from_call(call)
             ag.call_started(call_id, ag.caller_from(prof), call_type=str(call.get("type") or "webCall"),
                             brief=str(prof.get("history") or "") or None)
+        if status == "in-progress":
+            start_listening(call_id, call)
         return JSONResponse({})
 
     if typ == "assistant-request":
@@ -234,12 +284,15 @@ async def vapi_webhook(request: Request) -> JSONResponse:
         else:
             history, first = ag.intro_for(caller)
         ag.call_started(call_id, caller, call_type=str(call.get("type") or "inboundPhoneCall"), brief=history)
+        start_listening(call_id, call)
         return JSONResponse({"assistantId": cfg.assistant_id,
                              "assistantOverrides": {"firstMessage": first,
                                                     "variableValues": variable_values({**asdict(caller), "history": history})}})
 
     if typ == "tool-calls":
         t0 = time.monotonic()
+        if call_id in ag.calls:
+            start_listening(call_id, call)  # a call the server first hears of here
         # The conversation so far rides along with the tool call. On GPT-Live it is the only
         # live record of the caller's words that reaches the server (see note_turns).
         ag.note_turns(call_id, (msg.get("artifact") or {}).get("messages"))
@@ -281,6 +334,7 @@ async def vapi_webhook(request: Request) -> JSONResponse:
             if msg.get(k) and not artifact.get(k):
                 artifact[k] = msg[k]
         ag.note_turns(call_id, artifact.get("messages"))  # whatever the call did not show live
+        stop_listening(call_id)
         ag.end_call_later(call_id, ended_reason=str(msg.get("endedReason") or ""), artifact=artifact,
                           fetch_recording=(lambda cid=call_id: va.presigned_recording(cfg.private_key, cid)) if cfg.private_key else None)
         return JSONResponse({})
@@ -401,12 +455,13 @@ async def api_call_start(call_id: str, request: Request) -> dict[str, Any]:
     hear of the call at its first tool call, and the runs opened ahead would open then."""
     body = await request.json() if await request.body() else {}
     ag = _agent()
-    if call_id in ag.calls:
-        return {"call_id": call_id, "known": True}
-    prof = profiles.get(str(body.get("profile_id") or ""), {})
-    ag.call_started(call_id, ag.caller_from(prof) if prof.get("name") else Caller(name=""), call_type="webCall",
-                    brief=str(prof.get("history") or "") or None)
-    return {"call_id": call_id, "known": False}
+    known = call_id in ag.calls
+    if not known:
+        prof = profiles.get(str(body.get("profile_id") or ""), {})
+        ag.call_started(call_id, ag.caller_from(prof) if prof.get("name") else Caller(name=""), call_type="webCall",
+                        brief=str(prof.get("history") or "") or None)
+    start_listening(call_id, None)  # the page knows only the id; the record says where the audio streams
+    return {"call_id": call_id, "known": known}
 
 
 @app.post("/api/calls/{call_id}/notes")
@@ -423,6 +478,8 @@ async def api_call_notes(call_id: str, request: Request) -> dict[str, Any]:
     typ = str(msg.get("type") or "")
     t = float(msg["t"]) if isinstance(msg.get("t"), (int, float)) else None
     if typ == "speech-update":
+        if ag.is_listening(call_id):
+            return {"ignored": "the call's audio says who is speaking"}
         ag.note_speech(call_id, str(msg.get("role") or ""), str(msg.get("status") or ""), t=t)
     elif typ == "transcript" and str(msg.get("transcriptType") or "final") == "final":
         ag.note_transcript(call_id, str(msg.get("role") or ""), str(msg.get("transcript") or ""), t=t)

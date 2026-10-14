@@ -453,10 +453,9 @@ class SenseLabEpisode:
         """Open the run; return the text for Jev's memory slot.
 
         ``Run.begin`` fetches the entity's briefing and then retrieves for the task. The
-        briefing is per entity, not per task, and is the slow half (3 to 4 s hosted, against
-        about 1 s for the retrieve), so a caller opening several runs on the same entity at
-        once can fetch it once and pass it as *briefing*; likewise the entity's *entries*,
-        which the situation record is read from."""
+        briefing is per entity, not per task, so a caller opening several runs on the same
+        entity at once can fetch it once and pass it as *briefing*; likewise the entity's
+        *entries*, which the situation record is read from."""
         import time
 
         t0 = time.perf_counter()

@@ -63,7 +63,7 @@ The committed run is [`results-sample/lead_routing`](../../results-sample/lead_r
 - What fits in Jev's input. The second chart: the history arm from the wall run climbs
   into Jev's 32k-token limit and is refused at case 276; the lookup and SenseLab stay flat.
 - The repair loop. The judge graded 119 of the SenseLab arm's 120 decisions as they
-  happened (one trace upload hit a rate limit), grouped the flagged ones into behaviours and
+  happened, grouped the flagged ones into behaviours and
   opened incidents; both of the repair agent's drafts were stopped at the Tier 1 replay test
   because they would not have fixed the failed runs. The events are listed with their episode numbers.
 

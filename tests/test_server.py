@@ -1,6 +1,8 @@
 """The voice server's page API, with a stand-in for the agent (no SenseLab, no Vapi)."""
 
+import asyncio
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -75,6 +77,15 @@ class FakeAgent:
     def note_transcript(self, call_id: str, role: str, text: str, *, t: float | None = None) -> None:
         self.notes.append(("transcript", call_id, role, text, t))
 
+    def intro_for(self, caller: Caller) -> tuple[str, str]:
+        return ("", f"Hi {caller.name}".strip())
+
+    def set_listening(self, call_id: str, on: bool = True) -> None:
+        self.calls[call_id]["listening"] = on
+
+    def is_listening(self, call_id: str) -> bool:
+        return bool(self.calls.get(call_id, {}).get("listening"))
+
 
 def test_page_registers_a_browser_call_and_relays_what_vapi_does_not_send(monkeypatch):
     fake = FakeAgent()
@@ -100,6 +111,75 @@ def test_page_registers_a_browser_call_and_relays_what_vapi_does_not_send(monkey
     assert fake.notes == [("transcript", "c1", "user", "hello", None), ("speech", "c1", "assistant", "started", None),
                           ("speech", "c1", "assistant", "stopped", 1700000000.5)]
     assert c.get("/api/config").json()["stack"] == server.cfg.stack
+    # Once the server follows the call's audio, who is speaking comes from there; the page's
+    # speech notes are ignored and its words still land.
+    fake.set_listening("c1")
+    assert c.post("/api/calls/c1/notes", json={"type": "speech-update", "role": "user", "status": "started"}).json() == {"ignored": "the call's audio says who is speaking"}
+    c.post("/api/calls/c1/notes", json={"type": "transcript", "role": "user", "transcriptType": "final", "transcript": "still here"})
+    assert fake.notes[-1] == ("transcript", "c1", "user", "still here", None)
+
+
+def test_the_server_follows_the_calls_audio_when_vapi_says_where(monkeypatch):
+    """Every webhook message carries the call record; its monitor.listenUrl is where the
+    audio streams. The listener starts once per call, from whichever message comes first
+    (a phone call's assistant-request, a status update, or a tool call the server first
+    hears of the call in), and is cancelled by the end-of-call report."""
+    fake = FakeAgent()
+    monkeypatch.setattr(server, "agent", fake)
+    monkeypatch.setattr(server.cfg, "listen", True)
+    monkeypatch.setattr(server.cfg, "assistant_id", "asst")
+    monkeypatch.setattr(server.cfg, "webhook_secret", None)  # whatever the shell's .env says
+    monkeypatch.setattr(server.cfg, "private_key", None)
+    started: list[tuple[str, str]] = []
+
+    async def fake_listen(call_id, url, on_speech, *, on_open=None):
+        started.append((call_id, url))
+        if on_open:
+            on_open()
+        on_speech("user", "started", 1_700_000_001.0)
+        await asyncio.sleep(3600)  # until the call ends
+
+    monkeypatch.setattr(server.li, "listen", fake_listen)
+    server.listeners.clear()
+    fake.end_call_later = lambda *a, **k: None  # type: ignore[attr-defined]
+    fake.note_turns = lambda *a, **k: 0  # type: ignore[attr-defined]
+    call = {"id": "p1", "type": "inboundPhoneCall", "monitor": {"listenUrl": "wss://listen/p1", "controlUrl": "wss://control/p1"}}
+    monkeypatch.setattr(server.app.router, "on_startup", [])  # no real agent, no SenseLab
+    monkeypatch.setattr(server.app.router, "on_shutdown", [])
+    with TestClient(server.app) as c:  # one event loop for the whole call, as in the server
+        c.post("/vapi/webhook", json={"message": {"type": "assistant-request", "call": call}})
+        c.post("/vapi/webhook", json={"message": {"type": "status-update", "status": "in-progress", "call": call}})
+        c.post("/vapi/webhook", json={"message": {"type": "tool-calls", "call": call, "toolCallList": []}})
+        assert started == [("p1", "wss://listen/p1")]  # once, not three times
+        assert fake.calls["p1"]["listening"] is True and ("speech", "p1", "user", "started", 1_700_000_001.0) in fake.notes
+        # A call with no listen URL is left alone; a server told not to listen is too.
+        c.post("/vapi/webhook", json={"message": {"type": "status-update", "status": "in-progress", "call": {"id": "p2", "type": "webCall"}}})
+        monkeypatch.setattr(server.cfg, "listen", False)
+        c.post("/vapi/webhook", json={"message": {"type": "status-update", "status": "in-progress", "call": {**call, "id": "p3"}}})
+        assert [cid for cid, _ in started] == ["p1"] and set(server.listeners) == {"p1"}
+        monkeypatch.setattr(server.cfg, "listen", True)
+        # The end-of-call report stops it.
+        c.post("/vapi/webhook", json={"message": {"type": "end-of-call-report", "call": call, "endedReason": "customer-ended-call"}})
+        assert "p1" not in server.listeners
+        # A browser call: the page knows only the id, so the record is fetched (once) for
+        # where the audio streams. A record without one is logged and let be.
+        records = {"w1": {"id": "w1", "monitor": {"listenUrl": "wss://listen/w1"}}, "w2": {"id": "w2"}}
+        fetched: list[str] = []
+
+        def fake_fetch(_key: str, cid: str) -> dict[str, Any]:
+            fetched.append(cid)
+            return records[cid]
+
+        monkeypatch.setattr(server.cfg, "private_key", "k")
+        monkeypatch.setattr(server.va, "fetch_call", fake_fetch)
+        c.post("/api/calls/w1/start", json={"profile_id": "nope"})
+        c.post("/api/calls/w1/start", json={"profile_id": "nope"})
+        c.post("/api/calls/w2/start", json={"profile_id": "nope"})
+        for _ in range(50):  # the lookups run off the request's path
+            if ("w1", "wss://listen/w1") in started and len(fetched) == 2:
+                break
+            time.sleep(0.02)
+        assert fetched == ["w1", "w2"] and ("w1", "wss://listen/w1") in started and "w2" not in server.listeners
 
 
 class _Turns:

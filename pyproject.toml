@@ -17,8 +17,9 @@ dependencies = [
 [project.optional-dependencies]
 # The retrieval baseline embeds past cases locally. Not needed for the headline run.
 baseline = ["fastembed>=0.3"]
-# The live voice agent (voice/): a webhook server for Vapi.
-voice = ["fastapi>=0.110", "uvicorn>=0.29"]
+# The live voice agent (voice/): a webhook server for Vapi, and a client for the call's
+# live audio stream (who is speaking, on stacks where Vapi does not say).
+voice = ["fastapi>=0.110", "uvicorn>=0.29", "websockets>=12"]
 dev = ["ruff>=0.5", "pytest>=8"]
 
 [tool.uv]

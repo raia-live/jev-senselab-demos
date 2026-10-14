@@ -248,8 +248,7 @@ things GPT-Live does differently, both found on real calls and visible in Vapi's
   hundred), and asking for `conversation-update` or `model-output` changes nothing. A phone
   call is unaffected, because the number asks the server who should answer. A browser call
   would be unknown to the server until its first decision, so the runs could not open ahead
-  and the caller waited 3 to 6 s at the decision point. The page therefore registers the
-  call itself the moment the Vapi SDK connects (`POST /api/calls/{id}/start` with the
+  of it. The page therefore registers the call itself the moment the Vapi SDK connects (`POST /api/calls/{id}/start` with the
   chosen profile). The SDK's `call-start` event does not fire on GPT-Live either; the page
   treats the call as live from the moment `start()` returns.
 - The conversation reaches the page two ways, because Vapi gives it two ways. The browser
@@ -257,11 +256,17 @@ things GPT-Live does differently, both found on real calls and visible in Vapi's
   speaks, and a single final at the end of the call; the page turns that into words on
   screen as they are said, a speaking segment on the timeline, and one line per utterance
   (a pause of 1.2 s ends one), and relays those to `POST /api/calls/{id}/notes`. The
-  caller's words, and exact turn timing for both sides, come to the server inside each
-  tool call and the end-of-call report (`artifact.messages`), so the timeline fills in the
-  caller's turns at each decision and at hang-up. On a phone call that second path is the
-  only one, which is why the caller's lane fills in at the decision rather than as they
-  speak.
+  caller's words come to the server inside each tool call and the end-of-call report
+  (`artifact.messages`), so the caller's lines appear at each decision and at hang-up. On
+  a phone call that second path is the only one for words.
+- Who is speaking, right now, comes from the call's audio. Vapi streams every call live
+  (`monitor.listenUrl` on the call record, a WebSocket of raw PCM with the caller on one
+  channel and the agent on the other), and `voice/listen.py` follows it: loudness per
+  channel every 100 ms, a turn starts after 200 ms of sound and ends after 700 ms of
+  quiet, with an adaptive noise floor so a phone line does not read as a voice. Those
+  starts and stops light the two boxes on the page and draw the timeline's lanes, on phone
+  and browser calls alike, with the timing of the audio itself. `VOICE_LISTEN=0` turns it
+  off; the page then has what the other paths give it.
 - The speaker has no tools. It delegates to the reasoner, and anything the reasoner does
   not do, does not happen: a goodbye without `endCall` leaves the line open. The reasoner's
   prompt checks for a goodbye before anything else, and a `customer.speech.timeout` hook
@@ -385,20 +390,17 @@ into `caller_from_call` in `voice/server.py` if you have one. The tiers are your
 
 ## Latency
 
-`Run.begin` is two reads of the SenseLab API: the entity's briefing (3 to 4 s on the hosted
-account, the same for every situation) and a retrieve for the task (1 to 3 s, and the hosted
-account serves them roughly one at a time). A caller will not wait for that at the decision
-point, so the server opens runs ahead of it: when the call connects it begins one run per
-situation the caller could be in (the account tells us tier and prior contacts; the intent
-is the only thing we do not know yet), sharing one briefing across them, and the tool call
-takes the one that matches. The runs open in order of likelihood, two at a time: small
-billing disputes and cancellations first (ready 2 to 4 s after the call connects), outages
-and large disputes next, the rest last. A decision that arrives before its run has started
-opens it on the spot rather than waiting its turn. The decision itself takes Jev's 200 ms.
-The briefing is refreshed after every sealed outcome, which is when memory changes. A run
-opened and not used is one read; nothing stays open on the platform. The timeline shows when
-the situation the caller turned out to be in was ready, and when all of them were. The
-review and the seal run after the call, off the webhook's path.
+The server opens the SenseLab runs ahead of the decision, so the caller never waits on a
+lookup: when the call connects it begins one run per situation the caller could be in (the
+account tells us tier and prior contacts; the intent is the only thing we do not know yet),
+sharing one briefing across them, and the tool call takes the one that matches. The runs
+open in order of likelihood, the common situations first, and a decision that arrives before
+its run has started opens it on the spot. By the time the caller has said why they are
+calling, the guidance is waiting and the decision is Jev's 200 ms. The briefing is refreshed
+after every sealed outcome, which is when memory changes. A run opened and not used costs
+nothing more than the read; nothing stays open on the platform. The timeline shows when the
+situation the caller turned out to be in was ready, and when all of them were. The review
+and the seal run after the call, off the webhook's path.
 
 ## Files
 
@@ -408,6 +410,7 @@ voice/business.py    reads it; builds the scenario Jev and SenseLab see, names s
 voice/agent.py       Jev + SenseLab per call: open ahead, recall the caller, decide, seal with the outcome, repair loop
 voice/customers.py   the per-caller memory: seeded history, the brief the agent gets, the note it writes after a call
 voice/server.py      FastAPI: /vapi/webhook, the page, /api/*
+voice/listen.py      who is speaking, from the call's live audio stream (lights the boxes, draws the lanes)
 voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice stack, server URL); --number
 voice/simulate.py    the scenario's callers, sent as Vapi tool calls
 voice/testcalls.py   runs the business file's [[scenarios]] as voice calls through Vapi Simulations, judge plus our own checks

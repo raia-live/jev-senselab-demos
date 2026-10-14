@@ -296,8 +296,10 @@ function apply(e, live) {
       break; }
     case "turn": {
       // A line reported after the fact (GPT-Live: the server learns the caller's words at
-      // each decision and at hang-up), with the real start and end of the speech.
-      c.speech[e.role].push({ t0: e.t0, t1: e.t1 }); c.lines.push({ role: e.role, text: e.text, t: e.t1 });
+      // each decision and at hang-up), with the real start and end of the speech. When the
+      // server is following the call's audio the lanes already have the speech; words only.
+      if (!e.listened) c.speech[e.role].push({ t0: e.t0, t1: e.t1 });
+      c.lines.push({ role: e.role, text: e.text, t: e.t1 });
       if (live && isCur && now() - e.t1 < 20) { pulse("e-you-riley", { label: "", color: e.role === "user" ? C.you : C.riley, reverse: e.role !== "user", dur: 700 }); subtitle(e.role, e.text); }
       break; }
     case "recall": {

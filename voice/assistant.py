@@ -574,6 +574,16 @@ class VapiApi:
         self._c.close()
 
 
+def fetch_call(private_key: str, call_id: str) -> dict[str, Any]:
+    """The call record (``GET /call/{id}``): type, status, ``monitor.listenUrl`` while the
+    call is on, the artifact once it has ended."""
+    api = VapiApi(private_key)
+    try:
+        return dict(api._call("GET", f"/call/{call_id}") or {})  # noqa: SLF001
+    finally:
+        api.close()
+
+
 def presigned_recording(private_key: str, call_id: str) -> str | None:
     """A URL for the call's stereo recording that can be fetched (the plain ``recordingUrl``
     cannot be, without Vapi's storage credentials). ``None`` until Vapi has it."""
