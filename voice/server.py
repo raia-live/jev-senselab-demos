@@ -4,7 +4,8 @@
 
 Routes
   POST /vapi/webhook      Vapi server messages: status-update, speech-update, transcript, tool-calls, end-of-call-report,
-                          assistant-request (phone numbers), transfer-destination-request.
+                          assistant-request (phone numbers: who is calling comes from the number, voice/phonebook.py),
+                          transfer-destination-request.
   GET  /                  the demo page (browser calls through the Vapi Web SDK).
   GET  /api/config        what the page needs: the public key and the assistant id.
   GET  /api/state         calls, decisions, events; polled by the page.
@@ -212,6 +213,29 @@ def caller_from_call(call: dict[str, Any]) -> Caller:
     return _agent().caller_from(profile_from_call(call))
 
 
+# -- who is calling, from the number ----------------------------------------------------------
+def caller_number(call: dict[str, Any]) -> str:
+    """The caller's number on an inbound phone call, as Vapi reports it."""
+    return str(((call or {}).get("customer") or {}).get("number") or "").strip()
+
+
+def phone_profile(call: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """Who an inbound phone call is from, and how we know. A caller registered on the page
+    in the last ten minutes wins (that is how the demo switches callers) and teaches the
+    phone book the number; otherwise the book answers (``voice/phonebook.py``: your lookup
+    first, then the numbers the agent has learned); otherwise nobody."""
+    prof = profile_from_call(call)
+    number = caller_number(call)
+    book = _agent().phonebook
+    if prof:
+        if prof.get("name") and number:
+            book.remember(number, prof)
+        return prof, ("page" if prof.get("name") else None)
+    if number:
+        return book.who(number)
+    return {}, None
+
+
 NO_ACCOUNT = ("No account matched this caller. There is no name, plan, tenure or history on file, so state none; "
               "whatever is known about them comes from this call.")
 
@@ -285,14 +309,16 @@ async def vapi_webhook(request: Request) -> JSONResponse:
         # An inbound phone call. The number is routed through this server so the caller's
         # account facts and history can go into the prompt (a phone call carries none of
         # ours). Pre-open the runs now too, before the caller has spoken.
-        prof = profile_from_call(call)
-        # Nobody registered on the page: a stranger, greeted as one (no name, no history).
+        prof, known_by = phone_profile(call)
+        # Nobody registered on the page and a number we have not met: a stranger, greeted
+        # as one (no name, no history). If they say who they are, identify_caller matches it.
         caller = ag.caller_from(prof) if prof.get("name") else Caller(name="")
         if prof.get("history") and prof.get("first_message"):
             history, first = str(prof["history"]), str(prof["first_message"])
         else:
-            history, first = ag.intro_for(caller)
-        ag.call_started(call_id, caller, call_type=str(call.get("type") or "inboundPhoneCall"), brief=history)
+            history, first = await run_in_threadpool(ag.intro_for, caller)
+        ag.call_started(call_id, caller, call_type=str(call.get("type") or "inboundPhoneCall"), brief=history,
+                        known_by=known_by)
         start_listening(call_id, call)
         return JSONResponse({"assistantId": cfg.assistant_id,
                              "assistantOverrides": {"firstMessage": first,
@@ -320,6 +346,11 @@ async def vapi_webhook(request: Request) -> JSONResponse:
                 results.append(tool_reply(tc, d, ag.business, record=ag.situation_record_words(d.situation), stack=cfg.stack))
             elif name == "recall_customer":
                 text = ag.recall(call_id, dict(args or {}), caller=caller_from_call(call))
+                results.append({"toolCallId": tc.get("id"), "name": name, "result": text})
+            elif name == "identify_caller":
+                text, who = await run_in_threadpool(ag.identify, call_id, dict(args or {}))
+                if who is not None and caller_number(call):
+                    ag.phonebook.remember(caller_number(call), asdict(who))
                 results.append({"toolCallId": tc.get("id"), "name": name, "result": text})
             else:
                 results.append({"toolCallId": tc.get("id"), "name": name, "error": f"unknown tool {name}"})

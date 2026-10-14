@@ -273,7 +273,27 @@ function apply(e, live) {
     case "call_started": {
       c.start = e.t; c.caller = e.caller; c.type = e.type || c.type;
       if (live) { current = id; resetNodes(); }
-      if (live && isCur) { glow("you", 1500); pulse("e-you-riley", { label: "call connected", color: C.you }); status("you", `${c.caller.name} · ${c.caller.tier}, ${c.caller.prior_contacts_30d} prior`); status("riley", "answering"); caption(`<span class="you">Call connected.</span> ${esc(AGENT)} answers.`, `${esc(c.caller.name)}, a ${esc(c.caller.tier)} account with ${c.caller.prior_contacts_30d} contact${c.caller.prior_contacts_30d === 1 ? "" : "s"} with support this month. The account facts arrive with the call; what they want, and what happened last time, SenseLab has.`); }
+      if (live && isCur) {
+        glow("you", 1500); pulse("e-you-riley", { label: "call connected", color: C.you }); status("riley", "answering");
+        const phone = String(c.type || "").toLowerCase().includes("phone");
+        if (!c.caller.name) {
+          status("you", phone ? "unknown number" : "unknown caller");
+          caption(`<span class="you">Call connected.</span> Nobody we know, yet.`, phone
+            ? `This number is not in the phone book, so ${esc(AGENT)} greets a stranger. If the caller says who they are, ${esc(AGENT)} looks the name up and the number is remembered as them. Or pick the caller above and press "use this caller" before dialing.`
+            : `No account matched. If the caller says who they are, ${esc(AGENT)} looks the name up.`);
+        } else {
+          const how = e.known_by === "number" ? "The number is in the phone book, so" : e.known_by === "page" ? "Registered on the page, so" : "";
+          status("you", `${c.caller.name} · ${c.caller.tier}, ${c.caller.prior_contacts_30d} prior`);
+          caption(`<span class="you">Call connected.</span> ${esc(AGENT)} answers.`, `${how ? how + " " : ""}${esc(c.caller.name)}, a ${esc(c.caller.tier)} account with ${c.caller.prior_contacts_30d} contact${c.caller.prior_contacts_30d === 1 ? "" : "s"} with support this month. The account facts arrive with the call; what they want, and what happened last time, SenseLab has.`);
+        }
+      }
+      break; }
+    case "identified": {
+      if (e.matched) c.caller = e.caller;
+      if (live && isCur) {
+        if (e.matched) { glow("sl"); pulse("e-riley-sl", { label: `who is ${esc(e.name)}?`, color: C.riley }); status("you", `${c.caller.name} · ${c.caller.tier}, ${c.caller.prior_contacts_30d} prior`); caption(`<span class="sl">Found ${esc(c.caller.name)}.</span>`, `The caller said their name; ${esc(AGENT)} matched it to an account and has their file from here on. The number is remembered as them for next time.`); }
+        else caption(`No account called "${esc(e.name)}".`, `${esc(AGENT)} carries on without a file.`);
+      }
       break; }
     case "memory_opening": {
       c.openAt = e.t; c.runs = e.runs;

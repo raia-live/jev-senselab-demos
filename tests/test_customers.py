@@ -1,6 +1,7 @@
 """The per-caller memory the voice demo keeps in SenseLab: seeding, the brief, the note."""
 
 import datetime as dt
+import threading
 from types import SimpleNamespace
 
 from voice.agent import Caller
@@ -193,6 +194,36 @@ def test_the_agent_notes_a_call_that_reached_no_decision():
     assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["call_id"] == "c-01a13944"
     ag._note_call({"id": "c-2", "caller": {}, "live": []}, None)  # no account matched: nothing to file it under
     assert len(writes) == 1
+
+
+def test_a_caller_who_says_their_name_is_matched_to_an_account():
+    from concurrent.futures import ThreadPoolExecutor
+
+    from voice.agent import LiveAgent
+
+    ag = LiveAgent.__new__(LiveAgent)
+    ag.business, ag.entity_path, ag.agent_id = BUSINESS, "jev-demos/voice", "john"
+    ag.calls, ag.events, ag._lock = {}, [], threading.Lock()
+    ag._opening, ag._customer, ag._pool = {}, {}, ThreadPoolExecutor(1)
+    ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
+    ag._open_all = lambda call_id, caller: None  # type: ignore[method-assign]
+    ag._fetch_customer = lambda caller: None  # type: ignore[method-assign]
+    ag.intro_for = lambda caller: (f"Caller: {caller.name}.\n- today: Called about outage: x.", "Hi")  # type: ignore[method-assign]
+    # The name: full, first, said loosely; and the ones that do not pick anyone out.
+    assert ag.persona_named("Bruno").id == "bruno-andrade" and ag.persona_named("it's bruno").id == "bruno-andrade"
+    assert ag.persona_named("Priya Raman") is None or ag.persona_named("Priya").id == "priya-raman"
+    assert ag.persona_named("Sam Ortiz") is None and ag.persona_named("") is None
+    # On a call nobody matched, the name makes the call theirs: caller, brief, runs, record.
+    ag.calls["c1"] = {"id": "c1", "caller": {"name": "", "customer_id": ""}, "status": "in-progress"}
+    text, who = ag.identify("c1", {"name": "Bruno"})
+    assert who is not None and who.customer_id == "bruno-andrade" and who.tier == next(p for p in PERSONAS if p.id == "bruno-andrade").tier
+    assert text.startswith("Matched: Bruno.") and "Called about outage" in text
+    assert ag.calls["c1"]["caller"]["customer_id"] == "bruno-andrade" and ag.calls["c1"]["known_by"] == "name"
+    assert "c1" in ag._opening and "c1" in ag._customer
+    assert [k for k, _ in ag.events] == ["identified", "recall"] and ag.events[0][1]["matched"] is True
+    text, who = ag.identify("c1", {"name": "Sam Ortiz"})
+    assert who is None and text.startswith("No account matches the name 'Sam Ortiz'")
+    assert ag.identify("nope", {"name": "Bruno"}) == ("No call to identify.", None)
 
 
 def test_caller_customer_id_is_a_slug():

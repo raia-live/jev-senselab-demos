@@ -68,8 +68,24 @@ class FakeAgent:
     def caller_from(self, m: dict[str, Any] | None) -> Caller:
         return Caller.from_mapping(m)
 
-    def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall", brief: str | None = None) -> None:
-        self.calls[call_id] = {"caller": caller, "type": call_type, "brief": brief}
+    def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall", brief: str | None = None,
+                     known_by: str | None = None) -> None:
+        self.calls[call_id] = {"caller": caller, "type": call_type, "brief": brief, "known_by": known_by}
+
+    @property
+    def phonebook(self) -> Any:
+        from voice.phonebook import PhoneBook
+
+        if not hasattr(self, "_book"):
+            self._book = PhoneBook(_Store(), "john", "jev-demos/voice")
+        return self._book
+
+    def identify(self, call_id: str, params: dict[str, Any]) -> tuple[str, Caller | None]:
+        if params.get("name") == "Bruno":
+            who = Caller(name="Bruno", tier="consumer", prior_contacts_30d=3, tenure_months=39, customer_id="bruno-andrade")
+            self.calls[call_id]["caller"] = who
+            return "Matched: Bruno. the file", who
+        return "No account matches the name", None
 
     def note_speech(self, call_id: str, role: str, status: str, *, t: float | None = None) -> None:
         self.notes.append(("speech", call_id, role, status, t))
@@ -186,6 +202,80 @@ def test_the_server_follows_the_calls_audio_when_vapi_says_where(monkeypatch):
             time.sleep(0.02)
         assert fetched.count("w1") == 1 and fetched.count("w2") == 2 and fetched.count("w3") == 3
         assert ("w1", "wss://listen/w1") in started and ("w2", "wss://listen/w2") in started and "w3" not in server.listeners
+
+
+def test_a_phone_number_is_remembered_once_we_know_who_it_is(monkeypatch):
+    from voice.phonebook import PhoneBook
+
+    fake = FakeAgent()
+    monkeypatch.setattr(server, "agent", fake)
+    monkeypatch.setattr(server.cfg, "assistant_id", "asst")
+    monkeypatch.setattr(server.cfg, "webhook_secret", None)
+    monkeypatch.setattr(server.cfg, "listen", False)
+    store = _Store()
+    fake._book = PhoneBook(store, "john", "jev-demos/voice")
+    server.profiles.clear()
+    fake.note_turns = lambda *a, **k: 0  # type: ignore[attr-defined]
+    c = TestClient(server.app)
+    ring = lambda cid, number: {"message": {"type": "assistant-request", "call": {  # noqa: E731
+        "id": cid, "type": "inboundPhoneCall", "customer": {"number": number}}}}
+    # A number we have never met, nobody registered on the page: a stranger.
+    r = c.post("/vapi/webhook", json=ring("p1", "+15550001111")).json()
+    assert fake.calls["p1"]["caller"].name == "" and fake.calls["p1"]["known_by"] is None
+    assert r["assistantOverrides"]["variableValues"]["name"] == "unknown"
+    # The caller says who they are; the name matches, the call is theirs, the number is now them.
+    c.post("/vapi/webhook", json={"message": {"type": "tool-calls", "call": {"id": "p1", "customer": {"number": "+15550001111"}},
+                                              "toolCallList": [{"id": "t1", "function": {"name": "identify_caller", "arguments": {"name": "Bruno"}}}]}})
+    assert fake.phonebook.who("+15550001111") == ({"name": "Bruno", "tier": "consumer", "prior_contacts_30d": 3, "tenure_months": 39, "customer_id": "bruno-andrade"}, "number")
+    assert [e for e, _k, _v in store.writes] == ["jev-demos/voice/phonebook"] and "+1555" not in str(store.writes)  # hashed
+    # Next call from that number, nothing registered on the page: known from the number.
+    r = c.post("/vapi/webhook", json=ring("p2", "+15550001111")).json()
+    assert fake.calls["p2"]["caller"].name == "Bruno" and fake.calls["p2"]["known_by"] == "number"
+    assert r["assistantOverrides"]["variableValues"]["name"] == "Bruno"
+    # A caller registered on the page in the last ten minutes wins (the demo switches
+    # callers that way), and teaches the book the new name for the number.
+    server.profiles["q"] = {"profile_id": "q", "registered": time.time(), "name": "Priya", "tier": "business",
+                            "prior_contacts_30d": 1, "tenure_months": 8, "customer_id": "priya-raman",
+                            "history": "the file", "first_message": "Hi Priya"}
+    c.post("/vapi/webhook", json=ring("p3", "+15550001111"))
+    assert fake.calls["p3"]["caller"].name == "Priya" and fake.calls["p3"]["known_by"] == "page"
+    assert fake.phonebook.who("+15550001111")[0]["customer_id"] == "priya-raman"
+    # A stranger registered on purpose (the test calls) stays a stranger, and is not
+    # written into the book; another number is still nobody.
+    server.profiles["s"] = {"profile_id": "s", "registered": time.time() + 1, "name": "", "tier": "consumer",
+                            "prior_contacts_30d": 0, "tenure_months": 0, "customer_id": "", "history": "", "first_message": "Hi"}
+    c.post("/vapi/webhook", json=ring("p4", "+15550001111"))
+    assert fake.calls["p4"]["caller"].name == "" and fake.phonebook.who("+15550001111")[0]["customer_id"] == "priya-raman"
+    server.profiles.clear()
+    c.post("/vapi/webhook", json=ring("p5", "+15550002222"))
+    assert fake.calls["p5"]["caller"].name == ""
+    # A name nobody has leaves the call and the book alone.
+    c.post("/vapi/webhook", json={"message": {"type": "tool-calls", "call": {"id": "p5", "customer": {"number": "+15550002222"}},
+                                              "toolCallList": [{"id": "t2", "function": {"name": "identify_caller", "arguments": {"name": "Sam Ortiz"}}}]}})
+    assert fake.phonebook.who("+15550002222") == ({}, None)
+    # The book is read back from SenseLab at startup.
+    again = PhoneBook(store, "john", "jev-demos/voice")
+    assert again.load() == 1 and again.who("+1 (555) 000-1111")[0]["name"] == "Priya"
+
+
+class _Store:
+    """A stand-in for the SenseLab client: writes kept, listed back as entries."""
+
+    def __init__(self) -> None:
+        self.writes: list[tuple[str, str, dict[str, Any]]] = []
+
+    def memory(self, _agent_id: str) -> "_Store":
+        return self
+
+    def write(self, entity: str, key: str, value: dict[str, Any], **_kw: Any) -> None:
+        self.writes.append((entity, key, value))
+
+    def list(self, entity: str) -> list[Any]:
+        latest: dict[str, Any] = {}
+        for e, k, v in self.writes:
+            if e == entity:
+                latest[k] = type("E", (), {"key": k, "value": v})()
+        return list(latest.values())
 
 
 class _Turns:

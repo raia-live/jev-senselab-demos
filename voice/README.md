@@ -164,13 +164,30 @@ uv run python -m voice.assistant --server-url https://<tunnel>/vapi/webhook --nu
 
 gets a free Vapi US number and routes it through this server: when the number rings, Vapi
 asks the server who should answer, and the server replies with the assistant and the caller's
-account facts and history, so a phone call starts with as much known as a browser call. A
-phone call carries no account facts of its own (there is no caller-id lookup behind the
-number in this demo), so pick the caller on the page and press "use this caller"; the page
-reads their history and the next call to the number within ten minutes is that person.
-Without that, a phone caller is a consumer with no prior contacts and nothing on record. The
+account facts and history, so a phone call starts with as much known as a browser call. The
 server re-routes any number it owns on every start, so a new tunnel URL needs nothing more
 than a restart.
+
+A phone call carries the caller's number and nothing else of ours, so who is calling comes
+from the number (`voice/phonebook.py`). Three answers, in order:
+
+- Your own lookup. `lookup(number)` in `voice/phonebook.py` returns None until you fill it
+  in; put your CRM or billing query there and return the account facts (`name`, `tier`,
+  `prior_contacts_30d`, `tenure_months`, `customer_id`). The history under that
+  `customer_id` then comes from SenseLab as for any caller. This answer wins.
+- What the agent has learned. The first time a number calls while a caller is registered on
+  the page, or a caller nobody matched says who they are and the name matches an account,
+  the number is written to SenseLab under `<entity>/phonebook` as that person (keyed by a
+  hash of the number) and read back at startup. From then on the number is them: no button,
+  no window.
+- Nobody. John greets a stranger and asks who he is speaking with. If the caller gives a
+  name that matches an account, John has their file from that moment and the number is
+  remembered.
+
+For the demo, pick the caller on the page and press "use this caller" before the first call
+from a phone; the next call to the number within ten minutes is that person, and after that
+the number is. A caller registered on the page always wins over the book, which is how you
+switch personas from one phone.
 
 Phone audio is narrowband (8 kHz; the same line quality as any phone call), so the voice is
 at its best in a browser call, where the audio is wideband. If you are recording a demo,
@@ -394,8 +411,9 @@ The server rebuilds the Vapi assistant from the file on start (`python -m voice.
   whatever is here.
 
 What stays the same: the account facts a call carries (name, tier, prior contacts in 30
-days, tenure), which come from the page or from `POST /api/profiles`; wire your own lookup
-into `caller_from_call` in `voice/server.py` if you have one. The tiers are yours to name.
+days, tenure, an account id). On a browser call they come from the page; on a phone call
+from the number, through `lookup(number)` in `voice/phonebook.py`, which is where your CRM
+goes (see A phone number). The tiers are yours to name.
 
 ## Latency
 
@@ -418,6 +436,7 @@ voice/business.toml  the business: company, intents, actions, policy, situations
 voice/business.py    reads it; builds the scenario Jev and SenseLab see, names situations, opens runs ahead
 voice/agent.py       Jev + SenseLab per call: open ahead, recall the caller, decide, seal with the outcome, repair loop
 voice/customers.py   the per-caller memory: seeded history, the brief the agent gets, the note it writes after a call
+voice/phonebook.py   who is calling, from the number: your lookup (fill it in), then the numbers the agent has learned
 voice/server.py      FastAPI: /vapi/webhook, the page, /api/*
 voice/listen.py      who is speaking, from the call's live audio stream (realtime and pipeline stacks)
 voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice stack, server URL); --number

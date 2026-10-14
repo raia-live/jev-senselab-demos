@@ -154,7 +154,7 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     assert live["hooks"][1]["options"]["timeoutSeconds"] == 30 and live["hooks"][1]["do"][1] == {"type": "tool", "tool": {"type": "endCall"}}
     # The eighth run: the reasoner dropped the tool's "Why" so the speaker had no answer to
     # "why would it work this time", and promised to "check" with no tool to check with.
-    assert 'ALWAYS pass on the tool\'s "Why"' in reasoner and "You have no lookup" in reasoner
+    assert 'ALWAYS pass on the tool\'s "Why"' in reasoner and "Beyond that you have no lookup" in reasoner and "identify_caller is for one case" in reasoner
     assert "sort it out. There is nothing to check" in speaker and "Do not add a time, a date, a name or a job title" in speaker
     # The ninth run: a stranger was told the charge was "a setup fee" from a file that does not
     # exist, and Tomas asked who was calling and got no name although his file has one.
@@ -193,7 +193,7 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     for a in Business.load().actions:
         for text in (a.then, a.then_no_file):
             assert "$" not in text and '"' not in text and "'your file" not in text, a.id
-    assert [t.get("function", {}).get("name", t["type"]) for t in live["model"]["tools"]] == ["decide_next_step", "endCall"]
+    assert [t.get("function", {}).get("name", t["type"]) for t in live["model"]["tools"]] == ["identify_caller", "decide_next_step", "endCall"]
     assert all("messages" not in t for t in live["model"]["tools"])  # not spoken on GPT-Live
     assert not any(k in live for k in ("transcriber", "startSpeakingPlan", "stopSpeakingPlan", "backchannelingEnabled", "messagePlan"))
     assert live["hooks"][0]["on"] == "customer.speech.timeout"
@@ -214,7 +214,7 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     pl = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, stack="pipeline", voice_id="sarah")
     assert pl["model"]["model"] == "gpt-4.1" and pl["voice"]["voiceId"] == "sarah" and pl["transcriber"]["provider"] == "deepgram"
     assert "request-response-delayed" in [m["type"] for t in pl["model"]["tools"] for m in t.get("messages", [])]
-    assert [t.get("function", {}).get("name", t["type"]) for t in pl["model"]["tools"]] == ["recall_customer", "decide_next_step", "endCall"]
+    assert [t.get("function", {}).get("name", t["type"]) for t in pl["model"]["tools"]] == ["identify_caller", "recall_customer", "decide_next_step", "endCall"]
     with pytest.raises(ValueError):
         assistant_config(b, server_url="https://x", secret=None, stack="telepathy")
 

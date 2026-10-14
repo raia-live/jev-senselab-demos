@@ -66,16 +66,21 @@ saying, and respond to what they just said; do not finish your earlier thought.
 - If you did not catch something, say so and ask again. Do not guess.{style}"""
 
 
-def _caller_lines(*, tool_words: str) -> str:
+def _caller_lines(*, tool_words: str, identify_words: str = "") -> str:
     """The caller's file, as the prompt carries it (``{{name}}``, ``{{history}}`` and the
     rest are filled per call by the server). *tool_words* is how this stack names asking
-    for a decision, for the line that says a question about the past is not that."""
+    for a decision, for the line that says a question about the past is not that.
+    *identify_words* is how it names looking a name up, for a caller no account matched;
+    empty on a stack without that tool."""
+    identify = (f" If they say who they are, or you ask and they tell you, {identify_words}: if their file comes back, "
+                "it is what you know about them from then on; use their name and carry on as with any known caller. "
+                if identify_words else "")
     return f"""- From the account: {{{{account}}}}.
 - Their history with us, as of the moment this call connected. This is the PAST. It tells you who they are and what \
 has already been tried; it does not tell you why they are calling today.
 {{{{history}}}}
-- If no account matched, you do not know this person: say so lightly if it comes up, take their word for who they are, \
-and the rest of this section does not apply. You cannot see their account or their invoice, so you cannot say what a \
+- If no account matched, you do not know this person: say so lightly if it comes up, and ask who you are speaking \
+with.{identify}Until then take their word for who they are, and the rest of this section does not apply. You cannot see their account or their invoice, so you cannot say what a \
 charge is; never guess one ("a setup fee"). If the backend says to resolve it on the call, resolving it means: ask \
 what the line says, take the email on their account and read it back, and tell them a colleague will check that line \
 today and reply to that email. Say that in one go; it is the whole answer. Otherwise you KNOW this person. Show it in a sentence, not a recap: one \
@@ -120,7 +125,7 @@ Backchannel policy: light. Acknowledge briefly without competing with the caller
 Interruption policy: stop speaking when the caller interrupts. Listen, and answer what they said.
 
 # What you know about this caller
-{_caller_lines(tool_words="ask the backend anything")}
+{_caller_lines(tool_words="ask the backend anything", identify_words="ask the backend to look the name up")}
 
 # How a call goes
 1. Open. The greeting has been said, and if we know this person it used their name and said their file is open. Listen. \
@@ -154,6 +159,8 @@ Backend tools:
 this caller, and its answer is final for this call.
 - Ending the call.
 Delegate to the backend when:
+- No account matched this call and the caller has said their name: ask the backend to look the name up, and say \
+nothing else in that turn. Their file comes back, or nothing does.
 - The caller has said, on this call, what they need today ({_intent_lines(b)}), and you have the one detail that needs, \
 or the file has it, or they do not have it. Ask what happens next, and pass along what the caller said, in their words. \
 A charge the file already explains, a cancellation they have given a reason for, an outage you can see in the notes: \
@@ -249,8 +256,11 @@ now"): the assistant repeats what you write, so a result shaped like a promise g
 on. No Markdown, no lists. If the tool fails, say what failed and that the assistant should get a colleague to help \
 the caller.
 
-You have no lookup. Your only tools are decide_next_step and endCall. Never say you will check, look up or confirm \
-anything: facts about the caller's account are in the assistant's own file, not yours. When the next step is to \
+Your tools are identify_caller, decide_next_step and endCall. identify_caller is for one case: no account matched \
+this call (the assistant's file says so) and the caller has said their name. Call it with the name as they said it, \
+and return its result to the assistant word for word: it is their file now, or it says nothing matched. Beyond that \
+you have no lookup. Never say you will check, look up or confirm anything: facts about the caller's account are in \
+the assistant's own file, not yours. When the next step is to \
 resolve on the call, say so and tell the assistant to answer from its file: first the entry in the file that matches, \
 then what it means; and, as a second short instruction, that no matching entry means saying it does not see it in its \
 notes and taking an email for a colleague to check today. Two instructions, not one conditional sentence: the \
@@ -290,7 +300,7 @@ You are {b.agent_name}, on the phones at {where}. You are talking to a customer 
 {_voice_lines(b)}
 
 # What you know about this caller
-{_caller_lines(tool_words="call any tool")}
+{_caller_lines(tool_words="call any tool", identify_words="call identify_caller with the name" if recall else "")}
 
 # How a call goes
 1. Open. The greeting has been said, and if we know this person it used their name and said their file is open. Listen.
@@ -356,6 +366,31 @@ def recall_tool(b: Business) -> dict[str, Any]:
     }
 
 
+def identify_tool() -> dict[str, Any]:
+    """For a caller no account matched who says who they are: the name is checked against
+    the accounts, and if it picks one out, the call becomes theirs (history, situations,
+    the record of what happens). Returns the caller's file, or that nothing matched."""
+    return {
+        "type": "function",
+        "async": False,
+        "function": {
+            "name": "identify_caller",
+            "description": ("Only when no account matched this call and the caller has said their name: look the name up. "
+                            "If it matches an account, the result is their file (who they are, their history), which is "
+                            "what you know about them from then on. If nothing matches, carry on without a file."),
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "The name the caller gave, as they said it."}},
+                "required": ["name"],
+            },
+        },
+        "messages": [
+            {"type": "request-response-delayed", "content": "One second, let me find you.", "timingMilliseconds": 2500},
+            {"type": "request-failed", "content": "I can't get to the accounts right now, so I'll take your word for it."},
+        ],
+    }
+
+
 def decide_tool(b: Business) -> dict[str, Any]:
     labels = ", ".join(a.label.lower() for a in b.actions)
     return {
@@ -417,6 +452,8 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
     # stack two tool calls in one turn (which the model does when it has two tools to call)
     # lose one of the answers (see voice/server.py, tool_floor_ms). The pipeline keeps both.
     tools = ([decide_tool(b)] if stack in ("live", "realtime") else [recall_tool(b), decide_tool(b)]) + [{"type": "endCall"}]
+    if stack != "realtime":  # a third tool on the realtime stack would be the second call it drops
+        tools.insert(0, identify_tool())
     cfg: dict[str, Any] = {
         "name": ASSISTANT_NAME,
         # The first line is built by the server from the caller's file (name, how often and

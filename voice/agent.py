@@ -48,6 +48,7 @@ from core.senselab import ReviewHistory, SenseLabClient, SenseLabEpisode
 
 from . import customers as cust
 from .business import Business
+from .phonebook import PhoneBook
 
 log = logging.getLogger("voice")
 
@@ -228,7 +229,7 @@ class LiveAgent:
         self.recordings_dir: Path | None = S.REPO_ROOT / "results" / "voice"
         self.prefetch_wait_s = 12.0  # how long a decision waits for a run still being opened
         # The entity's briefing and entries, fetched once and shared by the runs opened for a
-        # call (the briefing is the slow half of a begin, and the same for every situation).
+        # call (the briefing is the same for every situation, so one read serves them all).
         # Refreshed after every sealed outcome, since that is when memory changes.
         self._warm: Warm | None = None
         self._warm_future: Future[Warm] | None = None
@@ -242,9 +243,10 @@ class LiveAgent:
         entries = self._warm_up().entries
         self.history = rehydrate_history(entries)
         seeded_customers = self.seed_customers()
+        self.phonebook = PhoneBook(self.client, self.agent_id, self.entity_path)
         info: dict[str, Any] = {
             "agent_id": self.agent_id, "entity_path": self.entity_path, "seeded": seeded,
-            "seeded_customers": seeded_customers,
+            "seeded_customers": seeded_customers, "numbers_known": self.phonebook.load(),
             "entries": len(entries), "seen_pairs": len(self.history.tally),
             "lessons": sum(1 for e in entries if str(e.key).startswith(("learned-", "lesson-"))),
         }
@@ -321,14 +323,16 @@ class LiveAgent:
     def brief_for(self, caller: Caller) -> str:
         return self.intro_for(caller)[0]
 
-    def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall", brief: str | None = None) -> None:
+    def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall", brief: str | None = None,
+                     known_by: str | None = None) -> None:
         """A call is connecting. *brief* is the caller's history as it went into the prompt,
-        when the server had it (``brief_for``); it is shown on the page as the first read."""
+        when the server had it (``brief_for``); it is shown on the page as the first read.
+        *known_by* says how a phone caller was matched ("page", "number"), or None."""
         with self._lock:
             self.calls[call_id] = {"id": call_id, "started": time.time(), "caller": asdict(caller),
                                    "type": call_type, "status": "in-progress", "decisions": 0,
-                                   **({"customer_brief": brief} if brief else {})}
-        self._event("call_started", {"call_id": call_id, "caller": asdict(caller)})
+                                   **({"customer_brief": brief} if brief else {}), **({"known_by": known_by} if known_by else {})}
+        self._event("call_started", {"call_id": call_id, "caller": asdict(caller), "type": call_type, "known_by": known_by})
         if brief:
             contacts = sum(1 for line in brief.splitlines() if line.startswith("- "))
             self._event("recall", {"call_id": call_id, "customer_id": caller.customer_id, "name": caller.name,
@@ -340,6 +344,51 @@ class LiveAgent:
             self._opening[call_id] = self._pool.submit(self._open_all, call_id, caller)
             self._customer[call_id] = self._pool.submit(self._fetch_customer, caller)
 
+    def persona_named(self, name: str) -> cust.Persona | None:
+        """The demo caller a name picks out: the full name, or a first name that only one
+        persona has. None when nobody matches, or more than one does."""
+        words = [w for w in re.sub(r"[^a-z' -]", "", str(name or "").lower()).split() if w]
+        if not words:
+            return None
+        personas = self.business.personas
+        full = [p for p in personas if p.name.lower() == " ".join(words) or p.label.lower() == " ".join(words)]
+        if len(full) == 1:
+            return full[0]
+        first = [p for p in personas if p.name.lower().split()[0] in words]
+        return first[0] if len(first) == 1 else None
+
+    def identify(self, call_id: str, params: dict[str, Any]) -> tuple[str, Caller | None]:
+        """Answer ``identify_caller``: a caller no account matched has said who they are. If
+        the name picks out an account, the call becomes theirs from here: their history is
+        read now and returned for the assistant to go on, the runs for their situations are
+        opened, and what happens on the call is filed under them. The words back are for the
+        assistant, as the brief would have been at the start."""
+        with self._lock:
+            call = self.calls.get(call_id)
+        if call is None:
+            return "No call to identify.", None
+        name = str(params.get("name") or "").strip()
+        persona = self.persona_named(name)
+        if persona is None:
+            self._event("identified", {"call_id": call_id, "name": name[:60], "matched": False})
+            return (f"No account matches the name '{name[:60]}'. Carry on without a file: take their word for who "
+                    "they are, and do not describe an account you cannot see."), None
+        caller = self.caller_from({**persona.public(), "customer_id": persona.id})
+        brief, _ = self.intro_for(caller)
+        with self._lock:
+            call["caller"] = asdict(caller)
+            call["customer_brief"] = brief
+            call["known_by"] = "name"
+            self._opening[call_id] = self._pool.submit(self._open_all, call_id, caller)
+            self._customer[call_id] = self._pool.submit(self._fetch_customer, caller)
+        self._event("identified", {"call_id": call_id, "name": name[:60], "matched": True, "caller": asdict(caller)})
+        contacts = sum(1 for line in brief.splitlines() if line.startswith("- "))
+        self._event("recall", {"call_id": call_id, "customer_id": caller.customer_id, "name": caller.name,
+                               "contacts": contacts, "seeded": 0, "topic": "identified by name", "record": False,
+                               "ms": 0, "brief": brief[:1800]})
+        return (f"Matched: {caller.name}. This is their file; from here on it is what you know about this caller.\n"
+                f"{brief}"), caller
+
     def _open_all(self, call_id: str, caller: Caller) -> None:
         """Open a run for each situation this caller could turn out to be in. The intent is
         what the account does not know; everything else that names the situation it does."""
@@ -347,16 +396,14 @@ class LiveAgent:
         # A refresh in flight (the previous call's seal just changed what is known) is worth
         # a short wait; past that, the last briefing will do and the retrieve is fresh anyway.
         # Short means short: this is on the path to the first decision, and a caller who gets
-        # to the point quickly is waiting on it. (Six seconds here, under a few calls at once,
-        # was most of a ten-second silence after "let me see what I can do".)
+        # to the point quickly is waiting on it.
         warm = self._current_warm(wait_s=1.0)
         if warm is None:
             with self._lock:
                 warm = self._warm
         opened: list[Future[SenseLabEpisode]] = []
-        # The hosted retrieve queues requests from one account, so six at once come back
-        # together, late. Two lanes in order of likelihood (billing, cancellation, outage,
-        # then the rest) have the common situations ready while the caller is still talking.
+        # Two lanes in order of likelihood (billing, cancellation, outage, then the rest), so
+        # the common situations are ready first, while the caller is still talking.
         lanes: list[list[tuple[str, dict[str, Any], Future[SenseLabEpisode]]]] = [[], []]
         with self._lock:
             if call_id not in self.calls:
