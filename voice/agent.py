@@ -8,9 +8,11 @@ into the memory slot, Jev picks the action. When the call ends, what came of the
 is written back as the outcome of that run, and the next call in the same situation starts
 from it.
 
-The same ``call_handling`` scenario drives the batch harness and this agent: same actions,
-same policy, same situation labels, same review. A batch run and the live agent can share
-an entity path, and then what the batch run learned is what the live agent knows.
+What the business is (its intents, actions, policy, callers) comes from ``voice/business.toml``
+through ``voice/business.py``; nothing here is Northwind's. In the demo the same
+``call_handling`` scenario drives the batch harness and reviews this agent's decisions:
+same actions, same policy, same situation labels, same review, so a batch run and the live
+agent can share an entity path and what the batch run learned is what the live agent knows.
 
 Latency: ``Run.begin`` is two reads of the SenseLab API, a few seconds on a hosted account
 (``voice/README.md`` has measurements). A caller will not wait that long for an answer,
@@ -44,26 +46,11 @@ from core.jev import Jev
 from core.loops import RepairLoop
 from core.scenario import Case, Outcome
 from core.senselab import ReviewHistory, SenseLabClient, SenseLabEpisode
-from demos.call_handling.scenario import SCENARIO, situation_of, truth_of
 
 from . import customers as cust
+from .business import Business
 
 log = logging.getLogger("voice")
-
-INTENTS = ("billing_dispute", "cancellation", "outage", "upgrade", "how_to")
-DEFAULT_AGENT_ID = "jev-voice-support-agent"
-DEFAULT_ENTITY_PATH = "jev-demos/call_handling/live"
-
-# What the assistant says when it follows each action. The conversational model gets this
-# back from the tool and speaks it (in its own words if it must; the instruction says not to).
-SAY = {
-    "resolve_in_bot": "Okay, good news: I can sort this out for you right now, on this call.",
-    "transfer_to_agent": "Okay. This one needs a colleague of mine, so let me bring them in.",
-    "schedule_callback": ("Right. I don't want you going round in circles on this again, so I'm booking a billing "
-                          "specialist to call you back within one business day. They'll have your account open and "
-                          "the authority to fix it properly."),
-    "issue_credit": "Okay, I'm putting a credit for the disputed amount on your account right now.",
-}
 
 _REVIEW_RE = re.compile(r"\[(worked|did not work)\] (.*?)(?=; \[(?:worked|did not work)\] |$)")
 _TALLY_RE = re.compile(r"with (?P<action>\S+): worked (?P<worked>\d+) of (?P<total>\d+) time")
@@ -80,11 +67,12 @@ class Caller:
     customer_id: str = ""  # the account's id for this caller; "" when the caller is nobody we know
 
     @classmethod
-    def from_mapping(cls, m: dict[str, Any] | None) -> Caller:
+    def from_mapping(cls, m: dict[str, Any] | None, *, tiers: tuple[str, ...] | None = None,
+                     default_tier: str = "consumer") -> Caller:
         m = m or {}
-        tier = str(m.get("tier") or "consumer")
-        if tier not in ("consumer", "business", "enterprise"):
-            tier = "consumer"
+        tier = str(m.get("tier") or default_tier)
+        if tiers is not None and tier not in tiers:
+            tier = default_tier
         return cls(
             name=str(m.get("name") or "Alex")[:40],
             tier=tier,
@@ -116,7 +104,7 @@ class LiveDecision:
     situation: str
     action: str
     confidence: float
-    say: str
+    then: str  # what the agent gets across to the caller once this is the action, in its own words
     basis: str | None
     probabilities: dict[str, float]
     memory_text: str
@@ -199,16 +187,17 @@ def rehydrate_history(entries: list[Any]) -> ReviewHistory:
 class LiveAgent:
     """Jev decides at the decision point of a call; SenseLab remembers what came of it."""
 
-    def __init__(self, settings: S.Settings, *, agent_id: str = DEFAULT_AGENT_ID,
-                 entity_path: str = DEFAULT_ENTITY_PATH, noise: float = 0.0, changed: bool = False,
+    def __init__(self, settings: S.Settings, business: Business | None = None, *, agent_id: str | None = None,
+                 entity_path: str | None = None, noise: float = 0.0, changed: bool = False,
                  repair_loop: bool = True, prefetch_workers: int = 24) -> None:
         S.require(settings)
         assert settings.typesafe_api_key and settings.amfs_api_key
-        self.scenario = SCENARIO
-        self.agent_id = agent_id
-        self.entity_path = entity_path
+        self.business = business or Business.load()
+        self.scenario = self.business.scenario
+        self.agent_id = agent_id or self.business.agent_id
+        self.entity_path = entity_path or self.business.entity_path
         self.noise = noise
-        self.changed = changed  # has the retention offer gone live in this demo's world
+        self.changed = changed  # is the simulated world's mid-run change in force
         self.jev = Jev(settings.typesafe_api_key)
         self.client = SenseLabClient(settings.amfs_api_key, base_url=settings.amfs_url)
         self.eval_api = EvalClient(settings.amfs_api_key, base_url=settings.amfs_url) if repair_loop else None
@@ -273,6 +262,10 @@ class LiveAgent:
 
     # -- calls -----------------------------------------------------------------------------
 
+    def caller_from(self, m: dict[str, Any] | None) -> Caller:
+        """A caller from account facts, with the tier checked against the business's."""
+        return Caller.from_mapping(m, tiers=self.business.tiers, default_tier=self.business.default_tier)
+
     def _warm_up(self) -> Warm:
         mem = self.client.memory(self.agent_id)
         with ThreadPoolExecutor(2, thread_name_prefix="warm") as ex:
@@ -334,8 +327,8 @@ class LiveAgent:
             if call_id not in self.calls:
                 return  # ended before the briefing came back
             slots = self._prefetch.setdefault(call_id, {})
-            for i, fields in enumerate(self._candidate_fields(caller)):
-                situation = situation_of(fields)
+            for i, fields in enumerate(self.business.candidate_fields(caller)):
+                situation = self.business.situation_of(fields)
                 if situation not in slots:
                     fut: Future[SenseLabEpisode] = Future()
                     slots[situation] = fut
@@ -353,14 +346,6 @@ class LiveAgent:
             except Exception:  # noqa: BLE001 - reported where the run is taken
                 pass
         self._event("memory_ready", {"call_id": call_id, "runs": len(opened), "ms": round((time.perf_counter() - t0) * 1000)})
-
-    def _candidate_fields(self, caller: Caller) -> list[dict[str, Any]]:
-        """Every situation this caller could be in, most common first: small billing disputes
-        and cancellations, then outages and large disputes, then the rest."""
-        order = (("billing_dispute", 50.0), ("cancellation", 0.0), ("outage", 0.0), ("billing_dispute", 400.0),
-                 ("upgrade", 0.0), ("how_to", 0.0))
-        return [{"intent": intent, "tier": caller.tier, "prior_contacts_30d": caller.prior_contacts_30d,
-                 "amount_usd": amount} for intent, amount in order]
 
     def _open_lane(self, call_id: str, t0: float, lane: list[tuple[str, dict[str, Any], Future[SenseLabEpisode]]],
                    warm: Warm | None) -> None:
@@ -458,7 +443,7 @@ class LiveAgent:
         """Give the demo callers their seeded history, once. Returns the customers seeded."""
         mem = self.client.memory(self.agent_id)
         seeded: list[str] = []
-        for persona in cust.PERSONAS:
+        for persona in self.business.personas:
             entity = cust.customer_entity(self.entity_path, persona.id)
             try:
                 if mem.list(entity):
@@ -482,8 +467,7 @@ class LiveAgent:
         rows = [(k[1].split(":", 1)[-1], v) for k, v in self.history.tally.items() if k[0] == situation]
         if not rows:
             return ""
-        words = {"resolve_in_bot": "handling it on the call", "transfer_to_agent": "a transfer to an agent",
-                 "schedule_callback": "a scheduled specialist callback", "issue_credit": "a credit"}
+        words = {k: v.lower() for k, v in self.business.action_labels().items()}
         worked = [f"{words.get(a, a)} ({w} of {t})" for a, (w, t) in rows if t and w / t >= 0.5]
         failed = [f"{words.get(a, a)} ({w} of {t})" for a, (w, t) in rows if t and w / t < 0.5]
         out = f"For callers in this situation ({situation.replace('/', ', ').replace('_', ' ')}),"
@@ -499,7 +483,7 @@ class LiveAgent:
         if call is None:
             self.call_started(call_id, caller or Caller())
             call = self.calls[call_id]
-        c = Caller.from_mapping(call["caller"])
+        c = self.caller_from(call["caller"])
         t0 = time.perf_counter()
         memory: cust.CustomerMemory | None = None
         with self._lock:
@@ -511,13 +495,13 @@ class LiveAgent:
                 log.warning("customer memory for %s: %s", c.customer_id, exc)
         intent = str(params.get("intent") or "")
         record = ""
-        if intent in INTENTS:
-            amount = _float(params.get("amount_usd"), 0.0)
-            if intent == "billing_dispute" and not amount:
-                amount = 50.0  # the common case until the caller names a figure
-            record = self.situation_record_words(situation_of({"intent": intent, "tier": c.tier,
-                                                               "prior_contacts_30d": c.prior_contacts_30d,
-                                                               "amount_usd": amount}))
+        if intent in self.business.intent_ids:
+            # The common values for the intent's fields until the caller names them.
+            fields = {"intent": intent, "tier": c.tier, "prior_contacts_30d": c.prior_contacts_30d, "amount_usd": 0.0,
+                      **self.business.default_fields(intent)}
+            if _float(params.get("amount_usd"), 0.0):
+                fields["amount_usd"] = _float(params.get("amount_usd"), 0.0)
+            record = self.situation_record_words(self.business.situation_of(fields))
         text = cust.brief(c, memory, record=record)
         with self._lock:
             call["customer_brief"] = text
@@ -535,9 +519,10 @@ class LiveAgent:
         customer_id = str(d.caller.get("customer_id") or "")
         if not customer_id:
             return
-        key, value = cust.contact_entry(d.call_id, intent=str(d.fields.get("intent") or "how_to"),
+        key, value = cust.contact_entry(d.call_id, intent=str(d.fields.get("intent") or self.business.fallback_intent),
                                         summary=d.text.split(". ", 2)[-1][:240] if ". " in d.text else d.text[:240],
-                                        action=d.action, outcome_note=outcome.note, worked=outcome.success)
+                                        action=d.action, outcome_note=outcome.note, worked=outcome.success,
+                                        agent_name=self.business.agent_name, action_words=self.business.action_words())
         try:
             self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), key, value,
                                                     confidence=1.0, memory_type="experience")
@@ -549,7 +534,7 @@ class LiveAgent:
     # -- the decision ----------------------------------------------------------------------
 
     def decide(self, call_id: str, params: dict[str, Any], *, caller: Caller | None = None) -> LiveDecision:
-        """Answer ``decide_next_step``: the action, and the line to say."""
+        """Answer ``decide_next_step``: the action, and what to get across."""
         with self._lock:
             call = self.calls.get(call_id)
         if call is None:
@@ -557,10 +542,10 @@ class LiveAgent:
             # status update was not subscribed). Register it from what the tool call carries.
             self.call_started(call_id, caller or Caller())
             call = self.calls[call_id]
-        c = Caller.from_mapping(call["caller"])
-        intent = str(params.get("intent") or "how_to")
-        if intent not in INTENTS:
-            intent = "how_to"
+        c = self.caller_from(call["caller"])
+        intent = str(params.get("intent") or self.business.fallback_intent)
+        if intent not in self.business.intent_ids:
+            intent = self.business.fallback_intent
         fields = {
             "intent": intent, "tier": c.tier, "prior_contacts_30d": c.prior_contacts_30d,
             "amount_usd": _float(params.get("amount_usd"), 0.0), "tenure_months": c.tenure_months,
@@ -569,14 +554,15 @@ class LiveAgent:
         summary = " ".join(str(params.get("summary") or "").split())[:600]
         text = (f"Caller on a {c.tier} account, {c.tenure_months} months with us, sounds {fields['sentiment']}. "
                 f"{c.prior_contacts_30d} contact(s) with support in the last 30 days. {summary}")
-        situation = situation_of(fields)
+        situation = self.business.situation_of(fields)
         self._event("tool_call", {"call_id": call_id, "intent": intent, "situation": situation, "summary": summary[:160]})
         n = len(self.decisions)
+        # In simulated mode the scenario knows the hidden right answer (for the review when
+        # the call ends); in reported mode there is none, the outcome will say.
+        known = self.scenario.classify(fields, changed=self.changed)
         case = Case(id=f"{call_id}:{n}", episode=n, text=text, fields=fields, situation=situation,
-                    truth=truth_of(fields, changed=self.changed), kind=intent,
-                    is_tacit=(intent == "billing_dispute" and c.prior_contacts_30d >= 2 and fields["amount_usd"] < 200
-                              and c.tier != "enterprise"),
-                    is_changed=(intent == "cancellation" and c.tier == "consumer" and self.changed))
+                    truth=str(known.get("truth") or ""), kind=intent,
+                    is_tacit=bool(known.get("is_tacit")), is_changed=bool(known.get("is_changed")))
 
         t0 = time.perf_counter()
         ep = self._take_prefetched(call_id, situation, wait_s=self.prefetch_wait_s)
@@ -611,7 +597,7 @@ class LiveAgent:
         live = LiveDecision(
             id=case.id, call_id=call_id, at=time.time(), caller=asdict(c), fields=fields, text=text,
             situation=situation, action=decision.action, confidence=round(decision.confidence, 3),
-            say=SAY[decision.action], basis=decision.basis,
+            then=self.business.action(decision.action).then, basis=decision.basis,
             probabilities={k: round(v, 3) for k, v in decision.probabilities.items()},
             memory_text=memory_text, memory_entries=list(ep.trace.guidance_entries[:12]),
             memory_mode=ep.trace.guidance_mode, memory_prefetched=prefetched, memory_ms=round(memory_ms),
@@ -624,7 +610,7 @@ class LiveAgent:
             call["decisions"] += 1
             call["last_action"] = decision.action
             self._pending.setdefault(call_id, []).append(_Pending(live, case, ep, decision))
-        self._event("decision", {"call_id": call_id, "situation": situation, "action": decision.action,
+        self._event("decision", {"call_id": call_id, "decision": live.id, "situation": situation, "action": decision.action,
                                  "confidence": live.confidence, "basis": decision.basis, "prefetched": prefetched,
                                  "memory_ms": live.memory_ms, "jev_ms": live.jev_ms,
                                  "alone_action": live.alone_action, "alone_confidence": live.alone_confidence})
@@ -635,9 +621,10 @@ class LiveAgent:
     def call_ended(self, call_id: str, *, ended_reason: str | None = None, transcript: str | None = None,
                    artifact: dict[str, Any] | None = None, auto_review: bool = True,
                    fetch_recording: Callable[[], str | None] | None = None) -> list[LiveDecision]:
-        """The call is over. Drop the runs opened for situations that did not come up and,
-        unless the outcome will be reported later, review each decision the demo world's way.
-        *artifact* is Vapi's: the recording URLs and the transcript, kept with the call."""
+        """The call is over. Drop the runs opened for situations that did not come up and, in
+        simulated mode (unless *auto_review* is off), review each decision the demo world's
+        way. In reported mode the decisions wait for ``report_outcome``. *artifact* is Vapi's:
+        the recording URLs and the transcript, kept with the call."""
         artifact = artifact or {}
         transcript = transcript or artifact.get("transcript")
         # The plain recording URLs are not fetchable without Vapi's credentials; the presigned
@@ -671,8 +658,9 @@ class LiveAgent:
             self._pool.submit(self._save_recording, call_id, recording, fetch_recording)
         for p in pending:
             p.decision.ended_reason = ended_reason
-        self._event("call_ended", {"call_id": call_id, "ended_reason": ended_reason, "decisions": len(pending)})
-        if not auto_review:
+        self._event("call_ended", {"call_id": call_id, "ended_reason": ended_reason, "decisions": len(pending),
+                                   "awaiting_outcome": not (auto_review and self.business.simulated)})
+        if not auto_review or not self.business.simulated:
             return [p.decision for p in pending]
         return [self._review(p) for p in pending]
 
@@ -786,7 +774,7 @@ class LiveAgent:
     def set_changed(self, changed: bool) -> None:
         self.changed = changed
         self._event("world_changed", {"changed": changed,
-                                      "note": self.scenario.change_rule if changed else "retention offer withdrawn"})
+                                      "note": self.scenario.change_rule if changed else "the change is reverted"})
 
     def memory_snapshot(self) -> dict[str, Any]:
         """What is in memory now, for the page: lessons and review records by situation."""
@@ -854,5 +842,4 @@ def new_call_id() -> str:
     return f"local-{uuid.uuid4().hex[:12]}"
 
 
-__all__ = ["Caller", "DEFAULT_AGENT_ID", "DEFAULT_ENTITY_PATH", "INTENTS", "LiveAgent", "LiveDecision", "SAY",
-           "new_call_id", "rehydrate_history"]
+__all__ = ["Caller", "LiveAgent", "LiveDecision", "new_call_id", "rehydrate_history"]

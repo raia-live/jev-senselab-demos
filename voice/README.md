@@ -22,6 +22,13 @@ Vapi runs the call: the phone or browser audio, speech to text, the conversation
 text to speech (ElevenLabs if you connected it, Vapi's voices otherwise). This folder is the
 server Vapi talks to, the page you call from, and a simulator for when you have no microphone.
 
+Nothing the caller hears is scripted. Riley is given a character and a few rules (look the
+caller up before answering the substance, ask Jev before promising anything, never mention
+the machinery), and talks. Jev's decision comes back to the model as what happens next and
+what to get across, and Riley puts it in her own words. The business itself (Northwind Cloud,
+its intents, actions, policy and demo callers) is one file, `voice/business.toml`; swap it
+for yours and the same agent answers for your company ("Make it your business", below).
+
 ## What you need
 
 - The two keys from the main README (`TYPESAFE_API_KEY`, `AMFS_API_KEY`).
@@ -72,17 +79,21 @@ Then flip "retention offer live" and call as Priya. The policy still says transf
 first call transfers, the queue loses the caller, the review says so, and the next call keeps
 them in the bot.
 
-The five callers come with a seeded history (`voice/customers.py`), because a first demo call
-needs something to know; those entries are marked as seeded. Everything after them is written
-by the agent from what happened on a call. The history is kept in SenseLab at
+The five callers come with a seeded history (`[[personas]]` in `voice/business.toml`), because
+a first demo call needs something to know; those entries are marked as seeded. Everything after
+them is written by the agent from what happened on a call. The history is kept in SenseLab at
 `<entity>/customers/<id>`, one entry per contact.
+
+For a clean take, start on an empty memory: `VOICE_ENTITY_PATH=jev-demos/call_handling/take2`
+(the caller histories live under the entity, so they are re-seeded there too), then run the
+simulator for thirty calls before you record.
 
 ## What you see on the page
 
 The page is a live graph of the call: the caller, Riley (Vapi), Jev and SenseLab as boxes,
 with the traffic between them animated as it happens: the call connecting, SenseLab opening
-a run per possible situation, Riley asking Jev, Jev's answer going back, the line being
-spoken, the call ending, the outcome arriving and being sealed. One line under the graph
+a run per possible situation, Riley asking Jev, Jev's answer going back, Riley telling the
+caller, the call ending, the outcome arriving and being sealed. One line under the graph
 narrates each step. Below it a timeline shows the same call second by second, one lane per
 party: who was speaking when, the moment Riley looked the caller up, the moment Riley asked
 Jev, Jev's 200 ms, SenseLab opening the runs and sealing the outcome. "Details" opens a side
@@ -109,10 +120,12 @@ caller, with a note in the words a review would use. The world's rules are in
 the retention offer is live, consumer cancellations are kept by the bot. Nobody told the
 agent either rule. The page marks these outcomes "demo world".
 
-To report outcomes yourself instead (your own CRM, a survey, a person), end the call with
-`POST /api/calls/{id}/end` and `{"auto_review": false}`, then send
-`POST /api/outcome` with `{"decision_id", "severity", "note"}` when you know. The decision
-waits in `pending` until then. Vapi calls always get the automatic review.
+To report outcomes yourself instead (your own CRM, a survey, a person), set
+`outcomes.mode = "reported"` in the business file. Then nothing is assumed when a call ends:
+the decision waits, "Details" shows an "It worked / It did not" control for it, and
+`POST /api/outcome` with `{"decision_id", "severity", "note"}` does the same from code. The
+lesson is written the moment the outcome lands, however long that takes. In simulated mode a
+single call can still be held back with `POST /api/calls/{id}/end` and `{"auto_review": false}`.
 
 ## No microphone
 
@@ -139,6 +152,57 @@ demo), so pick the caller on the page and press "use this caller"; the next call
 number within ten minutes is that person, history and all. Without that, a phone caller is a
 consumer with no prior contacts and nothing on record.
 
+## How the conversation is shaped
+
+The system prompt (`voice/assistant.py`, `system_prompt`) is a character, not a flowchart:
+who Riley is on the phone, how she reacts before she acts, what she never says. The only
+scripted audio is a "still with you" if a lookup takes more than a couple of seconds. The
+rest is Vapi's conversational settings: backchannels while the caller is talking, a short
+wait plus smart endpointing so a pause mid-sentence is not taken for the end of a turn, two
+words from the caller interrupt Riley but a cough does not, and a word if the line goes
+quiet. The model runs at temperature 0.7 so two calls do not sound alike. The voice is
+ElevenLabs' multilingual v2 at low stability with some style, which is what makes it sound
+like a person rather than a reader. All of it is in `assistant_config`; the voice id and
+provider come from `VAPI_VOICE_ID` and `VAPI_VOICE_PROVIDER`.
+
+## Make it your business
+
+Everything about Northwind is in `voice/business.toml`. Copy it and point the server at
+your copy:
+
+```
+cp voice/business.toml my-business.toml
+VOICE_BUSINESS=my-business.toml VOICE_PUBLIC_URL=https://<tunnel> uv run uvicorn voice.server:app --port 8787
+```
+
+The server rebuilds the Vapi assistant from the file on start (`python -m voice.assistant
+--show-prompt` prints the prompt it will use). What to change:
+
+- `[company]`: the name, what you do, the agent's name, the greeting, and a line or two of
+  house style if your people talk a particular way.
+- `[[intents]]`: what people call about. For each, a label in plain words and, where the
+  agent needs a number before it can decide (an amount, a count), `needs` naming it and
+  `ahead` with the values to open memory for while the caller is still talking. List them
+  by how common they are; the first ones are ready first.
+- `[[actions]]`: what the agent can do at the decision point. `jev` is what Jev decides
+  between; `then` is what the agent gets across once it is chosen (in its own words, so
+  write it as facts, not a line); `words` is how it reads in a caller's history.
+- `[[policy]]`: your written rules, one per line. Jev follows them unless memory says a
+  rule has stopped working for a situation.
+- `[situation]`: how calls are grouped for learning. Intent and tier by default; add a split
+  where a number changes what works (the demo splits billing disputes by repeat callers and
+  by amount).
+- `[outcomes]`: `mode = "reported"` for a real business (see Outcomes), with the dollar cost
+  of a miss by how bad it was. Keep `simulated` only if you also write a scenario module
+  for the batch harness with the same actions, as `demos/call_handling/scenario.py` does.
+- `[memory]`: the agent id and entity path in SenseLab. A new entity path is an empty memory.
+- `[[personas]]`: callers to try, each with the account facts, a seeded history and a
+  script. Delete the demo's, or write your own.
+
+What stays the same: the account facts a call carries (name, tier, prior contacts in 30
+days, tenure), which come from the page or from `POST /api/profiles`; wire your own lookup
+into `caller_from_call` in `voice/server.py` if you have one. The tiers are yours to name.
+
 ## Latency
 
 `Run.begin` is two reads of the SenseLab API: the entity's briefing (3 to 4 s on the hosted
@@ -159,11 +223,13 @@ review and the seal run after the call, off the webhook's path.
 ## Files
 
 ```
+voice/business.toml  the business: company, intents, actions, policy, situations, outcomes, demo callers
+voice/business.py    reads it; builds the scenario Jev and SenseLab see, names situations, opens runs ahead
 voice/agent.py       Jev + SenseLab per call: open ahead, recall the caller, decide, seal with the outcome, repair loop
-voice/customers.py   the five demo callers, their seeded history, and the per-caller memory the agent writes
+voice/customers.py   the per-caller memory: seeded history, the brief the agent gets, the note it writes after a call
 voice/server.py      FastAPI: /vapi/webhook, the page, /api/*
-voice/assistant.py   create/update the Vapi assistant (prompt, tools, voice, server URL); --number
+voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice, server URL); --number
 voice/simulate.py    the scenario's callers, sent as Vapi tool calls
 voice/web/index.html the page
-demos/call_handling/ the scenario both the batch harness and the live agent use
+demos/call_handling/ the demo's scenario: the batch harness runs it, and it reviews the live agent's decisions
 ```

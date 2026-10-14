@@ -18,7 +18,8 @@ Routes
 
 Environment (``.env``): TYPESAFE_API_KEY, AMFS_API_KEY, and for Vapi VAPI_PUBLIC_KEY (the page),
 VAPI_PRIVATE_KEY (creating the assistant), optional VAPI_ASSISTANT_ID, VAPI_WEBHOOK_SECRET,
-VOICE_PUBLIC_URL (the tunnel URL Vapi can reach), VOICE_AGENT_ID, VOICE_ENTITY_PATH, VOICE_NOISE.
+VOICE_PUBLIC_URL (the tunnel URL Vapi can reach), VOICE_BUSINESS (the business file; default
+``voice/business.toml``), VOICE_AGENT_ID, VOICE_ENTITY_PATH, VOICE_NOISE.
 """
 
 from __future__ import annotations
@@ -38,8 +39,8 @@ from core import settings as S
 from core.scenario import SEVERITIES, Outcome
 
 from . import assistant as va
-from .agent import DEFAULT_AGENT_ID, DEFAULT_ENTITY_PATH, Caller, LiveAgent, new_call_id
-from .customers import PERSONAS
+from .agent import Caller, LiveAgent, new_call_id
+from .business import Business
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -56,8 +57,9 @@ class Config:
         self.assistant_id = (os.environ.get("VAPI_ASSISTANT_ID") or "").strip() or None
         self.webhook_secret = (os.environ.get("VAPI_WEBHOOK_SECRET") or "").strip() or None
         self.public_url = (os.environ.get("VOICE_PUBLIC_URL") or "").strip().rstrip("/") or None
-        self.agent_id = (os.environ.get("VOICE_AGENT_ID") or DEFAULT_AGENT_ID).strip()
-        self.entity_path = (os.environ.get("VOICE_ENTITY_PATH") or DEFAULT_ENTITY_PATH).strip()
+        self.business = Business.load()
+        self.agent_id = (os.environ.get("VOICE_AGENT_ID") or self.business.agent_id).strip()
+        self.entity_path = (os.environ.get("VOICE_ENTITY_PATH") or self.business.entity_path).strip()
         self.noise = float(os.environ.get("VOICE_NOISE") or 0.0)
         self.repair_loop = (os.environ.get("VOICE_REPAIR_LOOP") or "1").strip() not in ("0", "false", "no")
         self.phone_numbers: list[str] = []
@@ -72,13 +74,14 @@ profiles: dict[str, dict[str, Any]] = {}  # profile id -> caller facts registere
 @app.on_event("startup")
 def _startup() -> None:
     global agent
-    agent = LiveAgent(cfg.settings, agent_id=cfg.agent_id, entity_path=cfg.entity_path, noise=cfg.noise,
+    agent = LiveAgent(cfg.settings, cfg.business, agent_id=cfg.agent_id, entity_path=cfg.entity_path, noise=cfg.noise,
                       repair_loop=cfg.repair_loop)
+    log.info("business: %s (%s), %s", cfg.business.name, cfg.business.path, cfg.business.outcomes_mode)
     info = agent.start()
     log.info("agent ready: %s", json.dumps({k: v for k, v in info.items() if k != "loop"}))
     if cfg.private_key and cfg.public_url:
         try:
-            a = va.upsert_assistant(cfg.private_key, server_url=f"{cfg.public_url}/vapi/webhook",
+            a = va.upsert_assistant(cfg.private_key, business=cfg.business, server_url=f"{cfg.public_url}/vapi/webhook",
                                     secret=cfg.webhook_secret)
             cfg.assistant_id = a["id"]
             log.info("assistant %s (%s) points at %s/vapi/webhook", a["id"], a.get("name"), cfg.public_url)
@@ -131,33 +134,22 @@ def caller_from_call(call: dict[str, Any]) -> Caller:
         last = max(profiles.values(), key=lambda p: p["registered"])
         if time.time() - last["registered"] < 600:
             values = dict(last)
-    return Caller.from_mapping(values)
+    return _agent().caller_from(values)
 
 
-AFTER = {
-    "resolve_in_bot": ("Now handle it on this call in two or three sentences, answer any questions, and when there is "
-                       "nothing else, say goodbye and end the call."),
-    "transfer_to_agent": ("There is no human queue in this demo, so tell the caller a colleague will pick it up from "
-                          "here, answer any last question, thank them for calling, and end the call."),
-    "schedule_callback": ("Now confirm the number on file and that it will be within one business day. If they ask why "
-                          "this will work when earlier attempts did not, answer from what you know of their history. "
-                          "When there is nothing else, say goodbye and end the call."),
-    "issue_credit": "Now confirm the amount, answer any questions, and when there is nothing else, say goodbye and end the call.",
-}
+def tool_result(d: Any, business: Business) -> str:
+    """What the conversational model gets back from ``decide_next_step``: the decision, and
+    what to get across. The model puts it in its own words; the decision itself is not up
+    for discussion, and the result says so."""
+    label = business.action(d.action).label
+    return (f"Next step: {d.action}. Decided: {label.lower()}. This is what happens on this call; do not offer, "
+            f"hint at or agree to anything else. {d.then} Say it the way you would to a friend, in a sentence "
+            f"or two, then let them respond. When there is nothing else, say goodbye and end the call.")
 
 
-def tool_result(d: Any) -> str:
-    """What goes into the conversation history for the model."""
-    return f'Next step: {d.action}. The caller has just been told: "{d.say}" {AFTER[d.action]}'
-
-
-def tool_reply(tc: dict[str, Any], d: Any) -> dict[str, Any]:
-    """One entry of ``results``: the record for the model, and the line Vapi speaks to the
-    caller right away, word for word, so the decision is what the caller hears."""
-    return {
-        "toolCallId": tc.get("id"), "name": "decide_next_step", "result": tool_result(d),
-        "message": {"type": "request-complete", "role": "assistant", "content": d.say},
-    }
+def tool_reply(tc: dict[str, Any], d: Any, business: Business) -> dict[str, Any]:
+    """One entry of ``results``. No scripted line: the model tells the caller in its own words."""
+    return {"toolCallId": tc.get("id"), "name": "decide_next_step", "result": tool_result(d, business)}
 
 
 @app.post("/vapi/webhook")
@@ -197,7 +189,7 @@ async def vapi_webhook(request: Request) -> JSONResponse:
                     args = {"summary": args}
             if name == "decide_next_step":
                 d = ag.decide(call_id, dict(args or {}), caller=caller_from_call(call))
-                results.append(tool_reply(tc, d))
+                results.append(tool_reply(tc, d, ag.business))
             elif name == "recall_customer":
                 text = ag.recall(call_id, dict(args or {}), caller=caller_from_call(call))
                 results.append({"toolCallId": tc.get("id"), "name": name, "result": text})
@@ -256,7 +248,7 @@ def api_config() -> dict[str, Any]:
         "public_key": cfg.public_key, "assistant_id": cfg.assistant_id, "agent_id": cfg.agent_id,
         "entity_path": cfg.entity_path, "dashboard": S.DASHBOARD_URL, "browser_calls": bool(cfg.public_key and cfg.assistant_id),
         "noise": cfg.noise, "changed": _agent().changed, "phone_numbers": cfg.phone_numbers,
-        "personas": [p.public() for p in PERSONAS],
+        "business": cfg.business.public(),
     }
 
 
@@ -286,7 +278,7 @@ def api_loop() -> dict[str, Any]:
 async def api_profiles(request: Request) -> dict[str, Any]:
     body = await request.json()
     pid = uuid.uuid4().hex[:10]
-    c = Caller.from_mapping(body)
+    c = _agent().caller_from(body)
     profiles[pid] = {"profile_id": pid, "registered": time.time(), "name": c.name, "tier": c.tier,
                      "prior_contacts_30d": c.prior_contacts_30d, "tenure_months": c.tenure_months,
                      "customer_id": c.customer_id}
@@ -307,15 +299,16 @@ async def api_calls(request: Request) -> dict[str, Any]:
     """Text mode: a call without Vapi. The simulator and the page's text box use it."""
     body = await request.json()
     call_id = str(body.get("call_id") or new_call_id())
-    _agent().call_started(call_id, Caller.from_mapping(body.get("caller")), call_type="text")
+    _agent().call_started(call_id, _agent().caller_from(body.get("caller")), call_type="text")
     return {"call_id": call_id}
 
 
 @app.post("/api/calls/{call_id}/decide")
 async def api_decide(call_id: str, request: Request) -> dict[str, Any]:
     body = await request.json()
-    d = _agent().decide(call_id, dict(body), caller=Caller.from_mapping(body.get("caller")))
-    return {"decision": d.public(), "result": tool_result(d)}
+    ag = _agent()
+    d = ag.decide(call_id, dict(body), caller=ag.caller_from(body.get("caller")))
+    return {"decision": d.public(), "result": tool_result(d, ag.business)}
 
 
 @app.post("/api/calls/{call_id}/end")
@@ -325,8 +318,9 @@ async def api_end(call_id: str, request: Request) -> dict[str, Any]:
     pending = [d.public() for d in ag.pending_decisions(call_id)]
     ag.end_call_later(call_id, ended_reason=str(body.get("ended_reason") or "text-mode"),
                       auto_review=bool(body.get("auto_review", True)))
-    # The outcomes land a few seconds later; poll /api/state for them (the page does).
-    return {"decisions": pending}
+    # In simulated mode the outcomes land a few seconds later; poll /api/state for them (the
+    # page does). In reported mode they wait for POST /api/outcome.
+    return {"decisions": pending, "awaiting_outcome": not ag.business.simulated}
 
 
 @app.post("/api/outcome")
@@ -338,7 +332,7 @@ async def api_outcome(request: Request) -> dict[str, Any]:
     success = severity == "success"
     ag = _agent()
     outcome = Outcome(success=success, severity=severity, note=str(body.get("note") or "")[:300],
-                      true_success=success, cost_usd=float(ag.scenario.cost_by_severity.get(severity, 0.0)))
+                      true_success=success, cost_usd=float(ag.business.cost_by_severity.get(severity, 0.0)))
     try:
         d = ag.report_outcome(str(body.get("decision_id")), outcome, source=str(body.get("source") or "human"))
     except KeyError:

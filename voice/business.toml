@@ -1,0 +1,272 @@
+# The business this voice agent answers for. This file is the demo's: Northwind Cloud, a
+# small software company with a support line. To run the agent for your own business, copy
+# it, edit, and point the server at your copy:
+#
+#     cp voice/business.toml my-business.toml
+#     VOICE_BUSINESS=my-business.toml uv run uvicorn voice.server:app --port 8787
+#
+# The server builds the Vapi assistant (prompt, tools, greeting) from this file on start, so
+# a change here is a restart away. voice/README.md, "Make it your business", walks through
+# each section.
+
+[company]
+name = "Northwind Cloud"
+# One phrase about the company, for the agent's own sense of where it works.
+what = "a small software company"
+agent_name = "Riley"
+greeting = "Hi, thanks for calling Northwind Cloud, this is Riley. What can I help you with?"
+# Anything particular about how your people talk to customers. Plain prose; optional.
+house_style = ""
+
+[memory]
+# Where this agent's memory lives in SenseLab. Both are overridable from the environment
+# (VOICE_AGENT_ID, VOICE_ENTITY_PATH). A new entity path starts with an empty memory.
+agent_id = "jev-voice-support-agent"
+entity_path = "jev-demos/call_handling/live"
+
+[caller]
+# What your account lookup knows before the caller says a word. The tiers are the plan or
+# segment names your business uses; "prior_contacts_30d" and "tenure_months" are counted.
+tiers = ["consumer", "business", "enterprise"]
+default_tier = "consumer"
+
+[situation]
+# A call's situation is what the agent learns per: intent and tier, split further where a
+# number changes what works. The splits below give billing disputes four situations
+# (first or repeat caller, small or large amount); other intents are intent/tier.
+[[situation.splits]]
+intents = ["billing_dispute"]
+field = "prior_contacts_30d"
+at = 2
+below = "first"
+from = "repeat"
+
+[[situation.splits]]
+intents = ["billing_dispute"]
+field = "amount_usd"
+at = 200
+below = "small"
+from = "large"
+
+# -- intents: what a caller can be calling about -----------------------------------------
+# The agent recognises these and decides once it knows which one it is. "needs" lists the
+# facts the agent must have before it decides; "ahead" lists field values to open memory
+# for while the caller is still talking (one run per entry; omit it for one run).
+# Order them by how common they are: the first ones are ready first.
+
+[[intents]]
+id = "billing_dispute"
+label = "a charge they dispute or do not recognise"
+needs = ["amount_usd"]
+ahead = [{ amount_usd = 50 }, { amount_usd = 400 }]
+
+[[intents]]
+id = "cancellation"
+label = "cancelling their plan or closing the account"
+
+[[intents]]
+id = "outage"
+label = "the service is down or failing for them"
+
+[[intents]]
+id = "upgrade"
+label = "a plan change, more seats, an upgrade"
+
+[[intents]]
+id = "how_to"
+label = "how to do something in the product"
+
+# -- fields: what the agent asks for ------------------------------------------------------
+[fields]
+amount_usd = "the amount in dollars"
+
+# -- actions: what the agent can do at the decision point ---------------------------------
+# "jev" is the description Jev decides between. "words" is how the action reads in a
+# caller's history ("Riley booked a specialist callback"). "then" is what the agent gets
+# across once the action is chosen, in its own words.
+
+[[actions]]
+id = "resolve_in_bot"
+label = "Resolve on the call"
+jev = "Handle it on this call: explain, adjust, apply the standard offer or walk the caller through it."
+words = "handled it on the call"
+then = "Handle it here and now: explain, adjust or walk them through it, in a few sentences, then see if that covers it."
+
+[[actions]]
+id = "transfer_to_agent"
+label = "Transfer to an agent"
+jev = "Hand the call to a human agent now."
+words = "transferred the call to an agent"
+then = "A colleague takes it from here. There is no live queue in this demo, so say a colleague will pick it up and get back to them, take any last question, and thank them."
+
+[[actions]]
+id = "schedule_callback"
+label = "Schedule a callback"
+jev = "Book a callback from a specialist within one business day and end the call."
+words = "booked a specialist callback"
+then = "A specialist calls them back within one business day, with their account open and the authority to fix it. Confirm the number on file. If they doubt it will work this time, answer from their history: what was tried, what came of it, why this is different."
+
+[[actions]]
+id = "issue_credit"
+label = "Issue a credit"
+jev = "Apply an account credit for the disputed amount on this call."
+words = "applied a credit"
+then = "The credit for the disputed amount goes on their account now. Confirm the amount and when it shows."
+
+# -- the written policy -------------------------------------------------------------------
+# What Jev is told to do. Seeded into SenseLab as memory entries too, so the repair loop
+# has something to correct when the outcomes say a rule is wrong.
+
+[[policy]]
+key = "policy-billing-small"
+text = "Billing questions and disputes under $200: resolve in the bot. Explain the charge and adjust it if it is clearly wrong."
+
+[[policy]]
+key = "policy-billing-large"
+text = "Billing disputes of $200 or more: transfer to a billing agent."
+
+[[policy]]
+key = "policy-cancellation"
+text = "Cancellation requests: transfer to the retention team."
+
+[[policy]]
+key = "policy-outage"
+text = "Outage and service-down reports: resolve in the bot with the status page information and the current ETA."
+
+[[policy]]
+key = "policy-upgrade-howto"
+text = "Upgrades, plan changes and how-to questions: resolve in the bot."
+
+[[policy]]
+key = "policy-enterprise"
+text = "Enterprise accounts: transfer to the enterprise desk for anything other than a how-to question."
+
+[jev]
+instructions = "Choose what the support agent does next on this call."
+# What a failed decision looks like here, for the judge that grades each call afterwards.
+judge_rubric = """A decision failed when the review reports a callback about the same issue, a cancellation, \
+a caller who hung up in a transfer queue, a credit reversed by finance, or agent time spent on \
+a call the bot could have closed. Name the failure by the intent, the tier, whether the caller \
+was a repeat caller, and the action taken, for example 'repeat billing dispute resolved in bot; \
+called back and cancelled' or 'consumer cancellation transferred; hung up in queue'. Keep the \
+phrase identical across runs that fail the same way."""
+
+[outcomes]
+# How the agent learns whether a decision worked.
+#   "simulated": the demo world reviews each decision when the call ends, from the scenario
+#                named in "simulator" (the same one the batch harness runs).
+#   "reported":  nothing is assumed. Mark each decision on the page, or POST /api/outcome
+#                from the system that knows (your CRM, the survey, the churn report).
+mode = "simulated"
+simulator = "demos.call_handling.scenario:SCENARIO"
+# What the page calls the simulated world's mid-run change (the switch in the header).
+change_label = "retention offer live"
+# Dollars a wrong decision costs, by how wrong. Used for the running total on the page.
+cost_by_severity = { minor_failure = 35, failure = 600, critical_failure = 5000 }
+
+# -- demo callers ---------------------------------------------------------------------------
+# People to call as. Each has the account facts, a seeded history (days ago, what happened)
+# that SenseLab remembers them by, and a script for the person playing them. Delete these
+# for your own business, or write your own callers.
+
+[[personas]]
+id = "dana-whitfield"
+label = "Dana, third call about the same $49 (consumer)"
+name = "Dana"
+tier = "consumer"
+prior_contacts_30d = 3
+tenure_months = 39
+intent = "billing_dispute"
+amount_usd = 49
+history = [
+  [21, "Called about a $49 charge that appeared twice on the September invoice. Handled on the call: told the duplicate would drop off the next invoice. What came of it: it did not; the charge posted again."],
+  [12, "Called again about the same $49 duplicate. A $49 credit was applied on the call. What came of it: finance reversed the credit eight days later as unsupported, and the caller was not told."],
+  [5, "Called a third time, upset that the credit had vanished. Transferred to an agent; 31 minutes in the queue. The agent said a billing specialist would call back. What came of it: no callback was made."],
+]
+notes = "Prefers to be called back on the mobile number on file, afternoons."
+script = [
+  "Hi. I'm calling about my bill. Again.",
+  "Yes, that one. And last time someone promised to call me back and nobody did.",
+  "Why would it work this time? That's exactly what they told me last week.",
+  "Fine. Will the credit come back too, or is that gone?",
+  "Okay. Thanks.",
+]
+why = "The written policy says a small billing dispute is resolved on the call. For Dana that has been tried, and a credit, and a transfer; each time she called back. Only the outcomes of those calls can teach the agent that, and only a memory of Dana lets Riley say so instead of asking her to explain a fourth time."
+pushback = "Riley has what was tried and what came of it, so 'why would it work this time' gets a real answer."
+
+[[personas]]
+id = "marcus-oyelaran"
+label = "Marcus, first question about a $29 line (business)"
+name = "Marcus"
+tier = "business"
+prior_contacts_30d = 0
+tenure_months = 18
+intent = "billing_dispute"
+amount_usd = 29
+history = [
+  [540, "Account opened on the business plan, five seats."],
+  [61, "Added three seats through the admin page (five to eight). No contact with support."],
+]
+notes = ""
+script = [
+  "Hi, there's a $29 line on this month's invoice I don't recognise.",
+  "Oh. Is that the extra seats? I did add some people a while back.",
+  "Right, that makes sense then. That's all, thanks.",
+]
+why = "A plain case: the bot explains the charge. The history says where the $29 came from."
+
+[[personas]]
+id = "priya-raman"
+label = "Priya, cancelling (consumer; flip the switch)"
+name = "Priya"
+tier = "consumer"
+prior_contacts_30d = 0
+tenure_months = 11
+intent = "cancellation"
+amount_usd = 0
+history = [
+  [330, "Signed up on the monthly plan after a two-week trial."],
+  [40, "Usage review: two logins in the last sixty days, down from near daily in the spring. No contact with support."],
+]
+notes = ""
+script = [
+  "Hi, I want to cancel my account. I'm just not using it enough.",
+  "What would the offer be?",
+  "Hmm. Okay, I'll give it two more months then.",
+]
+why = "With the retention offer off, a human saves the account. Turn it on and the bot's offer saves it instead; the written policy still says transfer. Watch SenseLab notice the switch."
+
+[[personas]]
+id = "tomas-eriksen"
+label = "Tomas, enterprise outage (the expensive mistake)"
+name = "Tomas"
+tier = "enterprise"
+prior_contacts_30d = 1
+tenure_months = 30
+intent = "outage"
+amount_usd = 0
+history = [
+  [900, "Enterprise plan, 240 seats. Named account manager: Jordan Blake."],
+  [16, "SSO logins failed for about forty minutes. Escalated to engineering; root cause was a certificate rotation at the identity provider. Post-incident review sent to the account manager."],
+]
+notes = "Wants a named person and a time, not a status page."
+script = [
+  "Our whole team is locked out. The dashboard has been down for twenty minutes.",
+  "Is this the SSO thing again? We had this two weeks ago.",
+  "Okay. Who's calling me, and when?",
+]
+why = "Enterprise goes to a named person. A bot answer here is the $5,000 mistake."
+
+[[personas]]
+id = "lena-hoffmann"
+label = "Lena, a how-to (nothing to learn)"
+name = "Lena"
+tier = "consumer"
+prior_contacts_30d = 0
+tenure_months = 5
+intent = "how_to"
+amount_usd = 0
+history = [[150, "Trial converted to the monthly plan. No contact with support."]]
+notes = ""
+script = ["Hi, how do I export my data to a spreadsheet?", "Where's that setting?", "Got it. Thanks."]
+why = "The bot answers. Nothing for memory to add, and the page says so."

@@ -169,6 +169,17 @@ class CallHandling(Scenario):
 
     # -- cases ---------------------------------------------------------------------------
 
+    def classify(self, fields: dict[str, Any], *, changed: bool) -> dict[str, Any]:
+        """The hidden right answer and the case flags for a live call's fields, so the
+        voice agent's decisions are reviewed the way the batch harness reviews a case."""
+        intent, tier = str(fields.get("intent")), str(fields.get("tier"))
+        prior, amount = int(fields.get("prior_contacts_30d") or 0), float(fields.get("amount_usd") or 0)
+        return {
+            "truth": truth_of(fields, changed=changed),
+            "is_tacit": intent == "billing_dispute" and prior >= 2 and amount < 200 and tier != "enterprise",
+            "is_changed": intent == "cancellation" and tier == "consumer" and changed,
+        }
+
     def make_case(self, episode: int, rng: random.Random, *, changed: bool, probe: bool) -> Case:
         weights = KIND_WEIGHTS
         if changed:

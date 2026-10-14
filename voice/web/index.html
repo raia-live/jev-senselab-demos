@@ -107,7 +107,7 @@
 <body>
 <div class="app">
   <header>
-    <div class="brand"><span class="dot" id="dot"></span><b>Northwind support line</b><span>Vapi answers · Jev decides · SenseLab improves it, call after call</span></div>
+    <div class="brand"><span class="dot" id="dot"></span><b id="brand">support line</b><span>Vapi answers · Jev decides · SenseLab improves it, call after call</span></div>
     <div class="spacer"></div>
     <div class="ctl">
       <select id="scenario"></select>
@@ -115,12 +115,12 @@
       <button class="btn stop" id="hangup" disabled>Hang up</button>
     </div>
     <div class="phone"><span id="phone">no number</span><button class="btn sm" id="usephone" title="Phone calls carry no account facts; this makes the next call to the number this caller">use this caller</button><span class="ok" id="phoneok"></span></div>
-    <label class="tog" title="Off: humans save consumer cancellations. On: the bot's offer saves them. The policy says transfer either way; nobody told the agent."><input type="checkbox" id="changed"><span class="sw"></span>retention offer live</label>
+    <label class="tog" id="changed-wrap" title="The simulated world's mid-run change. The written policy does not change with it; nobody tells the agent."><input type="checkbox" id="changed"><span class="sw"></span><span id="changed-l">the change is live</span></label>
     <button class="btn" id="details">Details</button>
   </header>
 
   <section class="stage">
-    <div class="legend"><span><i style="background:var(--you)"></i>caller</span><span><i style="background:var(--riley)"></i>Riley (Vapi)</span><span><i style="background:var(--jev)"></i>Jev</span><span><i style="background:var(--sl)"></i>SenseLab RSI (recursive self-improvement)</span><span><i style="background:var(--world)"></i>the world</span></div>
+    <div class="legend"><span><i style="background:var(--you)"></i>caller</span><span><i style="background:var(--riley)"></i><span id="lg-agent">the agent</span> (Vapi)</span><span><i style="background:var(--jev)"></i>Jev</span><span><i style="background:var(--sl)"></i>SenseLab RSI (recursive self-improvement)</span><span><i style="background:var(--world)"></i>the world</span></div>
     <div class="clock" id="clock"></div>
     <svg class="graph" id="graph" viewBox="0 0 1100 400" preserveAspectRatio="xMidYMid meet">
       <defs>
@@ -143,7 +143,7 @@
       <g class="node" id="n-riley" style="--c:var(--riley)" transform="translate(350,73)">
         <rect width="236" height="104"/><g clip-path="url(#clip-node)">
         <text class="ic" x="18" y="28" fill="var(--riley)">VOICE AGENT</text>
-        <text class="nm" x="18" y="56">Riley</text><text class="st" x="18" y="80" id="riley-st">Vapi · GPT-4.1 · ElevenLabs</text></g>
+        <text class="nm" x="18" y="56" id="nm-agent">Agent</text><text class="st" x="18" y="80" id="riley-st">Vapi · GPT-4.1 · ElevenLabs</text></g>
       </g>
       <g class="node" id="n-jev" style="--c:var(--jev)" transform="translate(700,73)">
         <rect width="236" height="104"/><g clip-path="url(#clip-node)">
@@ -172,6 +172,7 @@
     <pre class="slot" id="cust">(none yet)</pre>
     <h3>Same call, decided twice</h3>
     <div id="alone" class="small">no decision yet</div>
+    <div id="mark" class="small" style="display:none"></div>
     <h3>Jev + SenseLab: the four actions</h3>
     <div id="probs" class="small">no decision yet</div>
     <h3>What SenseLab put in front of Jev</h3>
@@ -182,7 +183,7 @@
     <div id="records" class="small"></div>
     <h3>No microphone? Type the call</h3>
     <textarea id="t-text" rows="3">You charged me $49 twice for the same period. This is the third time I'm calling about it.</textarea>
-    <div class="row"><select id="t-intent"><option>billing_dispute</option><option>cancellation</option><option>outage</option><option>upgrade</option><option>how_to</option></select><input id="t-amount" type="number" value="49" style="width:110px"><button class="btn sm" id="t-send">Decide</button></div>
+    <div class="row"><select id="t-intent"></select><input id="t-amount" type="number" value="49" style="width:110px"><button class="btn sm" id="t-send">Decide</button></div>
     <h3>Links</h3>
     <div class="small"><a id="dash" target="_blank">SenseLab dashboard</a> · agent <span class="mono" id="agent"></span></div>
   </aside>
@@ -200,7 +201,7 @@
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const ACTION = { resolve_in_bot: "Resolve in the bot", transfer_to_agent: "Transfer to an agent", schedule_callback: "Schedule a callback", issue_credit: "Issue a credit" };
+let ACTION = {}, AGENT = "the agent", REPORTED = false;
 const C = { you: "#d97706", riley: "#4f6bed", jev: "#db2777", sl: "#059669", world: "#7c3aed", bad: "#dc2626", ok: "#059669" };
 const fmtPhone = (n) => { const m = String(n).match(/^\+1(\d{3})(\d{3})(\d{4})$/); return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : n; };
 const hhmm = (s) => new Date(s * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -210,7 +211,7 @@ const scenario = () => SCENARIOS[Number($("scenario").value)] || {};
 const caller = () => { const s = scenario(); return { name: s.name, tier: s.tier, prior_contacts_30d: s.prior_contacts_30d, tenure_months: s.tenure_months, customer_id: s.id }; };
 function showScenario() {
   const s = scenario(); if (!s.id) return;
-  $("say").innerHTML = (s.script || []).map((q, i) => `<div class="turn"><span class="n">${i + 1}</span>“${esc(q)}”</div>`).join("") + `<div class="small" style="margin-top:4px">Riley talks in between; answer her, push back, ask why.</div>`;
+  $("say").innerHTML = (s.script || []).map((q, i) => `<div class="turn"><span class="n">${i + 1}</span>“${esc(q)}”</div>`).join("") + `<div class="small" style="margin-top:4px">${esc(AGENT)} talks in between; answer, push back, ask why.</div>`;
   $("why").textContent = s.why; $("t-text").value = s.script?.[0] || ""; $("t-intent").value = s.intent; $("t-amount").value = s.amount_usd;
   $("cust").innerHTML = `<span class="small">Call as ${esc(s.name)} and SenseLab's memory of them shows here.</span>`;
 }
@@ -272,7 +273,7 @@ function apply(e, live) {
     case "call_started": {
       c.start = e.t; c.caller = e.caller; c.type = e.type || c.type;
       if (live) { current = id; resetNodes(); }
-      if (live && isCur) { glow("you", 1500); pulse("e-you-riley", { label: "call connected", color: C.you }); status("you", `${c.caller.name} · ${c.caller.tier}, ${c.caller.prior_contacts_30d} prior`); status("riley", "answering"); caption(`<span class="you">Call connected.</span> Riley answers.`, `${esc(c.caller.name)}, a ${esc(c.caller.tier)} account with ${c.caller.prior_contacts_30d} contact${c.caller.prior_contacts_30d === 1 ? "" : "s"} with support this month. The account facts arrive with the call; what they want, and what happened last time, SenseLab has.`); }
+      if (live && isCur) { glow("you", 1500); pulse("e-you-riley", { label: "call connected", color: C.you }); status("you", `${c.caller.name} · ${c.caller.tier}, ${c.caller.prior_contacts_30d} prior`); status("riley", "answering"); caption(`<span class="you">Call connected.</span> ${esc(AGENT)} answers.`, `${esc(c.caller.name)}, a ${esc(c.caller.tier)} account with ${c.caller.prior_contacts_30d} contact${c.caller.prior_contacts_30d === 1 ? "" : "s"} with support this month. The account facts arrive with the call; what they want, and what happened last time, SenseLab has.`); }
       break; }
     case "memory_opening": {
       c.openAt = e.t; c.runs = e.runs;
@@ -291,7 +292,7 @@ function apply(e, live) {
       break; }
     case "transcript": {
       c.lines.push({ role: e.role, text: e.text, t: e.t });
-      if (live && isCur) { if (e.role === "user") pulse("e-you-riley", { label: "", color: C.you, dur: 700 }); else pulse("e-you-riley", { label: "", color: C.riley, reverse: true, dur: 700 }); $("sub").innerHTML = `<span style="color:${e.role === "user" ? C.you : C.riley}">${e.role === "user" ? "Caller" : "Riley"}:</span> “${esc(e.text)}”`; }
+      if (live && isCur) { if (e.role === "user") pulse("e-you-riley", { label: "", color: C.you, dur: 700 }); else pulse("e-you-riley", { label: "", color: C.riley, reverse: true, dur: 700 }); $("sub").innerHTML = `<span style="color:${e.role === "user" ? C.you : C.riley}">${e.role === "user" ? "Caller" : esc(AGENT)}:</span> “${esc(e.text)}”`; }
       break; }
     case "recall": {
       c.recall = { t: e.t, ms: e.ms, contacts: e.contacts, seeded: e.seeded, name: e.name, brief: e.brief };
@@ -301,37 +302,37 @@ function apply(e, live) {
         status("sl", e.contacts ? `knows ${e.name}: ${e.contacts} contact${e.contacts === 1 ? "" : "s"}` : `${e.name}: nothing on record`);
         status("riley", "picking up the thread");
         caption(e.contacts ? `<span class="sl">SenseLab</span> knows ${esc(e.name)}.` : `<span class="sl">SenseLab</span> has nothing on ${esc(e.name)} yet.`,
-          e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}, what was tried and what came of each, in ${e.ms} ms. Riley can say "is this the same charge?" instead of asking ${esc(e.name)} to explain a fourth time.` : `A first call. Riley asks what is going on; whatever happens on this call is remembered for the next one.`);
+          e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}, what was tried and what came of each, in ${e.ms} ms. ${esc(AGENT)} can pick up the thread instead of asking ${esc(e.name)} to explain it all again.` : `A first call. ${esc(AGENT)} asks what is going on; whatever happens on this call is remembered for the next one.`);
       }
       if (c.recall && current === c.id) $("cust").textContent = e.brief || "";
       break; }
     case "customer_noted": {
       c.noted = { t: e.t, text: e.text };
-      if (live && isCur) { glow("sl", 2000); status("sl", `wrote a line in ${esc(c.recall?.name || "the caller")}'s history`); caption(`<span class="sl">SenseLab</span> remembers this call.`, `Added to ${esc(c.recall?.name || "the caller")}'s history: “${esc(e.text)}” Call again as the same person and Riley starts from here.`); }
+      if (live && isCur) { glow("sl", 2000); status("sl", `wrote a line in ${esc(c.recall?.name || "the caller")}'s history`); caption(`<span class="sl">SenseLab</span> remembers this call.`, `Added to ${esc(c.recall?.name || "the caller")}'s history: “${esc(e.text)}” Call again as the same person and ${esc(AGENT)} starts from here.`); }
       break; }
     case "tool_call": {
       c.toolCall = e.t; c.intent = e.intent; c.situation = e.situation;
-      if (live && isCur) { pulse("e-riley-jev", { label: "decide_next_step", color: C.riley }); glow("jev"); status("riley", "asking Jev"); status("jev", "deciding"); caption(`Riley asks <span class="jev">Jev</span> what to do.`, `Intent heard: <b>${esc(e.intent.replace(/_/g, " "))}</b>. Situation: <span class="mono">${esc(e.situation)}</span>. Jev gets the written policy plus what SenseLab learned about exactly this situation.`); }
+      if (live && isCur) { pulse("e-riley-jev", { label: "decide_next_step", color: C.riley }); glow("jev"); status("riley", "asking Jev"); status("jev", "deciding"); caption(`${esc(AGENT)} asks <span class="jev">Jev</span> what to do.`, `Intent heard: <b>${esc(e.intent.replace(/_/g, " "))}</b>. Situation: <span class="mono">${esc(e.situation)}</span>. Jev gets the written policy plus what SenseLab learned about exactly this situation.`); }
       break; }
     case "decision": {
       c.decision = { t: e.t, situation: e.situation, action: e.action, confidence: e.confidence, jev_ms: e.jev_ms, memory_ms: e.memory_ms, prefetched: e.prefetched, basis: e.basis, alone: e.alone_action, alone_conf: e.alone_confidence };
       if (live && isCur) {
         pulse("e-sl-jev", { label: e.prefetched ? "guidance, already open" : `guidance · ${e.memory_ms} ms`, color: C.sl, dur: 700 });
         pulse("e-riley-jev", { label: ACTION[e.action] || e.action, color: C.jev, reverse: true, delay: 650 });
-        pulse("e-you-riley", { label: "Riley says the line", color: C.riley, reverse: true, delay: 1500 });
-        setTimeout(() => { unglow("jev"); status("jev", `${ACTION[e.action] || e.action} · ${e.jev_ms} ms`); status("riley", "speaking the line"); }, 700);
+        pulse("e-you-riley", { label: `${AGENT} tells the caller`, color: C.riley, reverse: true, delay: 1500 });
+        setTimeout(() => { unglow("jev"); status("jev", `${ACTION[e.action] || e.action} · ${e.jev_ms} ms`); status("riley", "telling the caller"); }, 700);
         status("sl", e.prefetched ? "guidance was waiting" : `guidance in ${e.memory_ms} ms`);
         const differs = e.alone_action && e.alone_action !== e.action;
         caption(`<span class="jev">Jev + SenseLab:</span> ${esc(ACTION[e.action] || e.action)} <span style="color:var(--muted);font-size:15px">${Math.round(e.confidence * 100)}% · ${e.jev_ms} ms</span>`,
           (e.alone_action ? (differs ? `<b>Jev alone, on the written policy, would have chosen ${esc(ACTION[e.alone_action] || e.alone_action)}</b> (${Math.round(e.alone_confidence * 100)}%). ` : `Jev alone would have chosen the same. `) : "")
           + (e.basis && e.basis !== "none" ? `The decision rested on <span class="mono">${esc(e.basis)}</span>. ` : "")
-          + `Riley speaks the line to the caller, word for word.`);
+          + `${esc(AGENT)} tells the caller, in their own words.`);
       }
       refreshDecision(id);
       break; }
     case "call_ended": {
       c.end = e.t;
-      if (live && isCur) { unglow("you"); unglow("riley"); status("riley", "call over"); pulse("e-riley-world", { label: "call ended", color: C.riley }); glow("world", 2500); caption(`Call ended.`, `Now the world replies: did that work? In production it is the survey, the churn, the callback that did or did not happen. The demo's world answers at once.`); }
+      if (live && isCur) { unglow("you"); unglow("riley"); status("riley", "call over"); pulse("e-riley-world", { label: "call ended", color: C.riley }); glow("world", 2500); caption(`Call ended.`, REPORTED ? `Now the world replies: did that work? Mark it in Details when you know (or POST /api/outcome from the system that does). The lesson is written the moment it lands.` : `Now the world replies: did that work? In production it is the survey, the churn, the callback that did or did not happen. The demo's world answers at once.`); }
       break; }
     case "outcome": {
       c.outcome = { t: e.t, success: e.success, note: e.note, cost: e.cost_usd, seal_ms: e.seal_ms, trace: e.trace_id, keys: e.causal_keys || [], alone: e.alone || null };
@@ -350,7 +351,7 @@ function apply(e, live) {
       }
       break; }
     case "recording_saved": if (live) setTimeout(state, 300); break;
-    case "world_changed": if (live) caption(`The world changed.`, `Retention offer ${e.changed ? "is live: the bot's offer now saves consumer cancellations" : "is off: humans save consumer cancellations again"}. The written policy did not change. Watch SenseLab notice.`); $("changed").checked = !!e.changed; break;
+    case "world_changed": if (live) caption(`The world changed.`, `${esc(e.note || "")} The written policy did not change. Watch SenseLab notice.`); $("changed").checked = !!e.changed; break;
   }
   if (live && isCur) drawTimeline();
 }
@@ -360,7 +361,7 @@ function resetNodes() {
 }
 
 /* -- timeline -------------------------------------------------------------------------- */
-const LANES = [["you", "Caller", C.you], ["riley", "Riley", C.riley], ["jev", "Jev", C.jev], ["sl", "SenseLab RSI", C.sl]];
+const LANES = [["you", "Caller", C.you], ["riley", "Agent", C.riley], ["jev", "Jev", C.jev], ["sl", "SenseLab RSI", C.sl]];
 function drawTimeline() {
   const svg = $("tl"); const c = current && calls[current];
   const W = svg.clientWidth || 1000, H = svg.clientHeight || 220, L = 96, R = 24, top = 34, lh = (H - top - 20) / LANES.length;
@@ -415,6 +416,13 @@ function refreshDecision(callId) {
   $("alone").innerHTML = d.alone_action ? `With SenseLab: <b>${esc(ACTION[d.action] || d.action)}</b> (${Math.round(d.confidence * 100)}%). Alone, on the written policy: <b>${esc(ACTION[d.alone_action] || d.alone_action)}</b> (${Math.round((d.alone_confidence || 0) * 100)}%).${d.alone_outcome ? ` The world's verdict on the alone choice: ${d.alone_outcome.success ? "would have worked" : "a miss"}${d.alone_outcome.cost_usd ? `, $${Number(d.alone_outcome.cost_usd).toLocaleString()}` : ""}.` : ""}` : "no decision yet";
   $("probs").innerHTML = Object.entries(d.probabilities || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="prob ${k === d.action ? "pick" : ""}"><span>${esc(ACTION[k] || k)}</span><span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span><span class="mono" style="text-align:right">${Math.round(v * 100)}%</span></div>`).join("");
   $("slot").textContent = d.memory_text || "(empty)";
+  const mk = $("mark");
+  if (REPORTED && !d.outcome) {
+    mk.style.display = "block";
+    mk.innerHTML = `<div style="margin-top:6px">Did <b>${esc(ACTION[d.action] || d.action)}</b> work for this caller? <input id="mark-note" placeholder="what happened (optional)" style="width:100%;margin:6px 0"><div class="row"><button class="btn sm" id="mark-ok">It worked</button><button class="btn sm" id="mark-bad">It did not</button><select id="mark-sev" style="width:auto"><option value="failure">a miss</option><option value="minor_failure">a small miss</option><option value="critical_failure">a bad one</option></select></div></div>`;
+    const send = async (ok) => { await post("/api/outcome", { decision_id: d.id, success: ok, severity: ok ? "success" : $("mark-sev").value, note: $("mark-note").value, source: "page" }); mk.style.display = "none"; setTimeout(state, 800); setTimeout(memory, 1500); };
+    $("mark-ok").onclick = () => send(true); $("mark-bad").onclick = () => send(false);
+  } else mk.style.display = "none";
 }
 async function memory() {
   const m = await (await fetch("/api/memory")).json(); if (m.error) return;
@@ -484,10 +492,17 @@ $("t-send").onclick = async () => {
 
 async function init() {
   cfg = await (await fetch("/api/config")).json();
+  const biz = cfg.business || {};
+  AGENT = biz.agent_name || AGENT; REPORTED = biz.outcomes_mode === "reported";
+  ACTION = Object.fromEntries((biz.actions || []).map((a) => [a.id, a.label]));
+  $("brand").textContent = `${biz.name || ""} support line`; $("lg-agent").textContent = AGENT; $("nm-agent").textContent = AGENT; LANES[1][1] = AGENT;
+  document.title = `${biz.name || "Voice"} support line: Jev + SenseLab`;
+  $("t-intent").innerHTML = (biz.intents || []).map((i) => `<option value="${esc(i.id)}">${esc(i.id)}</option>`).join("");
+  if (biz.change_rule) { $("changed-wrap").title = biz.change_rule; $("changed-l").textContent = biz.change_label || "the change is live"; } else $("changed-wrap").style.display = "none";
   $("phone").textContent = cfg.phone_numbers?.length ? cfg.phone_numbers.map(fmtPhone).join(" · ") : "no phone number";
   $("mempath").textContent = cfg.entity_path; $("agent").textContent = cfg.agent_id; $("dash").href = cfg.dashboard;
   $("changed").checked = !!cfg.changed;
-  loadScenarios(cfg.personas);
+  loadScenarios(biz.personas);
   status("sl", "ready");
   // history: build the models without animating, then show the latest call
   const r = await (await fetch(`/api/events?since=0`)).json();

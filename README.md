@@ -161,7 +161,9 @@ The last one is also live: [`voice/`](voice/) puts the same decision behind a ph
 can call from your browser or a real number (Vapi runs the call; Jev decides; the outcome
 goes back into memory when you hang up). Every call is decided twice, Jev alone and Jev with
 SenseLab, so the page can show the difference, and SenseLab remembers each caller between
-calls. See [voice/README.md](voice/README.md).
+calls. The business it answers for is one file (`voice/business.toml`): swap in your company,
+intents, actions and policy and the same agent runs your line. See
+[voice/README.md](voice/README.md).
 
 ```bash
 uv run python -m core.runner --scenario ap_invoices        # full run: 120 episodes, ~35 min

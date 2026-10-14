@@ -4,9 +4,12 @@ import datetime as dt
 from types import SimpleNamespace
 
 from voice.agent import Caller
-from voice.customers import PERSONAS, CustomerMemory, brief, contact_entry, seed_entries
+from voice.business import Business
+from voice.customers import CustomerMemory, brief, contact_entry, seed_entries
 
 TODAY = dt.date(2026, 10, 14)
+BUSINESS = Business.load()
+PERSONAS = BUSINESS.personas
 
 
 def test_personas_are_distinct_and_scripted():
@@ -52,7 +55,7 @@ def test_brief_for_an_unknown_caller():
 def test_contact_entry_from_an_outcome():
     key, value = contact_entry("fake-adf2e126", intent="billing_dispute", summary="charged $49 twice, third call about it",
                                action="schedule_callback", outcome_note="Specialist called back next morning; CSAT 5/5.",
-                               worked=True, today=TODAY)
+                               worked=True, agent_name="Riley", action_words=BUSINESS.action_words(), today=TODAY)
     assert key == "contact-2026-10-14-f2e126"
     assert value["text"] == ("Called about billing dispute: charged $49 twice, third call about it. Riley booked a "
                              "specialist callback. What came of it: Specialist called back next morning; CSAT 5/5.")
@@ -60,9 +63,16 @@ def test_contact_entry_from_an_outcome():
     _, failed = contact_entry("x", intent="billing_dispute", summary="s", action="issue_credit", outcome_note="Credit reversed",
                               worked=False, today=TODAY)
     assert failed["text"].endswith("Credit reversed. It did not hold.")
+    assert failed["text"].startswith("Called about billing dispute: s. The agent issue credit.")  # no words given: the id
 
 
 def test_caller_customer_id_is_a_slug():
     c = Caller.from_mapping({"customer_id": "Dana Whitfield!"})
     assert c.customer_id == "danawhitfield"
     assert Caller.from_mapping({}).customer_id == ""
+
+
+def test_caller_tier_is_checked_against_the_business():
+    c = Caller.from_mapping({"tier": "platinum"}, tiers=BUSINESS.tiers, default_tier=BUSINESS.default_tier)
+    assert c.tier == "consumer"
+    assert Caller.from_mapping({"tier": "platinum"}).tier == "platinum"  # unchecked without a business
