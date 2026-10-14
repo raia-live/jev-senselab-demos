@@ -297,11 +297,30 @@ class LiveAgent:
             return warm
         return None
 
-    def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall") -> None:
+    def brief_for(self, caller: Caller) -> str:
+        """What the agent knows about this caller before the first word: the account facts and
+        their history, as prose for the prompt. Read from SenseLab now."""
+        memory: cust.CustomerMemory | None = None
+        if caller.customer_id:
+            try:
+                memory = self._fetch_customer(caller)
+            except Exception as exc:  # noqa: BLE001 - the brief is the account facts alone
+                log.warning("customer memory for %s: %s", caller.customer_id, exc)
+        return cust.brief(caller, memory)
+
+    def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall", brief: str | None = None) -> None:
+        """A call is connecting. *brief* is the caller's history as it went into the prompt,
+        when the server had it (``brief_for``); it is shown on the page as the first read."""
         with self._lock:
             self.calls[call_id] = {"id": call_id, "started": time.time(), "caller": asdict(caller),
-                                   "type": call_type, "status": "in-progress", "decisions": 0}
+                                   "type": call_type, "status": "in-progress", "decisions": 0,
+                                   **({"customer_brief": brief} if brief else {})}
         self._event("call_started", {"call_id": call_id, "caller": asdict(caller)})
+        if brief:
+            contacts = sum(1 for line in brief.splitlines() if line.startswith("- "))
+            self._event("recall", {"call_id": call_id, "customer_id": caller.customer_id, "name": caller.name,
+                                   "contacts": contacts, "seeded": 0, "topic": "call start", "record": False,
+                                   "ms": 0, "brief": brief[:1800]})
         if self._current_warm(wait_s=0) is None:
             self._refresh_warm()
         with self._lock:

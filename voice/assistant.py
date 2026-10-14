@@ -9,6 +9,11 @@ what SenseLab remembers of this caller (earlier contacts and what came of them) 
 can pick the thread up, and ``decide_next_step`` with Jev's decision. Nothing the caller hears
 is scripted: the model says the decision in its own words, and the tools carry no canned
 lines, only a "still with you" if an answer takes long.
+
+Two stacks (``$VOICE_STACK``): ``realtime``, OpenAI's speech-to-speech model, where one model
+hears and speaks and the voice is its own; and ``pipeline``, Deepgram to GPT-4.1 to
+ElevenLabs. The caller's history goes into the prompt as ``{{history}}`` when the call
+starts, so the agent knows the person from its first words.
 """
 
 from __future__ import annotations
@@ -43,43 +48,60 @@ def _needs_lines(b: Business) -> str:
 
 def system_prompt(b: Business) -> str:
     """Who the agent is and how a call goes, for this business. Written for a person on the
-    phone, not a procedure; the few hard rules (recall first, decide before promising, say
-    nothing of the machinery) are in it."""
+    phone, in the sectioned, bulleted shape the realtime models follow best (GPT-4.1 follows
+    it too). The caller's history is in it from the first word (``{{history}}``, filled per
+    call by the server); the few hard rules (recall, decide before promising, say nothing of
+    the machinery) are in capitals."""
     where = f"{b.name}, {b.what}" if b.what else b.name
-    style = f"\n\nHouse style: {b.house_style.strip()}" if b.house_style.strip() else ""
-    return f"""You are {b.agent_name}, on the phones at {where}. You are talking to a customer right now, out loud, on a live call.
+    style = f"\n- {b.house_style.strip()}" if b.house_style.strip() else ""
+    return f"""# Role
+You are {b.agent_name}, on the phones at {where}. You are talking to a customer right now, out loud, on a live call.
 
-Who you are on the phone: warm, unhurried, direct. You sound like someone who has done this a long time and still likes \
-people. Short sentences. Contractions. One thought at a time. You react before you act ("Oh no. Twice?"), you let \
-people finish, and you do not fill silence with corporate noise. A little humour is fine, never at the caller's expense. \
-No lists, no "I understand your frustration", no "absolutely", no "great question". Their name once early and perhaps \
-once near the end, not every turn. Never the same filler twice in one call. Numbers and dates the way people say them \
-("forty-nine dollars", "the twenty-third"). If you did not catch something, say so and ask again; do not guess.{style}
+# Personality and voice
+- Warm, unhurried, direct. Someone who has done this a long time and still likes people.
+- Short sentences. Contractions. One thought at a time. A natural pace; do not rush.
+- React before you act ("Oh no. Twice?"). Let people finish. Do not fill silence with corporate noise.
+- A little humour is fine, never at the caller's expense.
+- Never: lists, "I understand your frustration", "absolutely", "great question", the same filler twice in one call.
+- Their name once early and perhaps once near the end, not every turn.
+- Numbers and dates the way people say them ("forty-nine dollars", "the twenty-third").
+- If you did not catch something, say so and ask again. Do not guess.{style}
 
-What the account already tells you: name {{{{name}}}}, {{{{tier}}}} plan, {{{{prior_contacts_30d}}}} contact(s) with support in \
-the last 30 days, {{{{tenure_months}}}} months with us. Do not recite these; use them.
+# What you know about this caller
+- From the account: name {{{{name}}}}, {{{{tier}}}} plan, {{{{prior_contacts_30d}}}} contact(s) with support in the last 30 days, \
+{{{{tenure_months}}}} months with us.
+- Their history with us, as of the moment this call connected:
+{{{{history}}}}
+- You KNOW this person. Use it from your first words after the greeting, not only when asked: pick up the thread, refer to \
+one or two specifics in your own words, and if the history makes the problem obvious, check it in one short question \
+("Is this the same forty-nine dollar charge?") instead of asking them to start from the beginning.
+- If they ask what you know about them, what happened last time, what was promised, or what you talked about before: \
+TELL THEM, plainly and in order, from the history. Dates in people's terms ("three weeks ago", "last Thursday"), who did \
+what, and what came of it. Then ask if that matches what they remember.
+- If something we did let them down, say so and apologise once, like a person, not a policy.
+- If the history is empty, say so lightly and ask what is going on.
+- recall_customer gives you a fresh copy of the history plus what tends to work for people in their situation. Call it \
+when they say what they are calling about, and again whenever they ask about earlier calls or a different problem comes up.
 
-How a call goes:
-- The greeting has been said. Listen. As soon as you know roughly what they are calling about, even vaguely ("my bill, \
-again"), say one short natural thing that fits what they said, then call recall_customer with what you heard. Do not \
-make them tell the whole story first.
-- recall_customer gives you their history: earlier contacts, what was tried, what came of it, and what tends to work for \
-people in their situation. Talk like someone who has read the file: pick up the thread, mention one or two specifics in \
-your own words, and if the history makes the problem obvious, check it in one short question ("Is this the same \
-forty-nine dollar charge?") rather than asking them to start from the beginning. If something we did let them down, say \
-so plainly and apologise once, like a person, not a policy. If there is no history, say so lightly and ask what is going on.
-- Then talk it through. Answer what they ask from what you know. One question at a time. If they are upset, let them be \
-upset for a moment before you move on. What they can be calling about: {_intent_lines(b)}. {_needs_lines(b)}
-- When you know what it is (and the amount, where one is needed), call decide_next_step. Until it answers, do not \
-promise, book, transfer, credit or resolve anything, and do not hint at which way it will go. Its answer is what happens \
-on this call. Put it in your own words, warmly, in a sentence or two, and let them react.
+# How a call goes
+- The greeting has been said. Listen.
+- As soon as you know roughly what they are calling about, even vaguely ("my bill, again"), say one short natural thing \
+that fits what they said, then call recall_customer with what you heard. Do not make them tell the whole story first.
+- Talk it through. Answer what they ask from what you know. One question at a time. If they are upset, let them be upset \
+for a moment before you move on.
+- What they can be calling about: {_intent_lines(b)}. {_needs_lines(b)}
+- When you know what it is (and the amount, where one is needed), call decide_next_step. UNTIL IT ANSWERS, DO NOT promise, \
+book, transfer, credit or resolve anything, and do not hint at which way it will go.
+- Its answer is what happens on this call. Put it in your own words, warmly, in a sentence or two, and let them react.
 - If they push back ("why would it work this time?"), answer from their actual history: what was tried, what came of it, \
-why this is different. Hold the course kindly; do not re-decide because they are unhappy. Call decide_next_step again \
-only if a different problem comes up or new facts change the picture.
+why this is different. Hold the course kindly; do not re-decide because they are unhappy. Call decide_next_step again only \
+if a different problem comes up or new facts change the picture.
 - Before you go, ask if there is anything else. Then say goodbye the way you would to a regular, and use endCall.
 
-Never mention tools, systems, policies, models, memory, Jev or SenseLab. If asked whether you are a person, be honest \
-in a few words and carry on.
+# Rules
+- NEVER mention tools, systems, models, Jev or SenseLab by name. What you know is "your file" or "my notes here".
+- If asked whether you are a person, be honest in a few words and carry on.
+- Speak English.
 """
 
 
@@ -91,7 +113,8 @@ def recall_tool(b: Business) -> dict[str, Any]:
             "name": "recall_customer",
             "description": ("What we know about this caller: earlier contacts, what was tried, what came of it, and what "
                             "has worked for callers in their situation. Call it as soon as the caller says what they are "
-                            "calling about, before you respond to the substance."),
+                            "calling about, before you respond to the substance; again whenever they ask what you know "
+                            "about them or what happened on earlier calls; and again if a different problem comes up."),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -142,25 +165,23 @@ def decide_tool(b: Business) -> dict[str, Any]:
     }
 
 
-def assistant_config(b: Business, *, server_url: str, secret: str | None, voice_id: str, voice_provider: str) -> dict[str, Any]:
-    voice: dict[str, Any] = {"provider": voice_provider, "voiceId": voice_id}
-    if voice_provider == "11labs":
-        # Multilingual v2 is ElevenLabs' most natural model; it costs a few hundred ms over
-        # turbo, which the prefetch leaves room for. Lower stability lets the delivery vary;
-        # style adds the small inflections that make it sound like a person.
-        voice.update({"model": "eleven_multilingual_v2", "stability": 0.4, "similarityBoost": 0.8,
-                      "style": 0.35, "useSpeakerBoost": True})
+REALTIME_MODEL = "gpt-realtime-2"
+REALTIME_VOICES = ("alloy", "echo", "shimmer", "marin", "cedar")
+STACKS = ("realtime", "pipeline")
+
+
+def assistant_config(b: Business, *, server_url: str, secret: str | None, stack: str = "realtime",
+                     voice_id: str | None = None, voice_provider: str | None = None) -> dict[str, Any]:
+    """The assistant for *stack*: ``realtime`` is OpenAI's speech-to-speech model (one model
+    hears and speaks; the voice is the model's own, which is what makes it sound like a
+    person), ``pipeline`` is the classic Deepgram -> GPT-4.1 -> ElevenLabs chain."""
+    if stack not in STACKS:
+        raise ValueError(f"stack must be one of {STACKS}, not {stack!r}")
+    tools = [recall_tool(b), decide_tool(b), {"type": "endCall"}]
     cfg: dict[str, Any] = {
         "name": ASSISTANT_NAME,
         "firstMessage": b.greeting,
         "firstMessageMode": "assistant-speaks-first",
-        "model": {
-            "provider": "openai", "model": "gpt-4.1", "temperature": 0.7,
-            "messages": [{"role": "system", "content": system_prompt(b)}],
-            "tools": [recall_tool(b), decide_tool(b), {"type": "endCall"}],
-        },
-        "voice": voice,
-        "transcriber": {"provider": "deepgram", "model": "nova-3", "language": "en"},
         # The conversational settings. Backchannels ("mm-hm") while the caller talks; a short
         # wait plus smart endpointing so a pause mid-thought is not taken for the end of the
         # turn; a couple of words from the caller interrupt, a cough does not; a word if the
@@ -179,6 +200,25 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, voice_
         "maxDurationSeconds": 600,
         "backgroundSound": "off",
     }
+    if stack == "realtime":
+        voice = voice_id if voice_id in REALTIME_VOICES else "cedar"
+        cfg["model"] = {"provider": "openai", "model": REALTIME_MODEL, "temperature": 0.7, "maxTokens": 300,
+                        "messages": [{"role": "system", "content": system_prompt(b)}], "tools": tools}
+        cfg["voice"] = {"provider": "openai", "voiceId": voice}
+        # No transcriber: the model hears the audio itself. (Vapi still produces transcripts.)
+        return cfg
+    voice_provider = voice_provider or "11labs"
+    voice = {"provider": voice_provider, "voiceId": voice_id or "matilda"}
+    if voice_provider == "11labs":
+        # Turbo v2.5 is ElevenLabs' conversational model: close to multilingual v2 in quality
+        # and a few hundred ms faster, which keeps the turns tight. Stability around 0.5 and
+        # no style exaggeration is their own advice for speech that does not wobble.
+        voice.update({"model": "eleven_turbo_v2_5", "stability": 0.5, "similarityBoost": 0.75,
+                      "style": 0.0, "useSpeakerBoost": True})
+    cfg["model"] = {"provider": "openai", "model": "gpt-4.1", "temperature": 0.7,
+                    "messages": [{"role": "system", "content": system_prompt(b)}], "tools": tools}
+    cfg["voice"] = voice
+    cfg["transcriber"] = {"provider": "deepgram", "model": "nova-3", "language": "en"}
     return cfg
 
 
@@ -203,6 +243,24 @@ class VapiApi:
 
     def list_phone_numbers(self) -> list[dict[str, Any]]:
         return list(self._call("GET", "/phone-number"))
+
+    def our_numbers(self, assistant_id: str, server_url: str) -> list[dict[str, Any]]:
+        """The numbers that belong to this demo: on the assistant, or already routed here."""
+        return [n for n in self.list_phone_numbers()
+                if n.get("number") and (n.get("assistantId") == assistant_id or
+                                        str((n.get("server") or {}).get("url") or "") == server_url)]
+
+    def route_numbers(self, assistant_id: str, *, server_url: str, secret: str | None) -> list[str]:
+        """Have our numbers ask this server which assistant to use (``assistant-request``),
+        so a phone call can carry the caller's facts and history into the prompt. Returns
+        the numbers."""
+        out: list[str] = []
+        for n in self.our_numbers(assistant_id, server_url):
+            # Set every start: the secret is never read back, and the tunnel URL can change.
+            self._call("PATCH", f"/phone-number/{n['id']}",
+                       json={"assistantId": None, "server": {"url": server_url, **({"secret": secret} if secret else {})}})
+            out.append(str(n["number"]))
+        return out
 
     def create_free_number(self, assistant_id: str, *, area_code: str = "415", name: str = "SenseLab demo") -> dict[str, Any]:
         """A free Vapi US number, pointed at the assistant (inbound calls go to it directly).
@@ -234,19 +292,27 @@ def presigned_recording(private_key: str, call_id: str) -> str | None:
 
 
 def upsert_assistant(private_key: str, *, business: Business | None = None, server_url: str, secret: str | None = None,
-                     voice_id: str | None = None, voice_provider: str | None = None) -> dict[str, Any]:
-    """Create the assistant, or update the one with this name. Returns the assistant."""
+                     stack: str | None = None, voice_id: str | None = None, voice_provider: str | None = None) -> dict[str, Any]:
+    """Create the assistant, or update the one with this name. Returns the assistant.
+    The stack is ``$VOICE_STACK`` (default ``realtime``); the voice ``$VAPI_VOICE_ID`` (and
+    ``$VAPI_VOICE_PROVIDER`` for the pipeline stack)."""
     business = business or Business.load()
-    voice_id = voice_id or os.environ.get("VAPI_VOICE_ID") or "matilda"
-    voice_provider = voice_provider or os.environ.get("VAPI_VOICE_PROVIDER") or "11labs"
-    cfg = assistant_config(business, server_url=server_url, secret=secret, voice_id=voice_id, voice_provider=voice_provider)
+    stack = stack or os.environ.get("VOICE_STACK") or "realtime"
+    voice_id = voice_id or os.environ.get("VAPI_VOICE_ID") or None
+    voice_provider = voice_provider or os.environ.get("VAPI_VOICE_PROVIDER") or None
+    cfg = assistant_config(business, server_url=server_url, secret=secret, stack=stack, voice_id=voice_id,
+                           voice_provider=voice_provider)
     api = VapiApi(private_key)
     try:
         existing = next((a for a in api.list_assistants() if a.get("name") == ASSISTANT_NAME), None)
         if existing:
-            # A fixed goodbye from an earlier version would be spoken on top of the model's
-            # own; a PATCH only merges, so clear it explicitly.
-            return api.update_assistant(existing["id"], {**cfg, "endCallMessage": None})
+            # A PATCH only merges: a fixed goodbye from an earlier version would be spoken on
+            # top of the model's own, and a transcriber left over from the pipeline stack has
+            # no place on the realtime one. Clear both explicitly.
+            patch = {**cfg, "endCallMessage": None}
+            if "transcriber" not in cfg:
+                patch["transcriber"] = None
+            return api.update_assistant(existing["id"], patch)
         return api.create_assistant(cfg)
     finally:
         api.close()
@@ -260,8 +326,9 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv(REPO_ROOT / ".env")
     p = argparse.ArgumentParser(description="create or update the Vapi assistant for the voice demo")
     p.add_argument("--server-url", help="the public URL of this server's /vapi/webhook (default: $VOICE_PUBLIC_URL + /vapi/webhook)")
-    p.add_argument("--voice", help="voice id (default: $VAPI_VOICE_ID or 'matilda')")
-    p.add_argument("--voice-provider", help="voice provider (default: $VAPI_VOICE_PROVIDER or '11labs')")
+    p.add_argument("--stack", choices=STACKS, help="realtime (OpenAI speech-to-speech, default) or pipeline (Deepgram, GPT-4.1, ElevenLabs); default $VOICE_STACK")
+    p.add_argument("--voice", help="voice id: cedar/marin/alloy/echo/shimmer for realtime, an ElevenLabs voice for the pipeline (default $VAPI_VOICE_ID)")
+    p.add_argument("--voice-provider", help="pipeline voice provider (default: $VAPI_VOICE_PROVIDER or '11labs')")
     p.add_argument("--number", action="store_true", help="also get a free US phone number for the assistant, if it has none")
     p.add_argument("--area-code", default="415")
     p.add_argument("--business", help="the business file (default: $VOICE_BUSINESS or voice/business.toml)")
@@ -278,16 +345,16 @@ def main(argv: list[str] | None = None) -> int:
     if server_url == "/vapi/webhook":
         raise SystemExit("pass --server-url or set VOICE_PUBLIC_URL")
     a = upsert_assistant(key, business=business, server_url=server_url, secret=os.environ.get("VAPI_WEBHOOK_SECRET") or None,
-                         voice_id=args.voice, voice_provider=args.voice_provider)
+                         stack=args.stack, voice_id=args.voice, voice_provider=args.voice_provider)
     out: dict[str, Any] = {"assistant_id": a["id"], "name": a.get("name"), "business": business.name,
                            "server_url": server_url, "voice": a.get("voice"), "model": (a.get("model") or {}).get("model")}
     if args.number:
         api = VapiApi(key)
         try:
-            numbers = [n for n in api.list_phone_numbers() if n.get("assistantId") == a["id"]]
-            if not numbers:
-                numbers = [api.create_free_number(a["id"], area_code=args.area_code)]
-            out["phone_numbers"] = [n.get("number") for n in numbers]
+            if not api.our_numbers(a["id"], server_url):
+                api.create_free_number(a["id"], area_code=args.area_code)
+            out["phone_numbers"] = api.route_numbers(a["id"], server_url=server_url,
+                                                     secret=os.environ.get("VAPI_WEBHOOK_SECRET") or None)
         finally:
             api.close()
     print(json.dumps(out, indent=2))

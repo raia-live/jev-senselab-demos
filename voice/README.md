@@ -12,15 +12,19 @@ The caller gets the second. The page shows both, and when the outcome comes in i
 the first would have cost. That is the comparison the demo exists for.
 
 SenseLab also remembers the caller. Each person who rings has their own history in memory
-(earlier contacts, what was tried, what came of it), read at the start of the call and written
-to when the call's outcome is known. So Riley can say "is this the same forty-nine dollar
+(earlier contacts, what was tried, what came of it). It is read before the call connects and
+goes into the prompt, so Riley knows who is on the line from the first word, and it is written
+to when the call's outcome is known. Ask her "what do you know about me?" or "what did we talk
+about last time?" and she tells you, in order. She can say "is this the same forty-nine dollar
 charge?" instead of asking someone to explain a problem for the fourth time, and can answer
 "why would it work this time?" with what actually happened the last three times. Call twice as
 the same person and the second call starts from the first.
 
-Vapi runs the call: the phone or browser audio, speech to text, the conversational model (GPT-4.1),
-text to speech (ElevenLabs if you connected it, Vapi's voices otherwise). This folder is the
-server Vapi talks to, the page you call from, and a simulator for when you have no microphone.
+Vapi runs the call: the phone or browser audio and the speech. By default the speech is
+OpenAI's realtime model (`gpt-realtime-2`), which listens and talks directly, with no
+transcription step in between; that is what makes it sound like a person on a line rather
+than text read aloud ("The voice", below). This folder is the server Vapi talks to, the page
+you call from, and a simulator for when you have no microphone.
 
 Nothing the caller hears is scripted. Riley is given a character and a few rules (look the
 caller up before answering the substance, ask Jev before promising anything, never mention
@@ -34,7 +38,8 @@ for yours and the same agent answers for your company ("Make it your business", 
 - The two keys from the main README (`TYPESAFE_API_KEY`, `AMFS_API_KEY`).
 - A [Vapi](https://vapi.ai) account. Its public key goes in `VAPI_PUBLIC_KEY` (the browser uses
   it to start calls), its private key in `VAPI_PRIVATE_KEY` (the server uses it to create the
-  assistant). Optionally connect ElevenLabs to your Vapi account for the voice.
+  assistant). The default voice stack needs nothing else; for the ElevenLabs stack, connect
+  ElevenLabs to your Vapi account.
 - A tunnel so Vapi can reach your laptop: `ngrok` works (`brew install ngrok`).
 
 ```
@@ -146,24 +151,51 @@ call after that starts from what they taught.
 uv run python -m voice.assistant --server-url https://<tunnel>/vapi/webhook --number
 ```
 
-gets a free Vapi US number pointed at the assistant. Inbound calls hit the same server. A
-phone call carries no account facts (there is no caller-id lookup behind the number in this
-demo), so pick the caller on the page and press "use this caller"; the next call to the
-number within ten minutes is that person, history and all. Without that, a phone caller is a
-consumer with no prior contacts and nothing on record.
+gets a free Vapi US number and routes it through this server: when the number rings, Vapi
+asks the server who should answer, and the server replies with the assistant and the caller's
+account facts and history, so a phone call starts with as much known as a browser call. A
+phone call carries no account facts of its own (there is no caller-id lookup behind the
+number in this demo), so pick the caller on the page and press "use this caller"; the page
+reads their history and the next call to the number within ten minutes is that person.
+Without that, a phone caller is a consumer with no prior contacts and nothing on record. The
+server re-routes any number it owns on every start, so a new tunnel URL needs nothing more
+than a restart.
+
+Phone audio is narrowband (8 kHz; the same line quality as any phone call), so the voice is
+at its best in a browser call, where the audio is wideband. If you are recording a demo,
+record a browser call.
 
 ## How the conversation is shaped
 
 The system prompt (`voice/assistant.py`, `system_prompt`) is a character, not a flowchart:
-who Riley is on the phone, how she reacts before she acts, what she never says. The only
-scripted audio is a "still with you" if a lookup takes more than a couple of seconds. The
-rest is Vapi's conversational settings: backchannels while the caller is talking, a short
-wait plus smart endpointing so a pause mid-sentence is not taken for the end of a turn, two
-words from the caller interrupt Riley but a cough does not, and a word if the line goes
-quiet. The model runs at temperature 0.7 so two calls do not sound alike. The voice is
-ElevenLabs' multilingual v2 at low stability with some style, which is what makes it sound
-like a person rather than a reader. All of it is in `assistant_config`; the voice id and
-provider come from `VAPI_VOICE_ID` and `VAPI_VOICE_PROVIDER`.
+who Riley is on the phone, how she reacts before she acts, what she never says, and what she
+knows about the person calling (their account facts and their history, filled in per call).
+The only scripted audio is a "still with you" if a lookup takes more than a couple of
+seconds. The rest is Vapi's conversational settings: backchannels while the caller is
+talking, a short wait plus smart endpointing so a pause mid-sentence is not taken for the
+end of a turn, two words from the caller interrupt Riley but a cough does not, and a word if
+the line goes quiet. The model runs at temperature 0.7 so two calls do not sound alike. All
+of it is in `assistant_config`.
+
+Riley looks the caller up a second time when they ask what she knows about them, bring up an
+earlier call, or turn out to be calling about something else, so the answer is what memory
+holds rather than what the prompt happened to carry.
+
+## The voice
+
+Two stacks, chosen with `VOICE_STACK`:
+
+- `realtime` (default): OpenAI's `gpt-realtime-2` hears the caller and speaks back
+  directly. There is no speech-to-text step and no text-to-speech step, so it carries tone,
+  pace and hesitation the way a person does, reacts mid-sentence, and does not read
+  punctuation aloud. This is the same kind of model behind ChatGPT's voice mode. Voices:
+  `marin`, `cedar` (the default), `alloy`, `echo`, `shimmer`; set `VAPI_VOICE_ID`.
+- `pipeline`: Deepgram transcribes, GPT-4.1 writes, ElevenLabs (`eleven_turbo_v2_5`)
+  speaks. More control over each stage and any ElevenLabs voice (`VAPI_VOICE_ID`, with
+  `VAPI_VOICE_PROVIDER=11labs`), at the cost of a text hop in the middle. Needs ElevenLabs
+  connected to your Vapi account.
+
+Jev's decision works the same on both: a tool call from the model, answered by this server.
 
 ## Make it your business
 
@@ -228,7 +260,7 @@ voice/business.py    reads it; builds the scenario Jev and SenseLab see, names s
 voice/agent.py       Jev + SenseLab per call: open ahead, recall the caller, decide, seal with the outcome, repair loop
 voice/customers.py   the per-caller memory: seeded history, the brief the agent gets, the note it writes after a call
 voice/server.py      FastAPI: /vapi/webhook, the page, /api/*
-voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice, server URL); --number
+voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice stack, server URL); --number
 voice/simulate.py    the scenario's callers, sent as Vapi tool calls
 voice/web/index.html the page
 demos/call_handling/ the demo's scenario: the batch harness runs it, and it reviews the live agent's decisions

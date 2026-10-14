@@ -114,7 +114,8 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
 
     b = Business.from_dict(tomllib.loads(ANOTHER), path=tmp_path / "harbor.toml")
     prompt = system_prompt(b)
-    assert prompt.startswith("You are Sam, on the phones at Harbor Dental.")
+    assert "You are Sam, on the phones at Harbor Dental." in prompt
+    assert "{{history}}" in prompt and "{{name}}" in prompt  # filled per call by the server
     assert "booking or moving an appointment (appointment)" in prompt
     assert "for a bill they have a question about, the amount in dollars" in prompt
     assert "Northwind" not in prompt and "Riley" not in prompt
@@ -122,6 +123,11 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     assert tool["function"]["parameters"]["properties"]["intent"]["enum"] == ["appointment", "bill"]
     assert "amount_usd" in tool["function"]["parameters"]["properties"]
     assert all(m["type"] != "request-start" for m in tool["messages"])  # nothing scripted
-    cfg = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, voice_id="matilda", voice_provider="11labs")
-    assert cfg["firstMessage"] == b.greeting and "endCallMessage" not in cfg
-    assert cfg["backchannelingEnabled"] is True
+    rt = assistant_config(b, server_url="https://x/vapi/webhook", secret=None)
+    assert rt["model"]["model"] == "gpt-realtime-2" and rt["voice"] == {"provider": "openai", "voiceId": "cedar"}
+    assert "transcriber" not in rt and rt["firstMessage"] == b.greeting and "endCallMessage" not in rt
+    assert rt["backchannelingEnabled"] is True
+    pl = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, stack="pipeline", voice_id="sarah")
+    assert pl["model"]["model"] == "gpt-4.1" and pl["voice"]["voiceId"] == "sarah" and pl["transcriber"]["provider"] == "deepgram"
+    with pytest.raises(ValueError):
+        assistant_config(b, server_url="https://x", secret=None, stack="telepathy")

@@ -29,10 +29,12 @@ import logging
 import os
 import time
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from core import settings as S
@@ -87,12 +89,14 @@ def _startup() -> None:
             log.info("assistant %s (%s) points at %s/vapi/webhook", a["id"], a.get("name"), cfg.public_url)
             api = va.VapiApi(cfg.private_key)
             try:
-                cfg.phone_numbers = [str(n.get("number")) for n in api.list_phone_numbers()
-                                     if n.get("assistantId") == a["id"] and n.get("number")]
+                # Our numbers answer through this server (assistant-request), so each call
+                # gets the caller's facts and history in its prompt. Point them here.
+                cfg.phone_numbers = api.route_numbers(a["id"], server_url=f"{cfg.public_url}/vapi/webhook",
+                                                      secret=cfg.webhook_secret)
             finally:
                 api.close()
             if cfg.phone_numbers:
-                log.info("phone numbers on the assistant: %s", cfg.phone_numbers)
+                log.info("phone numbers answering through this server: %s", cfg.phone_numbers)
         except Exception as exc:  # noqa: BLE001 - the page says so; text mode still works
             log.warning("could not upsert the Vapi assistant: %s", exc)
     elif cfg.assistant_id:
@@ -119,14 +123,14 @@ def _agent() -> LiveAgent:
 OUR_KEYS = ("name", "tier", "prior_contacts_30d", "tenure_months", "profile_id", "customer_id")
 
 
-def caller_from_call(call: dict[str, Any]) -> Caller:
-    """The caller's account facts. A browser call carries them in the variable values the
-    page passed to ``vapi.start``; a phone call carries the carrier's values and nothing of
-    ours, so it gets the profile most recently registered on the page ("Use this caller for
-    the next phone call"), if that was within ten minutes."""
+def profile_from_call(call: dict[str, Any]) -> dict[str, Any]:
+    """The caller's account facts, and their history if it was prepared. A browser call
+    carries them in the variable values the page passed to ``vapi.start``; a phone call
+    carries the carrier's values and nothing of ours, so it gets the profile most recently
+    registered on the page ("use this caller"), if that was within ten minutes."""
     raw = dict((call.get("assistantOverrides") or {}).get("variableValues") or {})
     raw.update(call.get("metadata") or {})
-    values = {k: raw[k] for k in OUR_KEYS if raw.get(k) not in (None, "")}
+    values = {k: raw[k] for k in (*OUR_KEYS, "history") if raw.get(k) not in (None, "")}
     pid = str(values.get("profile_id") or "")
     if pid and pid in profiles:
         values = {**profiles[pid], **values}
@@ -134,7 +138,16 @@ def caller_from_call(call: dict[str, Any]) -> Caller:
         last = max(profiles.values(), key=lambda p: p["registered"])
         if time.time() - last["registered"] < 600:
             values = dict(last)
-    return _agent().caller_from(values)
+    return values
+
+
+def caller_from_call(call: dict[str, Any]) -> Caller:
+    return _agent().caller_from(profile_from_call(call))
+
+
+def variable_values(profile: dict[str, Any]) -> dict[str, str]:
+    """What the prompt's ``{{...}}`` are filled with: the account facts and the history."""
+    return {k: str(v) for k, v in profile.items() if k in (*OUR_KEYS, "history") and k != "profile_id"}
 
 
 def tool_result(d: Any, business: Business) -> str:
@@ -166,15 +179,23 @@ async def vapi_webhook(request: Request) -> JSONResponse:
     if typ == "status-update":
         status = str(msg.get("status") or "")
         if status == "in-progress" and call_id not in ag.calls:
-            ag.call_started(call_id, caller_from_call(call), call_type=str(call.get("type") or "webCall"))
+            prof = profile_from_call(call)
+            ag.call_started(call_id, ag.caller_from(prof), call_type=str(call.get("type") or "webCall"),
+                            brief=str(prof.get("history") or "") or None)
         return JSONResponse({})
 
     if typ == "assistant-request":
         if not cfg.assistant_id:
             return JSONResponse({"error": "no assistant configured on this server"})
-        # An inbound phone call: pre-open the runs now, before the caller has spoken.
-        ag.call_started(call_id, caller_from_call(call), call_type=str(call.get("type") or "inboundPhoneCall"))
-        return JSONResponse({"assistantId": cfg.assistant_id})
+        # An inbound phone call. The number is routed through this server so the caller's
+        # account facts and history can go into the prompt (a phone call carries none of
+        # ours). Pre-open the runs now too, before the caller has spoken.
+        prof = profile_from_call(call)
+        caller = ag.caller_from(prof)
+        history = str(prof.get("history") or "") or ag.brief_for(caller)
+        ag.call_started(call_id, caller, call_type=str(call.get("type") or "inboundPhoneCall"), brief=history)
+        return JSONResponse({"assistantId": cfg.assistant_id,
+                             "assistantOverrides": {"variableValues": variable_values({**asdict(caller), "history": history})}})
 
     if typ == "tool-calls":
         results = []
@@ -276,15 +297,18 @@ def api_loop() -> dict[str, Any]:
 
 @app.post("/api/profiles")
 async def api_profiles(request: Request) -> dict[str, Any]:
+    """Register who the next call is from. Reads their history from SenseLab now, so it is
+    in the prompt from the first word: the page passes ``variable_values`` to ``vapi.start``,
+    and a phone call within ten minutes gets the same values from ``assistant-request``."""
     body = await request.json()
+    ag = _agent()
     pid = uuid.uuid4().hex[:10]
-    c = _agent().caller_from(body)
-    profiles[pid] = {"profile_id": pid, "registered": time.time(), "name": c.name, "tier": c.tier,
-                     "prior_contacts_30d": c.prior_contacts_30d, "tenure_months": c.tenure_months,
-                     "customer_id": c.customer_id}
+    c = ag.caller_from(body)
+    history = await run_in_threadpool(ag.brief_for, c)
+    profiles[pid] = {"profile_id": pid, "registered": time.time(), **asdict(c), "history": history}
     for old in [k for k, v in profiles.items() if time.time() - v["registered"] > 3600]:
         del profiles[old]
-    return {"profile_id": pid, "variable_values": {k: str(v) for k, v in profiles[pid].items() if k != "registered"}}
+    return {"profile_id": pid, "variable_values": {"profile_id": pid, **variable_values(profiles[pid])}}
 
 
 @app.post("/api/world")

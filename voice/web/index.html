@@ -301,8 +301,9 @@ function apply(e, live) {
         pulse("e-riley-sl", { label: e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}` : "a new caller", color: C.sl, reverse: true, delay: 650 });
         status("sl", e.contacts ? `knows ${e.name}: ${e.contacts} contact${e.contacts === 1 ? "" : "s"}` : `${e.name}: nothing on record`);
         status("riley", "picking up the thread");
+        const when = e.topic === "call start" ? "read before the first word, so it is in the prompt from the start" : `in ${e.ms} ms`;
         caption(e.contacts ? `<span class="sl">SenseLab</span> knows ${esc(e.name)}.` : `<span class="sl">SenseLab</span> has nothing on ${esc(e.name)} yet.`,
-          e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}, what was tried and what came of each, in ${e.ms} ms. ${esc(AGENT)} can pick up the thread instead of asking ${esc(e.name)} to explain it all again.` : `A first call. ${esc(AGENT)} asks what is going on; whatever happens on this call is remembered for the next one.`);
+          e.contacts ? `${e.contacts} earlier contact${e.contacts === 1 ? "" : "s"}, what was tried and what came of each, ${when}. ${esc(AGENT)} can pick up the thread instead of asking ${esc(e.name)} to explain it all again.` : `A first call. ${esc(AGENT)} asks what is going on; whatever happens on this call is remembered for the next one.`);
       }
       if (c.recall && current === c.id) $("cust").textContent = e.brief || "";
       break; }
@@ -475,7 +476,7 @@ function clock() {
 /* -- controls -------------------------------------------------------------------------- */
 $("details").onclick = () => $("drawer").classList.toggle("open");
 $("changed").onchange = (e) => post("/api/world", { changed: e.target.checked });
-$("usephone").onclick = async () => { await post("/api/profiles", caller()); $("phoneok").textContent = "registered, dial within 10 min"; setTimeout(() => { $("phoneok").textContent = ""; }, 15000); };
+$("usephone").onclick = async () => { $("phoneok").textContent = "reading their history…"; await post("/api/profiles", caller()); $("phoneok").textContent = "registered, dial within 10 min"; setTimeout(() => { $("phoneok").textContent = ""; }, 15000); };
 $("call").onclick = async () => {
   if (!vapi) return;
   const prof = await post("/api/profiles", caller());
