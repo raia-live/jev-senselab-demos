@@ -1,5 +1,5 @@
 {
-  "run_id": "team3b",
+  "run_id": "team3d",
   "scenario": {
     "name": "lead_routing",
     "title": "Inbound lead routing",
@@ -65,32 +65,32 @@
   },
   "jev_model": "jev-1.13.0",
   "amfs_url": "https://amfs-login.sense-lab.ai",
-  "started_at": "2026-10-13T07:45:20.025450+00:00",
+  "started_at": "2026-10-13T22:27:23.330244+00:00",
   "resumes": [],
   "platform_budget": [
     {
       "before": {
         "account_id": "redacted",
-        "monthly_usd_cap": 25.0,
-        "spent_usd": 16.17773,
+        "monthly_usd_cap": 80.0,
+        "spent_usd": 24.478864,
         "degrade_threshold": 0.8,
         "period_start": "2026-10-01T00:00:00Z",
-        "updated_at": "2026-10-13T07:45:18.700001Z",
-        "remaining_usd": 8.82227,
-        "utilisation": 0.6471
+        "updated_at": "2026-10-13T22:23:41.240675Z",
+        "remaining_usd": 55.521136,
+        "utilisation": 0.306
       },
       "after": {
         "account_id": "redacted",
-        "monthly_usd_cap": 25.0,
-        "spent_usd": 19.923333,
+        "monthly_usd_cap": 80.0,
+        "spent_usd": 27.827175,
         "degrade_threshold": 0.8,
         "period_start": "2026-10-01T00:00:00Z",
-        "updated_at": "2026-10-13T08:26:26.756305Z",
-        "remaining_usd": 5.076667,
-        "utilisation": 0.7969
+        "updated_at": "2026-10-13T23:21:34.866938Z",
+        "remaining_usd": 52.172825,
+        "utilisation": 0.3478
       },
-      "spent_usd": 3.7456
+      "spent_usd": 3.3483
     }
   ],
-  "finished_at": "2026-10-13T08:26:37.020916+00:00"
+  "finished_at": "2026-10-13T23:21:56.259814+00:00"
 }

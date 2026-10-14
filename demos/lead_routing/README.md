@@ -59,13 +59,14 @@ The committed run is [`results-sample/lead_routing`](../../results-sample/lead_r
   to the situation does not care how the lead was worded. Plain `jev` is at 0% here too.
 - The guard, in action. Rows whose `memory_mode` is `act(held …)` are decisions where one
   bad review had SenseLab suggesting exploration and the harness held the working action
-  instead (9 times); `none(dropped)` is a thin record handed back to the policy (6 times).
+  instead (10 times); `none(dropped)` is a thin record handed back to the policy (6 times).
 - What fits in Jev's input. The second chart: the history arm from the wall run climbs
   into Jev's 32k-token limit and is refused at case 276; the lookup and SenseLab stay flat.
-- The repair loop. The judge graded all 120 of the SenseLab arm's decisions as they
-  happened, grouped the flagged ones into behaviours and opened an incident; the repair
-  agent's draft was stopped at the Tier 1 replay test because it would not have fixed the
-  failed runs. The events are listed with their episode numbers.
+- The repair loop. The judge graded 119 of the SenseLab arm's 120 decisions as they
+  happened (one trace upload hit a rate limit), grouped the flagged ones into behaviours and
+  opened incidents; both of the repair agent's drafts were stopped at the Tier 1 replay test
+  because they would not have fixed the failed runs. The events are listed with their episode numbers.
 
-Bottom line for this demo: 5 wrong decisions and $7,900 lost, against 7 and $12,900 for
-the best lookup we could build and 60 and $143,100 for Jev on the policy alone.
+Bottom line for this demo: 6 wrong decisions and $10,400 lost, against 7 and $12,900 for
+the best lookup we could build and 59 and $142,900 for Jev on the policy alone. With three
+workers on the stream the lookup goes to 13 and $30,200; SenseLab stays at 6.

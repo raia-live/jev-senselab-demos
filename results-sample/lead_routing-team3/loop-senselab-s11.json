@@ -1,5 +1,5 @@
 {
-  "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+  "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
   "policy": "auto_after_canary",
   "canary": {
     "pct": 50,
@@ -10,9 +10,9 @@
   "sessions_sealed": 120,
   "events": [
     {
-      "t": 1791877533.410471,
+      "t": 1791930457.624772,
       "kind": "agent_ready",
-      "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+      "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
       "judge": "jev-demo-decision-failure",
       "settings": {
         "repair_policy": "auto_after_canary",
@@ -23,7 +23,7 @@
         "replay_fidelity_floor": 0.5
       },
       "contract": {
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
         "policy": "auto_after_canary",
         "met": false,
         "missing": [
@@ -45,53 +45,53 @@
           "window_days": 14
         }
       },
-      "ms": 1933.0
+      "ms": 2163.7
     },
     {
-      "t": 1791877863.695254,
+      "t": 1791930994.0055249,
       "sessions": 22,
       "episode": 21,
       "kind": "fix_status",
       "fix": {
-        "id": "c006829b-a653-4ae6-8411-4fdc4ef0bed3",
+        "id": "0eaeaa8a-fade-47e0-b4fe-076269a2cda6",
         "status": "testing",
         "lever": "unknown",
         "source": "repair_agent",
-        "branch": "repair/c006829b",
-        "behavior_id": "03dabd7a-2757-4c8c-83dc-68590c18daeb",
+        "branch": "repair/0eaeaa8a",
+        "behavior_id": "9e12c08b-ee4b-411f-9cb1-8037c875f6e6",
         "incident_id": null,
-        "created_at": "2026-10-13T07:50:54.507114Z",
+        "created_at": "2026-10-13T22:36:30.346889Z",
         "shipped_at": null,
         "rolled_back_at": null,
-        "title": "Fix: Missing rationale",
+        "title": "Fix: Unjustified miss labels",
         "manifest": {
           "predicted_fixes": 3,
           "predicted_regressions": 0,
-          "expected_prevention": 0.9
+          "expected_prevention": 0.85
         }
       }
     },
     {
-      "t": 1791877984.929402,
-      "sessions": 31,
-      "episode": 30,
+      "t": 1791931195.9441652,
+      "sessions": 32,
+      "episode": 31,
       "kind": "fix_status",
       "fix": {
-        "id": "c006829b-a653-4ae6-8411-4fdc4ef0bed3",
+        "id": "0eaeaa8a-fade-47e0-b4fe-076269a2cda6",
         "status": "test_failed",
         "lever": "unknown",
         "source": "repair_agent",
-        "branch": "repair/c006829b",
-        "behavior_id": "03dabd7a-2757-4c8c-83dc-68590c18daeb",
+        "branch": "repair/0eaeaa8a",
+        "behavior_id": "9e12c08b-ee4b-411f-9cb1-8037c875f6e6",
         "incident_id": null,
-        "created_at": "2026-10-13T07:50:54.507114Z",
+        "created_at": "2026-10-13T22:36:30.346889Z",
         "shipped_at": null,
         "rolled_back_at": null,
-        "title": "Fix: Missing rationale",
+        "title": "Fix: Unjustified miss labels",
         "manifest": {
           "predicted_fixes": 3,
           "predicted_regressions": 0,
-          "expected_prevention": 0.9
+          "expected_prevention": 0.85
         },
         "test": {
           "status": "failed",
@@ -105,113 +105,56 @@
       }
     },
     {
-      "t": 1791878588.318194,
-      "sessions": 58,
-      "episode": 57,
+      "t": 1791932254.441511,
+      "sessions": 74,
+      "episode": 73,
       "kind": "fix_status",
       "fix": {
-        "id": "bfa67c2b-8e6a-42ab-9fa2-abae895d16b6",
+        "id": "862f672e-8717-49ed-958c-8d886b4d72ae",
         "status": "testing",
-        "lever": "knowledge",
+        "lever": "procedure",
         "source": "repair_agent",
-        "branch": "repair/bfa67c2b",
-        "behavior_id": "ce0dc19f-d993-4f69-8f95-ef5553c3af9b",
+        "branch": "repair/862f672e",
+        "behavior_id": "84ac0cfd-803c-4afe-a2a1-415567c82200",
         "incident_id": null,
-        "created_at": "2026-10-13T08:02:58.444423Z",
+        "created_at": "2026-10-13T22:57:29.659100Z",
         "shipped_at": null,
         "rolled_back_at": null,
-        "title": "Fix: Unclear escalation loop",
+        "title": "Fix: Misaligned outreach effort",
         "manifest": {
-          "predicted_fixes": 3,
-          "predicted_regressions": 4,
-          "expected_prevention": 0.67
+          "predicted_fixes": 2,
+          "predicted_regressions": 1,
+          "expected_prevention": 0.8
         }
       }
     },
     {
-      "t": 1791878778.011329,
-      "sessions": 67,
-      "episode": 66,
+      "t": 1791932355.481659,
+      "sessions": 78,
+      "episode": 77,
       "kind": "fix_status",
       "fix": {
-        "id": "bfa67c2b-8e6a-42ab-9fa2-abae895d16b6",
+        "id": "862f672e-8717-49ed-958c-8d886b4d72ae",
         "status": "test_failed",
-        "lever": "knowledge",
+        "lever": "procedure",
         "source": "repair_agent",
-        "branch": "repair/bfa67c2b",
-        "behavior_id": "ce0dc19f-d993-4f69-8f95-ef5553c3af9b",
+        "branch": "repair/862f672e",
+        "behavior_id": "84ac0cfd-803c-4afe-a2a1-415567c82200",
         "incident_id": null,
-        "created_at": "2026-10-13T08:02:58.444423Z",
+        "created_at": "2026-10-13T22:57:29.659100Z",
         "shipped_at": null,
         "rolled_back_at": null,
-        "title": "Fix: Unclear escalation loop",
+        "title": "Fix: Misaligned outreach effort",
         "manifest": {
-          "predicted_fixes": 3,
-          "predicted_regressions": 4,
-          "expected_prevention": 0.67
+          "predicted_fixes": 2,
+          "predicted_regressions": 1,
+          "expected_prevention": 0.8
         },
         "test": {
           "status": "failed",
           "passed": false,
           "repaired": 0,
-          "total": 3,
-          "regressed": 0,
-          "fidelity": 1.0,
-          "unreplayable": 0
-        }
-      }
-    },
-    {
-      "t": 1791879070.849505,
-      "sessions": 80,
-      "episode": 79,
-      "kind": "fix_status",
-      "fix": {
-        "id": "cc0af615-01bc-412d-a872-88fc06f16de3",
-        "status": "testing",
-        "lever": "knowledge",
-        "source": "template",
-        "branch": "repair/cc0af615",
-        "behavior_id": "d9a1f288-84e2-40ed-8d2e-79c07efc501d",
-        "incident_id": null,
-        "created_at": "2026-10-13T08:11:03.049052Z",
-        "shipped_at": null,
-        "rolled_back_at": null,
-        "title": "Fix: Mismatched qualification assumptions",
-        "manifest": {
-          "predicted_fixes": 3,
-          "predicted_regressions": 1,
-          "expected_prevention": 0.5
-        }
-      }
-    },
-    {
-      "t": 1791879228.027946,
-      "sessions": 88,
-      "episode": 87,
-      "kind": "fix_status",
-      "fix": {
-        "id": "cc0af615-01bc-412d-a872-88fc06f16de3",
-        "status": "test_failed",
-        "lever": "knowledge",
-        "source": "template",
-        "branch": "repair/cc0af615",
-        "behavior_id": "d9a1f288-84e2-40ed-8d2e-79c07efc501d",
-        "incident_id": null,
-        "created_at": "2026-10-13T08:11:03.049052Z",
-        "shipped_at": null,
-        "rolled_back_at": null,
-        "title": "Fix: Mismatched qualification assumptions",
-        "manifest": {
-          "predicted_fixes": 3,
-          "predicted_regressions": 1,
-          "expected_prevention": 0.5
-        },
-        "test": {
-          "status": "failed",
-          "passed": false,
-          "repaired": 0,
-          "total": 3,
+          "total": 2,
           "regressed": 0,
           "fidelity": 1.0,
           "unreplayable": 0
@@ -222,2003 +165,1366 @@
   "judge_mode": "continuous",
   "verdict_summary": {
     "graded": 120,
-    "failed": 19,
+    "failed": 20,
     "errors": 0,
-    "judge_usd": 0.776,
+    "judge_usd": 0.7455,
     "disagreements": 0,
     "categories": {
-      "enterprise EMEA lead routed to AE and escalated": 2,
-      "mid-market EMEA lead routed to partner and lost": 2,
+      "mid-market EMEA lead routed to partner; escalated later": 2,
+      "mid-market NA lead routed to self_serve and lost": 2,
+      "NA mid-market lead routed to AE; bought self-serve": 2,
       "personal-email disqualify and lost": 1,
-      "mid-market NA lead routed to self-serve and lost": 1,
-      "mid-market NA lead routed to self-serve and failed": 1,
-      "NA mid-market lead routed to self-serve and missed": 1,
-      "mid-market NA lead routed to self_serve and escalated": 1,
-      "NA mid-market lead routed to AE; bought self-serve": 1
+      "enterprise EMEA lead routed to AE and lost": 1,
+      "NA mid-market lead routed to self-serve; escalated later": 1,
+      "NA mid-market lead routed to self-serve and lost": 1,
+      "mid-market NA routed to AE and lost": 1
     }
   },
   "verdicts": [
     {
-      "trace_id": "9b636cfa-47c6-4ab8-91e0-4e2ec1f5a814",
+      "trace_id": "04b9dfd5-ee30-479c-918f-c2811315b415",
       "verdict": "fail",
       "category": "personal-email disqualify and lost",
       "score": 0.0,
-      "confidence": 0.92,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.043097,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T08:26:23.915268Z"
-    },
-    {
-      "trace_id": "1dfc49b2-ffc7-434d-9d67-4c675359ca4d",
-      "verdict": "pass",
-      "category": "decision success",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000868,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:25:27.408462Z"
-    },
-    {
-      "trace_id": "013ae4b6-17b6-4264-9ef0-52899c32c4dc",
-      "verdict": "pass",
-      "category": "partner closed deal",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000743,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:25:08.873287Z"
-    },
-    {
-      "trace_id": "c807ce32-bd86-4099-be74-e371001dbd26",
-      "verdict": "pass",
-      "category": "low-intent/enterprise routed to SDR nurture and engaged",
-      "score": 1.0,
       "confidence": 0.88,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000841,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:24:47.736903Z"
-    },
-    {
-      "trace_id": "9411851c-abac-4344-ad0c-49ebc9113d00",
-      "verdict": "pass",
-      "category": "mid-market NA self_serve succeeded",
-      "score": 1.0,
-      "confidence": 0.92,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000859,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:24:24.353071Z"
-    },
-    {
-      "trace_id": "3471e5af-43a0-4838-ba47-9c045c15849f",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000831,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:24:00.637339Z"
-    },
-    {
-      "trace_id": "dc04342c-6418-4fef-a92c-70a181e67edf",
-      "verdict": "pass",
-      "category": "mid_market NA self_serve success",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000794,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:23:33.996265Z"
-    },
-    {
-      "trace_id": "86e80173-76df-4d05-8749-a7942410b816",
-      "verdict": "fail",
-      "category": "enterprise EMEA lead routed to AE and escalated",
-      "score": 0.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.037641,
+      "cost_usd": 0.000886,
       "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T08:23:28.116449Z"
+      "created_at": "2026-10-13T23:21:40.866449Z"
     },
     {
-      "trace_id": "af15131e-8e58-49da-8109-4bf86943ebe7",
-      "verdict": "pass",
-      "category": "smb EMEA self_serve success",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000714,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:23:21.042153Z"
-    },
-    {
-      "trace_id": "04399eaa-30f0-458a-9b4e-220ee20d568a",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.92,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000739,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:22:31.533573Z"
-    },
-    {
-      "trace_id": "49bedb48-a16b-455b-b6a6-ce5638a97552",
-      "verdict": "pass",
-      "category": "smb/emea self_serve success",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000871,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:22:09.912272Z"
-    },
-    {
-      "trace_id": "15080fce-a94b-4384-8d0f-a1d41b7d6335",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.87,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000744,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:21:49.993605Z"
-    },
-    {
-      "trace_id": "b545475b-0af1-408a-9f33-08d603d4a859",
+      "trace_id": "12158c66-57a8-4154-b028-ac801b645857",
       "verdict": "pass",
       "category": "correct-routing",
       "score": 1.0,
-      "confidence": 0.92,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000772,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:21:31.685924Z"
-    },
-    {
-      "trace_id": "5424e6ae-4fb3-4afd-8339-9abe769712ad",
-      "verdict": "pass",
-      "category": "correct_action_chosen",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00083,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:20:49.596160Z"
-    },
-    {
-      "trace_id": "96ba328d-08a9-464b-b0c9-4dd74937f19f",
-      "verdict": "pass",
-      "category": "enterprise NA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.92,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000877,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:20:13.371856Z"
-    },
-    {
-      "trace_id": "fc039987-a641-4350-a6ad-603c353416f1",
-      "verdict": "pass",
-      "category": "correct-disqualification",
-      "score": 1.0,
-      "confidence": 0.92,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.0008,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:19:50.226070Z"
-    },
-    {
-      "trace_id": "8027107d-8229-4658-928a-6831b6e51a51",
-      "verdict": "pass",
-      "category": "enterprise NA routed to AE and won",
-      "score": 1.0,
       "confidence": 0.9,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000825,
+      "cost_usd": 0.000856,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:19:21.437527Z"
+      "created_at": "2026-10-13T23:18:53.542175Z"
     },
     {
-      "trace_id": "7cf64758-0bae-431e-952f-5e2407167455",
-      "verdict": "pass",
-      "category": "decision-success",
-      "score": 1.0,
-      "confidence": 0.85,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000816,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:19:00.348695Z"
-    },
-    {
-      "trace_id": "346dd4a0-7afd-4b10-b7fc-0a96f525bd4b",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000717,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:18:40.644172Z"
-    },
-    {
-      "trace_id": "000d1f85-2e07-40e1-a178-f4d5700c969b",
-      "verdict": "pass",
-      "category": "mid_market APAC routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.94,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000735,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:18:23.147338Z"
-    },
-    {
-      "trace_id": "bdb4a041-4630-44ee-9402-c55f6584ecfb",
-      "verdict": "pass",
-      "category": "correct-action",
-      "score": 1.0,
-      "confidence": 0.85,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000801,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:18:06.094572Z"
-    },
-    {
-      "trace_id": "146546a1-97c3-40bc-9b98-cc16dc1f49d3",
-      "verdict": "pass",
-      "category": "mid_market APAC routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000744,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:17:41.803575Z"
-    },
-    {
-      "trace_id": "ff2910ab-fb97-4694-a48a-2505e2406430",
+      "trace_id": "9336077d-c2e1-4a8e-93b5-aa79a69b0328",
       "verdict": "fail",
-      "category": "mid-market EMEA lead routed to partner and lost",
-      "score": 0.24,
-      "confidence": 0.81,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.043041,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T08:17:39.254829Z"
-    },
-    {
-      "trace_id": "6db7faa0-0e76-41e8-b7f7-240b9de6878e",
-      "verdict": "pass",
-      "category": "self_serve accepted",
-      "score": 1.0,
-      "confidence": 0.76,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00086,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:17:34.048624Z"
-    },
-    {
-      "trace_id": "034324eb-f2ef-48da-a7f2-4115281808bc",
-      "verdict": "pass",
-      "category": "mid_market NA self_serve success",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000661,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:17:20.136287Z"
-    },
-    {
-      "trace_id": "8362e551-3a86-4ff8-b79f-cc4d995e2778",
-      "verdict": "fail",
-      "category": "mid-market NA lead routed to self-serve and lost",
-      "score": 1.0,
-      "confidence": 0.93,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.038875,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T08:17:12.088350Z"
-    },
-    {
-      "trace_id": "44170289-a409-4a80-9dce-2edb61816df4",
-      "verdict": "pass",
-      "category": "smb/emea self_serve succeeded",
-      "score": 1.0,
-      "confidence": 0.85,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000796,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:16:24.682440Z"
-    },
-    {
-      "trace_id": "2cb98e95-4389-460b-b0b5-c66093de9a5a",
-      "verdict": "pass",
-      "category": "smb NA self_serve converted",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000786,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:16:02.199871Z"
-    },
-    {
-      "trace_id": "b6d71502-5e17-4fe8-a77c-1d736668e7e1",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.78,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000867,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:15:36.522161Z"
-    },
-    {
-      "trace_id": "5fe752f4-0bf1-446b-9a68-15be69478678",
-      "verdict": "pass",
-      "category": "low-intent enterprise nurtured",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00089,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:15:25.593578Z"
-    },
-    {
-      "trace_id": "25cddbb7-c38c-4382-82fb-7c8186356dd6",
-      "verdict": "pass",
-      "category": "mid-market NA self_serve succeeded",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00082,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:14:56.600242Z"
-    },
-    {
-      "trace_id": "14be3a11-39ed-4084-8172-c266bc5144b8",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000801,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:14:34.470676Z"
-    },
-    {
-      "trace_id": "0a2187f1-e940-462f-9902-7f27239c92a5",
-      "verdict": "pass",
-      "category": "partner closed deal",
-      "score": 1.0,
-      "confidence": 0.78,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000707,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:14:15.245037Z"
-    },
-    {
-      "trace_id": "ea524bef-52e0-4831-b2b4-d6b46ac5d590",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000847,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:13:49.345559Z"
-    },
-    {
-      "trace_id": "4ee9b289-b6cc-49a2-b4b4-6685239ba821",
-      "verdict": "pass",
-      "category": "smb/emea self_serve succeeded",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000727,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:13:29.821114Z"
-    },
-    {
-      "trace_id": "8eefb354-4612-4a8d-91cc-ac3b5d363fce",
-      "verdict": "pass",
-      "category": "mid-market NA self_serve accepted",
-      "score": 1.0,
-      "confidence": 0.92,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000791,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:13:08.487871Z"
-    },
-    {
-      "trace_id": "1acbc9e5-2a71-4ae4-a77e-9dc51b98e278",
-      "verdict": "fail",
-      "category": "mid-market NA lead routed to self-serve and failed",
+      "category": "enterprise EMEA lead routed to AE and lost",
       "score": 0.0,
-      "confidence": 0.96,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.040952,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00078,
       "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T08:13:05.523287Z"
+      "created_at": "2026-10-13T23:17:27.194127Z"
     },
     {
-      "trace_id": "324f6d7c-aa6c-45a3-b047-9ba6299e6811",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.84,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000826,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:13:00.029032Z"
-    },
-    {
-      "trace_id": "5592e7ab-69ab-466d-a859-1c94bdbeb72a",
-      "verdict": "pass",
-      "category": "mid-market EMEA routed to partner and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000838,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:12:21.001875Z"
-    },
-    {
-      "trace_id": "4c3267ec-8c68-46e4-be18-d742dc8bbe20",
+      "trace_id": "c6eba9af-f4cf-47ac-9215-1692692af71c",
       "verdict": "pass",
       "category": "mid-market EMEA lead routed to partner and won",
       "score": 1.0,
-      "confidence": 0.74,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000799,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:11:53.190078Z"
-    },
-    {
-      "trace_id": "f8d37505-5072-4e2e-9509-41c82596633e",
-      "verdict": "pass",
-      "category": "self_serve accepted",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000726,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:11:32.021757Z"
-    },
-    {
-      "trace_id": "68f334ad-06a6-4d37-904b-4560c58d4171",
-      "verdict": "pass",
-      "category": "low-intent/enterprise nurtured successfully",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000793,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:11:12.041204Z"
-    },
-    {
-      "trace_id": "2d2ae4a3-9e46-4b6f-af83-ee43bb217d6e",
-      "verdict": "pass",
-      "category": "mid_market/na: self_serve (successful)",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000786,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:10:53.307695Z"
-    },
-    {
-      "trace_id": "3bc57f4f-5e47-4799-955e-5974a4c001ae",
-      "verdict": "fail",
-      "category": "NA mid-market lead routed to self-serve and missed",
-      "score": 0.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.029364,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T08:10:39.626247Z"
-    },
-    {
-      "trace_id": "49f5f6d4-1911-4577-85c2-f2d2edbcb3e1",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.88,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000788,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:10:35.136336Z"
-    },
-    {
-      "trace_id": "2be92eaa-4233-4bd3-92ba-2210cb7ce874",
-      "verdict": "fail",
-      "category": "mid-market NA lead routed to self_serve and escalated",
-      "score": 0.0,
-      "confidence": 0.94,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.043049,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T08:10:30.743261Z"
-    },
-    {
-      "trace_id": "da5b3ed5-e977-41d9-aef5-30762b0dae24",
-      "verdict": "pass",
-      "category": "enterprise/na routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000729,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:09:34.034619Z"
-    },
-    {
-      "trace_id": "95242fa9-e35a-4605-93a4-916a1ee9907c",
-      "verdict": "pass",
-      "category": "mid_market/emea routed to partner and won",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000795,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:09:14.415155Z"
-    },
-    {
-      "trace_id": "57910669-b07d-4b1e-a4eb-41f2c9936011",
-      "verdict": "pass",
-      "category": "mid_market/apac routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000703,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:08:50.243747Z"
-    },
-    {
-      "trace_id": "f2686fc9-8778-4982-b347-99a2a9a909d2",
-      "verdict": "pass",
-      "category": "decision success",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000855,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:08:47.533417Z"
-    },
-    {
-      "trace_id": "e5e8c10a-9d79-438d-ade0-4c5024d9e7c3",
-      "verdict": "pass",
-      "category": "correct-disqualification",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00079,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:08:15.329063Z"
-    },
-    {
-      "trace_id": "afdc56a2-4308-4edc-b4d4-e7dda737ce74",
-      "verdict": "pass",
-      "category": "correct-routing",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000728,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:07:08.311255Z"
-    },
-    {
-      "trace_id": "43413646-a675-4cdb-8f84-45e12ba4a321",
-      "verdict": "pass",
-      "category": "mid-market NA self_serve succeeded",
-      "score": 1.0,
-      "confidence": 0.93,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000725,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:06:48.255974Z"
-    },
-    {
-      "trace_id": "bd9e4d86-b7b9-4b87-ad03-10fa4cf30f66",
-      "verdict": "fail",
-      "category": "NA mid-market lead routed to AE; bought self-serve",
-      "score": 0.0,
-      "confidence": 0.93,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.030551,
-      "agent_self_reported": "failure",
-      "created_at": "2026-10-13T08:06:44.270840Z"
-    },
-    {
-      "trace_id": "32769d3d-24e6-476c-b975-bba3524a88b3",
-      "verdict": "pass",
-      "category": "mid-market APAC routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.95,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000902,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:06:00.843244Z"
-    },
-    {
-      "trace_id": "2bca012e-96a8-4434-a416-ae0367849080",
-      "verdict": "pass",
-      "category": "mid-market EMEA lead routed to partner and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000716,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:05:38.317890Z"
-    },
-    {
-      "trace_id": "35755e90-ce64-4c41-b008-5698e7a45bce",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000832,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:05:16.634630Z"
-    },
-    {
-      "trace_id": "4265fe0d-a46b-4b96-a820-bad04d51f11f",
-      "verdict": "fail",
-      "category": "mid-market NA lead routed to AE and lost",
-      "score": 0.0,
-      "confidence": 0.85,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.043131,
-      "agent_self_reported": "failure",
-      "created_at": "2026-10-13T08:05:08.935288Z"
-    },
-    {
-      "trace_id": "cef33da5-331f-4832-bdf0-3e77907bed12",
-      "verdict": "pass",
-      "category": "smb/apac self_serve succeeded",
-      "score": 1.0,
       "confidence": 0.78,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000763,
+      "cost_usd": 0.000815,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:04:56.624081Z"
+      "created_at": "2026-10-13T23:15:46.219118Z"
     },
     {
-      "trace_id": "6f0d0215-f0e5-4bd8-a03f-c22b61881c57",
-      "verdict": "pass",
-      "category": "smb NA self_serve converted",
-      "score": 1.0,
-      "confidence": 0.95,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000793,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:04:37.894815Z"
-    },
-    {
-      "trace_id": "41936cf4-ee34-4d5c-98de-60b143d14783",
-      "verdict": "pass",
-      "category": "low-intent/mid_market routed to SDR nurture and booked",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000794,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:03:53.927272Z"
-    },
-    {
-      "trace_id": "6a37d404-5b30-4cc8-81a3-ecbd25ea9828",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000871,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:03:31.685907Z"
-    },
-    {
-      "trace_id": "ee7ecbbb-dadd-4de2-8be6-d6bafe92de81",
-      "verdict": "pass",
-      "category": "mid-market NA lead routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000703,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:03:09.237511Z"
-    },
-    {
-      "trace_id": "570e9428-a8cb-4587-9ca6-6f66333619ae",
-      "verdict": "pass",
-      "category": "mid_market/apac routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000868,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:02:54.722324Z"
-    },
-    {
-      "trace_id": "713d8ebe-aa18-4c76-85e1-ab061f36b5ec",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.85,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000855,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:02:32.438239Z"
-    },
-    {
-      "trace_id": "583d3603-2d43-4a63-b9a9-bdd9e7ac5139",
-      "verdict": "pass",
-      "category": "disqualify-personal lead",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000764,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:02:08.935774Z"
-    },
-    {
-      "trace_id": "65810657-04ee-4623-a793-e8fdbd949e3c",
-      "verdict": "pass",
-      "category": "low-intent enterprise nurtured",
-      "score": 1.0,
-      "confidence": 0.85,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000765,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:02:06.577091Z"
-    },
-    {
-      "trace_id": "e1b01f4a-5877-4ae2-b8bd-918106a00e23",
-      "verdict": "pass",
-      "category": "enterprise EMEA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000833,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:01:07.371162Z"
-    },
-    {
-      "trace_id": "8fc35957-5516-4052-ba25-c24b81ed2b77",
-      "verdict": "pass",
-      "category": "mid_market/emea partner routed and won",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000838,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:00:43.452936Z"
-    },
-    {
-      "trace_id": "833cbaac-b008-4b4d-90d4-29987b5f03b1",
-      "verdict": "pass",
-      "category": "decision-success",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000779,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:00:41.639448Z"
-    },
-    {
-      "trace_id": "342612d8-fc0e-442f-a0fa-2800d0860262",
-      "verdict": "pass",
-      "category": "low-intent enterprise nurtured",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000836,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T08:00:02.274059Z"
-    },
-    {
-      "trace_id": "39a25f73-057a-46b1-80f5-356524d12823",
-      "verdict": "pass",
-      "category": "mid-market APAC routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.79,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000617,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:59:38.126639Z"
-    },
-    {
-      "trace_id": "83b903a2-39f2-4d6a-bb36-6a7dace7f398",
-      "verdict": "fail",
-      "category": "mid-market EMEA lead routed to partner and lost",
-      "score": 0.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.043029,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:59:18.107430Z"
-    },
-    {
-      "trace_id": "fa155243-cbdf-4f0e-ad5d-b010991c4d48",
-      "verdict": "pass",
-      "category": "smb/na self_serve success",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000858,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:59:15.808536Z"
-    },
-    {
-      "trace_id": "af0ec625-6313-4eb9-9fa0-668cdde262df",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000729,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:58:33.414028Z"
-    },
-    {
-      "trace_id": "24640a8d-6a4d-49b7-a356-1e8ac6f300fb",
-      "verdict": "pass",
-      "category": "enterprise/EMEA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.87,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000798,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:58:08.971946Z"
-    },
-    {
-      "trace_id": "ff9759f7-a795-437b-a70a-2bef2bb82545",
-      "verdict": "fail",
-      "category": "mid-market EMEA lead routed to partner and failed",
-      "score": 0.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.035649,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:57:40.757397Z"
-    },
-    {
-      "trace_id": "790f697b-2edb-4bbc-bc72-28399b7081bc",
-      "verdict": "pass",
-      "category": "correct-action",
-      "score": 1.0,
-      "confidence": 0.95,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000802,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:57:38.981308Z"
-    },
-    {
-      "trace_id": "35685fc7-db48-4710-a256-9ccc36ab6b27",
-      "verdict": "pass",
-      "category": "partner-closed-deal",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000861,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:56:53.818053Z"
-    },
-    {
-      "trace_id": "88ad6cc0-c29e-42cc-bcfd-85b288da341e",
-      "verdict": "pass",
-      "category": "mid-market EMEA routed to partner and closed",
-      "score": 1.0,
-      "confidence": 0.88,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000705,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:56:33.922289Z"
-    },
-    {
-      "trace_id": "1503a507-29c2-47b9-a2a9-56c2080aa538",
-      "verdict": "pass",
-      "category": "low-intent mid-market routed to SDR nurture and won",
-      "score": 1.0,
-      "confidence": 0.89,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000914,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:56:09.931608Z"
-    },
-    {
-      "trace_id": "0139a32e-dd50-4d57-a2aa-48b86772f212",
+      "trace_id": "d187d656-2f11-4b03-8d3b-ded0e311d4ec",
       "verdict": "pass",
       "category": "partner closed deal",
       "score": 1.0,
-      "confidence": 0.86,
+      "confidence": 0.91,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000844,
+      "cost_usd": 0.000687,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:55:58.019487Z"
+      "created_at": "2026-10-13T23:15:22.471302Z"
     },
     {
-      "trace_id": "7b3eff3b-3177-4527-825e-1b2660855ff4",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner decision \u2014 success",
-      "score": 1.0,
-      "confidence": 0.89,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000807,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:55:31.405445Z"
-    },
-    {
-      "trace_id": "f2b688be-27e2-45a2-95a3-50b963b75b7a",
-      "verdict": "fail",
-      "category": "NA mid-market lead routed to SDR nurture; wasted sales time",
-      "score": 0.0,
-      "confidence": 0.93,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.030871,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:55:23.329305Z"
-    },
-    {
-      "trace_id": "95cbf7b5-7c28-44b5-a970-6f6f86cc1379",
-      "verdict": "pass",
-      "category": "mid-market NA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000811,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:54:41.634786Z"
-    },
-    {
-      "trace_id": "d7a9a212-e3e9-48a3-bc1c-3483bed1adfc",
-      "verdict": "pass",
-      "category": "enterprise NA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000702,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:54:27.365506Z"
-    },
-    {
-      "trace_id": "c9c049ac-bf91-40d4-98db-8c49a44320f9",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.77,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000814,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:54:02.998210Z"
-    },
-    {
-      "trace_id": "faf8e1a3-7478-4eea-8081-a8ddc43571e1",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.82,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000806,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:54:02.745717Z"
-    },
-    {
-      "trace_id": "ddf642ee-c2cc-49a4-8a26-0d9e1c667433",
-      "verdict": "pass",
-      "category": "decision-success",
-      "score": 1.0,
-      "confidence": 0.69,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000743,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:53:28.446456Z"
-    },
-    {
-      "trace_id": "c2c230ae-6c1c-40da-a067-086ada8b2fc3",
-      "verdict": "pass",
-      "category": "smb/emea self_serve succeeded",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000798,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:53:06.201520Z"
-    },
-    {
-      "trace_id": "b8163783-152c-4d0b-847f-06b2919ccaa6",
-      "verdict": "pass",
-      "category": "self_serve accepted",
-      "score": 1.0,
-      "confidence": 0.87,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000756,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:52:51.974032Z"
-    },
-    {
-      "trace_id": "9713ebcd-e93f-4802-a361-03e7eeda567b",
-      "verdict": "pass",
-      "category": "smb/na self_serve success",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000748,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:52:51.949167Z"
-    },
-    {
-      "trace_id": "60224ae9-7b4f-4c0f-93e7-d16fe863c9b7",
-      "verdict": "fail",
-      "category": "NA mid-market lead routed to AE; no budget",
-      "score": 0.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.033597,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:52:49.959172Z"
-    },
-    {
-      "trace_id": "c12f0491-67e0-4866-a313-ed223082c306",
-      "verdict": "pass",
-      "category": "low-intent enterprise nurtured",
-      "score": 1.0,
-      "confidence": 0.93,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000733,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:52:07.850321Z"
-    },
-    {
-      "trace_id": "d66789cc-adaa-447b-8f61-a50d3091bb42",
-      "verdict": "pass",
-      "category": "enterprise NA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.95,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000828,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:51:54.590897Z"
-    },
-    {
-      "trace_id": "32a98634-824a-4560-b6db-efbfd6dfad07",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.93,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000729,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:51:54.390133Z"
-    },
-    {
-      "trace_id": "2cd5eeb8-dbee-4023-a1eb-75e51e3cfd9f",
-      "verdict": "pass",
-      "category": "low-intent mid-market nurtured successfully",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000854,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:51:31.313948Z"
-    },
-    {
-      "trace_id": "8cda1079-6752-4fb5-b19c-a2861a2f671f",
-      "verdict": "pass",
-      "category": "mid_market EMEA partner routed and closed",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000816,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:51:16.459657Z"
-    },
-    {
-      "trace_id": "fc24980b-c177-40a0-8c00-b684e634beef",
-      "verdict": "fail",
-      "category": "NA enterprise lead routed to AE and lost",
-      "score": 0.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.031057,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:51:12.088804Z"
-    },
-    {
-      "trace_id": "921923b8-c157-4312-b5a9-51e043ff6687",
-      "verdict": "pass",
-      "category": "mid-market NA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000734,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:51:04.718396Z"
-    },
-    {
-      "trace_id": "2b6c56ba-0ce2-4817-9f53-e76290fdacda",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routed and won",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000865,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:50:30.447067Z"
-    },
-    {
-      "trace_id": "9f3451b6-048f-4057-ab91-b75e435ff684",
-      "verdict": "pass",
-      "category": "enterprise/emea routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000881,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:50:20.959936Z"
-    },
-    {
-      "trace_id": "bce218cf-fabd-4809-992b-fa2a04482556",
-      "verdict": "fail",
-      "category": "insurance mid-market disqualified and lost",
-      "score": 0.22,
-      "confidence": 0.84,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.033076,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:50:17.938313Z"
-    },
-    {
-      "trace_id": "e30098b0-85f4-4fea-a4e1-bee1624d76e6",
-      "verdict": "pass",
-      "category": "low-intent/enterprise routed to SDR nurture and engaged",
-      "score": 1.0,
-      "confidence": 0.9,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.0009,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:50:04.957749Z"
-    },
-    {
-      "trace_id": "019ce900-a01d-4b69-88af-d35530e4660f",
-      "verdict": "fail",
-      "category": "enterprise EMEA lead routed to AE and escalated",
-      "score": 0.3,
-      "confidence": 0.8,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.030875,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:50:03.042994Z"
-    },
-    {
-      "trace_id": "832fc2b1-325e-4529-acb3-336935208d24",
+      "trace_id": "6c3749ed-d2eb-40ac-8304-d5900ee80361",
       "verdict": "pass",
       "category": "low-intent enterprise routed to SDR nurture and succeeded",
       "score": 1.0,
       "confidence": 0.9,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000932,
+      "cost_usd": 0.000851,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:49:21.099757Z"
+      "created_at": "2026-10-13T23:15:11.651958Z"
     },
     {
-      "trace_id": "b09cd2e1-435f-4584-b5b6-39dc9963814a",
+      "trace_id": "2c7cb4d4-fe58-4927-ba44-ab24b9b2bd30",
+      "verdict": "pass",
+      "category": "mid-market NA self_serve success",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000782,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:15:08.518221Z"
+    },
+    {
+      "trace_id": "c3f19d16-31db-4fa1-b521-3ca905455183",
+      "verdict": "pass",
+      "category": "correct_routing_and_outcome",
+      "score": 1.0,
+      "confidence": 0.78,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000785,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:15:08.443458Z"
+    },
+    {
+      "trace_id": "265d41b1-410d-44b9-822d-59c306e4d0f9",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and closed",
+      "score": 1.0,
+      "confidence": 0.82,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000736,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:15:07.564723Z"
+    },
+    {
+      "trace_id": "f2974fc3-2096-4d90-9767-c3968b5ab9bc",
+      "verdict": "pass",
+      "category": "mid-market NA lead routed to self_serve and won",
+      "score": 1.0,
+      "confidence": 0.94,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000682,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:13:53.649159Z"
+    },
+    {
+      "trace_id": "ff05d9b7-9dff-4310-b340-6e846c5f384d",
+      "verdict": "pass",
+      "category": "partner closed deal",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00073,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:13:53.258204Z"
+    },
+    {
+      "trace_id": "f4df0cc5-7c99-4819-9b33-eae1a6c993cd",
+      "verdict": "pass",
+      "category": "mid-market NA self_serve succeeded",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000864,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:13:45.887399Z"
+    },
+    {
+      "trace_id": "8f22f528-957b-4dd9-b023-b17cf0fd3138",
+      "verdict": "pass",
+      "category": "smb/emea self_serve success",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000868,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:13:19.366901Z"
+    },
+    {
+      "trace_id": "4daaa4e7-21b9-41f2-8c42-34e25cfc24f0",
+      "verdict": "pass",
+      "category": "mid_market EMEA partner routed and won",
+      "score": 1.0,
+      "confidence": 0.85,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000807,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:12:42.241159Z"
+    },
+    {
+      "trace_id": "f7c654c6-6730-4749-9382-d01149ae7e47",
+      "verdict": "pass",
+      "category": "smb EMEA lead self_serve (successful)",
+      "score": 1.0,
+      "confidence": 0.93,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000824,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:12:05.444664Z"
+    },
+    {
+      "trace_id": "bfbaf30c-6005-45ef-9044-08efbfc147df",
+      "verdict": "pass",
+      "category": "mid_market/emea: partner routed and won",
+      "score": 1.0,
+      "confidence": 0.63,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000878,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:11:41.816147Z"
+    },
+    {
+      "trace_id": "8941a2f9-2659-4e3a-9f23-bcf54443ab06",
+      "verdict": "pass",
+      "category": "low-intent/enterprise routed to SDR nurture and engaged",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000847,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:11:19.042683Z"
+    },
+    {
+      "trace_id": "8ab29a07-4cf3-41e2-8ea7-5a2b0b08c5e6",
+      "verdict": "pass",
+      "category": "low-intent enterprise routed to SDR and engaged",
+      "score": 1.0,
+      "confidence": 0.73,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000777,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:10:56.062278Z"
+    },
+    {
+      "trace_id": "24f0dcdc-dede-4636-bfb4-9de1389e58e5",
+      "verdict": "pass",
+      "category": "enterprise NA routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.84,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000805,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:10:39.010887Z"
+    },
+    {
+      "trace_id": "8b89e821-cc22-45e7-ac06-4e3f098b6227",
+      "verdict": "pass",
+      "category": "personal lead disqualified correctly",
+      "score": 1.0,
+      "confidence": 0.87,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000847,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:10:18.543287Z"
+    },
+    {
+      "trace_id": "426ba5e0-bb3f-46cf-9227-9ed8283d8f9c",
+      "verdict": "pass",
+      "category": "correct-routing",
+      "score": 1.0,
+      "confidence": 0.82,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000689,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:09:58.013479Z"
+    },
+    {
+      "trace_id": "ccc9b706-84da-49ae-a851-001a8f1e0c25",
+      "verdict": "pass",
+      "category": "mid-market APAC routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000754,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:09:34.872555Z"
+    },
+    {
+      "trace_id": "bb488a6a-471a-4770-8b13-79fff1b07cc8",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and closed",
+      "score": 1.0,
+      "confidence": 0.88,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000798,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:09:25.671370Z"
+    },
+    {
+      "trace_id": "8ea39d14-c271-4a78-bc09-d0287d2bd8d5",
       "verdict": "fail",
-      "category": "mid-market EMEA lead routed to partner and missed",
+      "category": "mid-market EMEA lead routed to partner; escalated later",
+      "score": 0.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.038229,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T23:08:49.983885Z"
+    },
+    {
+      "trace_id": "0eaa70d7-96e4-4acc-9cac-dc02e8446f01",
+      "verdict": "pass",
+      "category": "low-intent mid-market nurtured and engaged",
+      "score": 1.0,
+      "confidence": 0.78,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000837,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:08:38.240293Z"
+    },
+    {
+      "trace_id": "f6199304-68a2-4d01-8d43-f4bdeea65c24",
+      "verdict": "pass",
+      "category": "mid-market APAC lead routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.78,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000875,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:08:03.856452Z"
+    },
+    {
+      "trace_id": "4e52e958-f6f9-4ec2-8bc6-c0a813f69354",
+      "verdict": "pass",
+      "category": "mid-market NA self_serve success",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000864,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:07:37.324522Z"
+    },
+    {
+      "trace_id": "4c3539b0-d218-436d-9dbb-572dc94023cf",
+      "verdict": "fail",
+      "category": "mid-market NA lead routed to self_serve and lost",
+      "score": 0.0,
+      "confidence": 0.89,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.043041,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T23:07:34.417612Z"
+    },
+    {
+      "trace_id": "15f8e650-2eb6-4b9f-b0fa-fb8ee2f10bd4",
+      "verdict": "pass",
+      "category": "self_serve \u2014 smb/emea",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000872,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:06:34.625123Z"
+    },
+    {
+      "trace_id": "12b5aad1-456e-431b-8071-0eddd8bdbb7b",
+      "verdict": "pass",
+      "category": "smb/na self_serve succeeded",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00085,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:05:58.185594Z"
+    },
+    {
+      "trace_id": "8a4d5a6b-7ed5-40d7-8caf-9fe3d186824e",
+      "verdict": "pass",
+      "category": "partner-closed-deal",
+      "score": 1.0,
+      "confidence": 0.93,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000803,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:05:38.984345Z"
+    },
+    {
+      "trace_id": "aa41dbb7-9b35-4466-9ed8-fb13fb9f9d97",
+      "verdict": "pass",
+      "category": "low-intent enterprise routed to SDR nurture and converted",
+      "score": 1.0,
+      "confidence": 0.95,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000842,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:05:31.257062Z"
+    },
+    {
+      "trace_id": "2c70a33e-5d74-4313-93fe-6c63dcdb2ceb",
+      "verdict": "fail",
+      "category": "mid-market NA lead routed to self_serve and lost",
+      "score": 0.0,
+      "confidence": 0.83,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.043145,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T23:04:52.974682Z"
+    },
+    {
+      "trace_id": "88a86b4d-a873-4907-8a0b-da07e29e064f",
+      "verdict": "pass",
+      "category": "partner mid-market EMEA lead routed to partner and won",
+      "score": 1.0,
+      "confidence": 0.85,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000718,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:04:12.952416Z"
+    },
+    {
+      "trace_id": "81c57f0e-aea5-4d73-b588-a96b95683515",
+      "verdict": "pass",
+      "category": "mid_market EMEA partner routed and closed",
+      "score": 1.0,
+      "confidence": 0.87,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000729,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:04:05.846759Z"
+    },
+    {
+      "trace_id": "8c38b427-c134-4b37-8e2a-1232ad9943e8",
+      "verdict": "pass",
+      "category": "smb/emea self_serve success",
+      "score": 1.0,
+      "confidence": 0.89,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000871,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:04:03.624142Z"
+    },
+    {
+      "trace_id": "c71dc1d6-8e97-45b7-bef7-6cc391ed567e",
+      "verdict": "pass",
+      "category": "partner closed deal",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000805,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:04:03.219923Z"
+    },
+    {
+      "trace_id": "c6e9cf17-9290-4c30-8354-f7dc6aee960c",
+      "verdict": "pass",
+      "category": "mid-market EMEA routed to partner and closed",
+      "score": 1.0,
+      "confidence": 0.82,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000787,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:01:23.926319Z"
+    },
+    {
+      "trace_id": "6dd8d32f-faf1-481e-a342-a9717153dde5",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and won",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000743,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:01:02.750271Z"
+    },
+    {
+      "trace_id": "88791690-a606-42d3-bc3e-fa07fcf3190b",
+      "verdict": "pass",
+      "category": "mid-market NA self_serve signed",
+      "score": 1.0,
+      "confidence": 0.91,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000836,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:00:40.632170Z"
+    },
+    {
+      "trace_id": "0fbb4d72-1828-4e1a-9847-aa1ecb91bca0",
+      "verdict": "pass",
+      "category": "low-intent enterprise nurtured",
+      "score": 1.0,
+      "confidence": 0.92,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000828,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T23:00:34.008149Z"
+    },
+    {
+      "trace_id": "57d652d9-de21-4161-8e94-993e6cf201c8",
+      "verdict": "pass",
+      "category": "mid-market NA self_serve succeeded",
+      "score": 1.0,
+      "confidence": 0.88,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000856,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:59:53.814876Z"
+    },
+    {
+      "trace_id": "1a33ea22-d7a5-4120-9284-c060a4748810",
+      "verdict": "fail",
+      "category": "NA mid-market lead routed to self-serve; escalated later",
+      "score": 0.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.038915,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:59:46.576904Z"
+    },
+    {
+      "trace_id": "007b2c52-2a57-4b04-8112-b6758e977841",
+      "verdict": "pass",
+      "category": "mid_market EMEA partner routed and closed",
+      "score": 1.0,
+      "confidence": 0.78,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000729,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:59:46.203007Z"
+    },
+    {
+      "trace_id": "3a0921c0-faf2-4b67-a405-05b0a43343d7",
+      "verdict": "fail",
+      "category": "NA mid-market lead routed to self-serve and lost",
+      "score": 0.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.031475,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:59:44.010030Z"
+    },
+    {
+      "trace_id": "7e12766d-3082-4ddf-af16-d266e993ff41",
+      "verdict": "pass",
+      "category": "correct-routing",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000939,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:59:12.621484Z"
+    },
+    {
+      "trace_id": "c5f914a0-5b01-4c9c-a792-496fc6c72a9a",
+      "verdict": "pass",
+      "category": "partner-closed-deal",
+      "score": 1.0,
+      "confidence": 0.8,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000862,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:57:52.131526Z"
+    },
+    {
+      "trace_id": "9d037a7d-4862-466f-bfc7-5b8fca4fbf3f",
+      "verdict": "pass",
+      "category": "mid-market APAC routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.88,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000819,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:57:32.459158Z"
+    },
+    {
+      "trace_id": "41a95cd8-4970-45d4-bd16-a6c96318a1f4",
+      "verdict": "pass",
+      "category": "partner-closed-deal",
+      "score": 1.0,
+      "confidence": 0.75,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000716,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:57:31.634207Z"
+    },
+    {
+      "trace_id": "ae9043a5-0bfe-48b8-9d7e-cafac2f5078b",
+      "verdict": "pass",
+      "category": "correctly-disqualified personal lead",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000782,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:56:45.599642Z"
+    },
+    {
+      "trace_id": "31cc955a-a33b-4f9b-be81-40af989dadb7",
+      "verdict": "pass",
+      "category": "mid-market NA self_serve succeeded",
+      "score": 1.0,
+      "confidence": 0.91,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00075,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:56:07.318964Z"
+    },
+    {
+      "trace_id": "78e7e58e-ed3f-4544-b297-3276a002f681",
+      "verdict": "fail",
+      "category": "NA mid-market lead routed to AE; bought self-serve",
+      "score": 0.0,
+      "confidence": 0.94,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.030427,
+      "agent_self_reported": "failure",
+      "created_at": "2026-10-13T22:55:56.099541Z"
+    },
+    {
+      "trace_id": "9ea9c480-caf2-4b5b-8c98-39092b225bac",
+      "verdict": "pass",
+      "category": "low-intent enterprise nurtured successfully",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000852,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:55:43.515056Z"
+    },
+    {
+      "trace_id": "8ca98975-8455-4ba6-be8a-9f612ccf142e",
+      "verdict": "fail",
+      "category": "mid-market NA routed to AE and lost",
+      "score": 0.12,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.031319,
+      "agent_self_reported": "failure",
+      "created_at": "2026-10-13T22:55:40.293067Z"
+    },
+    {
+      "trace_id": "63bd2b6f-0833-4bcc-ae41-c677b741cb14",
+      "verdict": "pass",
+      "category": "mid-market APAC routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000717,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:54:32.171763Z"
+    },
+    {
+      "trace_id": "79c3d95f-f90b-485b-aba7-4e90534a4af3",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and won",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000828,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:54:04.245267Z"
+    },
+    {
+      "trace_id": "7e560f81-ba18-446b-95c8-71401511bfbf",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and closed",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000707,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:53:42.990950Z"
+    },
+    {
+      "trace_id": "4b630fb4-3975-415f-ac31-c4c908a9568b",
+      "verdict": "pass",
+      "category": "smb/apac self_serve success",
+      "score": 1.0,
+      "confidence": 0.92,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000761,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:53:18.885540Z"
+    },
+    {
+      "trace_id": "d18773e3-59d0-435c-8a8d-46eb3a2243c0",
+      "verdict": "pass",
+      "category": "smb/na self_serve - success",
+      "score": 1.0,
+      "confidence": 0.89,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000824,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:53:12.609544Z"
+    },
+    {
+      "trace_id": "9395d0ad-9f44-4c12-85fd-904a0040b364",
+      "verdict": "fail",
+      "category": "NA mid-market lead routed to AE; bought self-serve",
       "score": 0.0,
       "confidence": 0.92,
       "judge_model": "gpt-5",
-      "cost_usd": 0.031014,
-      "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:49:18.766095Z"
+      "cost_usd": 0.033275,
+      "agent_self_reported": "failure",
+      "created_at": "2026-10-13T22:53:12.213344Z"
     },
     {
-      "trace_id": "1a24822b-e1d2-485d-a264-6f947b0d7192",
+      "trace_id": "9ac47705-e62e-4773-ae89-9009f70732c3",
+      "verdict": "pass",
+      "category": "success",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000817,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:52:08.963383Z"
+    },
+    {
+      "trace_id": "d5c4ef0c-a5fa-4061-859b-a73f40a614f9",
+      "verdict": "pass",
+      "category": "mid_market/emea partner",
+      "score": 1.0,
+      "confidence": 0.95,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000861,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:51:49.628855Z"
+    },
+    {
+      "trace_id": "c8dab5c8-99d6-4583-aa85-889f5e7e86cd",
+      "verdict": "pass",
+      "category": "correct-action",
+      "score": 1.0,
+      "confidence": 0.78,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00085,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:51:29.269297Z"
+    },
+    {
+      "trace_id": "0cddcffb-7c71-4163-8503-20a532fa54b1",
+      "verdict": "pass",
+      "category": "mid_market/apac routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00074,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:51:06.226222Z"
+    },
+    {
+      "trace_id": "90adac33-3336-4a41-8dbd-c127444c86e7",
       "verdict": "pass",
       "category": "mid-market EMEA partner routed and closed",
       "score": 1.0,
       "confidence": 0.92,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000863,
+      "cost_usd": 0.000781,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:49:05.243309Z"
+      "created_at": "2026-10-13T22:50:44.595824Z"
     },
     {
-      "trace_id": "233fcbcf-0ef4-44e6-9fb8-06edad92901d",
+      "trace_id": "c0f57e38-8577-4f7e-ba46-5890cac29a70",
+      "verdict": "pass",
+      "category": "low-intent/enterprise routed to SDR nurture and succeeded",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000848,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:50:25.290717Z"
+    },
+    {
+      "trace_id": "829f2d84-5b27-4a03-a887-6513133a796f",
+      "verdict": "pass",
+      "category": "correct-disqualification",
+      "score": 1.0,
+      "confidence": 0.76,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000735,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:50:22.987967Z"
+    },
+    {
+      "trace_id": "1d896180-111a-4a93-8831-1ba5410f5011",
+      "verdict": "pass",
+      "category": "enterprise EMEA routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000838,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:49:37.269313Z"
+    },
+    {
+      "trace_id": "461b8d48-4b8f-4717-8abe-1a9bda7abff0",
+      "verdict": "pass",
+      "category": "partner closed deal",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000688,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:49:16.109003Z"
+    },
+    {
+      "trace_id": "36185a7d-2346-4d3e-a1b7-948c117d1a65",
+      "verdict": "pass",
+      "category": "partner-closed-deal",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000804,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:48:44.216805Z"
+    },
+    {
+      "trace_id": "5308e539-1c3d-41f8-8c62-c1c15c48c83c",
+      "verdict": "pass",
+      "category": "low-intent enterprise routed to SDR nurture and succeeded",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000864,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:48:21.311040Z"
+    },
+    {
+      "trace_id": "f79eaf9f-4543-45a6-8280-581a46be6623",
+      "verdict": "pass",
+      "category": "mid-market APAC routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000657,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:47:59.239837Z"
+    },
+    {
+      "trace_id": "a1a76aaf-3786-44e1-8144-7b29797b9210",
+      "verdict": "pass",
+      "category": "smb/na self_serve succeeded",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000744,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:47:36.711584Z"
+    },
+    {
+      "trace_id": "7ac41457-6a60-442b-bfb4-7f250cbfb511",
+      "verdict": "fail",
+      "category": "mid-market EMEA lead routed to partner; escalated later",
+      "score": 0.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.042659,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:47:04.027638Z"
+    },
+    {
+      "trace_id": "e6ce1a5b-7aef-4f7b-9bb1-940e949a65e4",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and won",
+      "score": 1.0,
+      "confidence": 0.78,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000866,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:46:02.358048Z"
+    },
+    {
+      "trace_id": "04d87187-5442-4a6f-9440-2b93d8cbc995",
+      "verdict": "pass",
+      "category": "enterprise/emea routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.0008,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:45:35.343474Z"
+    },
+    {
+      "trace_id": "894f6208-a2ae-41ba-9a3f-66a91ec081d9",
+      "verdict": "pass",
+      "category": "low-intent enterprise routed to SDR nurture and succeeded",
+      "score": 1.0,
+      "confidence": 0.74,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000868,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:45:27.211147Z"
+    },
+    {
+      "trace_id": "058ff526-e047-4a52-b45b-534e231fd848",
+      "verdict": "fail",
+      "category": "lead_routing",
+      "score": 0.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.034309,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:45:24.430113Z"
+    },
+    {
+      "trace_id": "49a34dda-e91a-4cee-9fec-e8649e9ad4d8",
+      "verdict": "pass",
+      "category": "mid_market/emea routed to partner and closed",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000715,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:44:26.174841Z"
+    },
+    {
+      "trace_id": "73a9cd2f-001f-49bd-91db-ba3af5aa8c3b",
+      "verdict": "pass",
+      "category": "partner-closed-deal",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00078,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:44:02.515086Z"
+    },
+    {
+      "trace_id": "5e45973e-d890-4c4b-8b0d-6c4b4b2c665d",
+      "verdict": "pass",
+      "category": "correct_decision",
+      "score": 1.0,
+      "confidence": 0.85,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000778,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:43:37.246405Z"
+    },
+    {
+      "trace_id": "5c4e30c7-452a-4d8f-b229-98b0b55aa84d",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routing and closed",
+      "score": 1.0,
+      "confidence": 0.87,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000803,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:43:07.978253Z"
+    },
+    {
+      "trace_id": "972c550f-88c7-4e67-a0e7-09ce7c096f92",
+      "verdict": "fail",
+      "category": "NA mid-market lead nurtured by SDR; student project no budget",
+      "score": 0.0,
+      "confidence": 0.94,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.039109,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:42:56.291567Z"
+    },
+    {
+      "trace_id": "13411105-8cf3-4bc3-8105-a8576734b3a6",
+      "verdict": "pass",
+      "category": "correct-routing",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000721,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:42:41.197651Z"
+    },
+    {
+      "trace_id": "0ad307e2-14ef-4b62-a723-efffbb181c36",
+      "verdict": "pass",
+      "category": "mid_market NA routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.84,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000787,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:41:54.115439Z"
+    },
+    {
+      "trace_id": "01e3d191-d24b-45de-a853-e5b5e1b7d272",
+      "verdict": "pass",
+      "category": "mid-market EMEA lead routed to partner and closed",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000804,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:41:51.654395Z"
+    },
+    {
+      "trace_id": "56b4f0d0-6d89-47c9-b8ac-c271ddd7be60",
       "verdict": "pass",
       "category": "enterprise NA routed to AE and won",
       "score": 1.0,
-      "confidence": 0.9,
+      "confidence": 0.86,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00083,
+      "cost_usd": 0.00086,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:48:40.779346Z"
+      "created_at": "2026-10-13T22:41:15.829709Z"
     },
     {
-      "trace_id": "4717d3d3-f08a-4868-8c55-b6d80fa7f9b1",
+      "trace_id": "67437153-b6a4-4c6b-ab9a-b8f12c2a01d5",
       "verdict": "pass",
-      "category": "low-intent mid-market nurtured",
+      "category": "mid-market EMEA partner routed and won",
       "score": 1.0,
-      "confidence": 0.89,
+      "confidence": 0.85,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000845,
+      "cost_usd": 0.000746,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:48:32.298456Z"
+      "created_at": "2026-10-13T22:40:22.625738Z"
     },
     {
-      "trace_id": "8705573b-a8af-427c-9f1c-5e8012152f0f",
+      "trace_id": "b6981c80-9b54-461a-8c0a-cedcfeaf521f",
       "verdict": "fail",
-      "category": "NA mid-market lead routed to SDR nurture and lost",
+      "category": "NA mid-market lead routed to AE; student project, no budget",
       "score": 0.0,
-      "confidence": 0.9,
+      "confidence": 0.93,
       "judge_model": "gpt-5",
-      "cost_usd": 0.037737,
+      "cost_usd": 0.039037,
       "agent_self_reported": "minor_failure",
-      "created_at": "2026-10-13T07:48:30.383100Z"
+      "created_at": "2026-10-13T22:40:20.202935Z"
     },
     {
-      "trace_id": "1924d2e0-6c92-4f5e-b42b-dd83f45970e5",
+      "trace_id": "662fe7ee-c69f-4432-8ac7-303adc36d111",
       "verdict": "pass",
-      "category": "correct-action",
+      "category": "mid_market EMEA routed-to-partner and won",
       "score": 1.0,
       "confidence": 0.91,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000718,
+      "cost_usd": 0.000872,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:48:05.538608Z"
+      "created_at": "2026-10-13T22:39:57.535238Z"
     },
     {
-      "trace_id": "a73e69c6-9570-4ad5-a444-edd68f11b3bd",
+      "trace_id": "334adfc1-9338-4e02-b33d-7d1c9818d08c",
       "verdict": "pass",
-      "category": "mid-market NA routed to AE and won",
+      "category": "smb/emea self_serve success",
       "score": 1.0,
       "confidence": 0.9,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00087,
+      "cost_usd": 0.000863,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:47:26.106318Z"
+      "created_at": "2026-10-13T22:39:40.105118Z"
     },
     {
-      "trace_id": "2398394c-6fc3-42a3-8f84-436e915fb102",
+      "trace_id": "88904823-9371-4ba9-811b-2ce85cfdc822",
       "verdict": "pass",
-      "category": "enterprise/na routed to AE and won",
+      "category": "smb EMEA self_serve won",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.00076,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:39:39.678577Z"
+    },
+    {
+      "trace_id": "f31509ee-1a46-471f-8cd0-5a634a26c0d8",
+      "verdict": "pass",
+      "category": "smb/na self_serve succeeded",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000763,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:39:39.636333Z"
+    },
+    {
+      "trace_id": "5980014d-1d3f-45e8-8804-8214ce07575e",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and won",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000808,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:38:45.307076Z"
+    },
+    {
+      "trace_id": "63a98b7b-d04f-444d-843b-999291b28e41",
+      "verdict": "pass",
+      "category": "correct-decision",
+      "score": 1.0,
+      "confidence": 0.8,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000816,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:38:45.230108Z"
+    },
+    {
+      "trace_id": "5df99265-3f51-45e3-bfc3-0cf20f2fd8d1",
+      "verdict": "pass",
+      "category": "successful nurture",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000819,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:37:55.778613Z"
+    },
+    {
+      "trace_id": "971ec619-2582-4af6-b534-44ed53d140f1",
+      "verdict": "pass",
+      "category": "correct-routing",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000691,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:37:55.423386Z"
+    },
+    {
+      "trace_id": "b40f166b-6a36-49b1-aa6d-6fea180c2454",
+      "verdict": "pass",
+      "category": "partner action succeeded",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000848,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:37:18.355325Z"
+    },
+    {
+      "trace_id": "ebd22de4-5c70-4b67-87b3-c7530e69ad0e",
+      "verdict": "fail",
+      "category": "enterprise NA lead routed to AE and lost",
+      "score": 0.0,
+      "confidence": 0.95,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.042986,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:37:15.847357Z"
+    },
+    {
+      "trace_id": "e99a5567-efb9-422c-aab5-21bb216066a1",
+      "verdict": "pass",
+      "category": "mid-market NA routed to AE and won",
       "score": 1.0,
       "confidence": 0.89,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.00075,
+      "cost_usd": 0.000723,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:47:15.600370Z"
+      "created_at": "2026-10-13T22:36:36.016194Z"
     },
     {
-      "trace_id": "792d93f3-5d88-4fa3-9d3d-cf3fc92b6940",
+      "trace_id": "dd96753e-2865-433f-b48a-2068861e5b76",
       "verdict": "pass",
-      "category": "low-intent/enterprise routed to SDR nurture and engaged",
-      "score": 1.0,
-      "confidence": 0.73,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000782,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:47:01.214047Z"
-    },
-    {
-      "trace_id": "8e314569-7182-4b28-86e6-e33bdb2f87e1",
-      "verdict": "pass",
-      "category": "mid-market NA routed to AE and won",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000633,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:46:42.826655Z"
-    },
-    {
-      "trace_id": "15a57d9a-f138-4f9a-bb23-fd6984d0f809",
-      "verdict": "pass",
-      "category": "mid-market EMEA partner routing \u2014 success",
-      "score": 1.0,
-      "confidence": 0.86,
-      "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000869,
-      "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:46:31.689279Z"
-    },
-    {
-      "trace_id": "7c37b2e1-6771-4b74-acdb-6b8855ad5fa9",
-      "verdict": "fail",
-      "category": "mid-market EMEA lead routed to AE and lost",
-      "score": 0.0,
-      "confidence": 0.95,
-      "judge_model": "gpt-5",
-      "cost_usd": 0.03901,
-      "agent_self_reported": "failure",
-      "created_at": "2026-10-13T07:46:26.844057Z"
-    },
-    {
-      "trace_id": "47575d16-90fb-40de-8b09-6837e3ed4197",
-      "verdict": "pass",
-      "category": "mid_market/emea partner routed and won",
+      "category": "mid_market EMEA partner routed and closed",
       "score": 1.0,
       "confidence": 0.9,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000785,
+      "cost_usd": 0.000738,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:46:18.904274Z"
+      "created_at": "2026-10-13T22:36:32.477120Z"
     },
     {
-      "trace_id": "ef143e34-fff0-4267-b0be-247af696bbb1",
+      "trace_id": "4ba2a94d-e0c3-4769-8167-dad02ffe2146",
+      "verdict": "pass",
+      "category": "enterprise EMEA lead routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.85,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000788,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:35:22.057005Z"
+    },
+    {
+      "trace_id": "8751bf67-641c-4b01-a0dc-e4abf0c79532",
+      "verdict": "pass",
+      "category": "sdr_nurture - low-intent/enterprise",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000828,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:35:17.957891Z"
+    },
+    {
+      "trace_id": "9ad66f52-b0e9-4de4-92da-8043179808f0",
+      "verdict": "fail",
+      "category": "enterprise EMEA lead routed to AE and escalated later",
+      "score": 0.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.031667,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:35:04.088032Z"
+    },
+    {
+      "trace_id": "5823bc01-eb12-43ff-99c0-2b2b477cc34a",
+      "verdict": "fail",
+      "category": "NA mid-market lead disqualified and lost",
+      "score": 0.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.031473,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:35:02.635036Z"
+    },
+    {
+      "trace_id": "79d91f2b-39a2-4298-bc79-febc52517284",
+      "verdict": "fail",
+      "category": "mid-market EMEA lead routed to partner and lost",
+      "score": 0.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.042779,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:34:34.235932Z"
+    },
+    {
+      "trace_id": "f625aa5c-5491-476a-ba71-3d005c64660e",
+      "verdict": "pass",
+      "category": "low-intent enterprise routed to SDR nurture and succeeded",
+      "score": 1.0,
+      "confidence": 0.83,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000825,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:33:53.484059Z"
+    },
+    {
+      "trace_id": "6c525476-c639-4701-8ca5-e7337ad277e5",
+      "verdict": "pass",
+      "category": "enterprise NA routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.8,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000802,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:33:51.515254Z"
+    },
+    {
+      "trace_id": "9cdbb128-6b22-41d2-9b0a-462b0a775c7c",
+      "verdict": "pass",
+      "category": "mid_market EMEA partner routed and closed",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000834,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:33:51.431089Z"
+    },
+    {
+      "trace_id": "ba9830d5-996a-4b90-b87a-e893ce3308ed",
+      "verdict": "pass",
+      "category": "low-intent mid-market lead nurtured successfully",
+      "score": 1.0,
+      "confidence": 0.92,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000854,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:31:59.873779Z"
+    },
+    {
+      "trace_id": "9c276bbf-985d-482d-a557-3c95a738bc8c",
+      "verdict": "pass",
+      "category": "correct-action",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000828,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:31:57.140521Z"
+    },
+    {
+      "trace_id": "72e4c389-5fe0-4f30-9074-116d79332d7b",
+      "verdict": "fail",
+      "category": "low-intent mid-market lead routed to SDR nurture and lost",
+      "score": 0.0,
+      "confidence": 0.77,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.036484,
+      "agent_self_reported": "minor_failure",
+      "created_at": "2026-10-13T22:31:54.815665Z"
+    },
+    {
+      "trace_id": "fc4730b0-3745-4b94-8dd3-b5d091de38c8",
+      "verdict": "pass",
+      "category": "correct_routing",
+      "score": 1.0,
+      "confidence": 0.9,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000673,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:31:15.014385Z"
+    },
+    {
+      "trace_id": "cbabccf0-93c6-43d3-b07b-77619036f33c",
+      "verdict": "pass",
+      "category": "enterprise/na routed to AE and won",
+      "score": 1.0,
+      "confidence": 0.83,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000758,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:30:28.878434Z"
+    },
+    {
+      "trace_id": "d9ba76c0-8792-44ab-bbc4-85adbca8b87a",
+      "verdict": "pass",
+      "category": "low-intent enterprise nurtured successfully",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000805,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:29:56.012280Z"
+    },
+    {
+      "trace_id": "56d238d7-7f70-4d8d-af91-25eb4b8edf9a",
+      "verdict": "pass",
+      "category": "correct-routing",
+      "score": 1.0,
+      "confidence": 0.83,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000711,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:29:38.321848Z"
+    },
+    {
+      "trace_id": "3f9b7eec-dd6f-4a15-b8b3-6ae10b9864da",
+      "verdict": "pass",
+      "category": "mid-market EMEA partner routed and won",
+      "score": 1.0,
+      "confidence": 0.97,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.0008,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:29:17.455385Z"
+    },
+    {
+      "trace_id": "c306a5db-8935-491f-ad6d-687c260671e1",
       "verdict": "pass",
       "category": "mid-market EMEA lead routed to partner and won",
       "score": 1.0,
-      "confidence": 0.98,
+      "confidence": 0.94,
       "judge_model": "gpt-5-mini",
-      "cost_usd": 0.000753,
+      "cost_usd": 0.000874,
       "agent_self_reported": "success",
-      "created_at": "2026-10-13T07:46:05.930881Z"
+      "created_at": "2026-10-13T22:28:48.307801Z"
+    },
+    {
+      "trace_id": "59b3b1d9-dc0d-4486-941f-a2e96d14fe35",
+      "verdict": "pass",
+      "category": "mid-market EMEA lead routed to partner and won",
+      "score": 1.0,
+      "confidence": 0.86,
+      "judge_model": "gpt-5-mini",
+      "cost_usd": 0.000644,
+      "agent_self_reported": "success",
+      "created_at": "2026-10-13T22:28:42.589506Z"
+    },
+    {
+      "trace_id": "83f4b689-9ed2-48b8-b727-bd08b70718b7",
+      "verdict": "fail",
+      "category": "mid-market EMEA lead routed to AE and lost",
+      "score": 0.0,
+      "confidence": 0.93,
+      "judge_model": "gpt-5",
+      "cost_usd": 0.03392,
+      "agent_self_reported": "failure",
+      "created_at": "2026-10-13T22:28:39.955579Z"
     }
   ],
   "fixes": [
     {
-      "id": "cc0af615-01bc-412d-a872-88fc06f16de3",
+      "id": "862f672e-8717-49ed-958c-8d886b4d72ae",
       "account_id": "redacted",
-      "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-      "behavior_id": "d9a1f288-84e2-40ed-8d2e-79c07efc501d",
+      "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+      "behavior_id": "84ac0cfd-803c-4afe-a2a1-415567c82200",
       "judge_id": "jev-demo-decision-failure",
       "verdict_ids": [
-        "45394723-0a59-494c-9e5e-0f743bb9a73c",
-        "012b3783-3e2c-42cf-9865-d7869117edbb",
-        "1d60f4cf-fc34-4496-bd3a-dd154b5878ba"
+        "0a79e653-9ad2-455e-8359-89f2d6dfc9a6",
+        "8911896f-316b-4ba6-932c-78be36c3a721",
+        "878b3efb-151e-42b6-b5a0-9dde8f279c8f"
       ],
-      "lever": "knowledge",
-      "lever_confidence": 0.62,
-      "lever_rationale": "1 evidence ref(s) cite tool calls that succeeded \u2014 the sequence, not the tool; 1 evidence ref(s) cite causal_entries; 1/3 unsupported claims overlap a memory entry read; 2 evidence ref(s) cite error/tool spans; template kept (repair agent gave up: timeout after 7 step(s), 256.7s)",
+      "lever": "procedure",
+      "lever_confidence": 0.85,
+      "lever_rationale": "1/3 unsupported claims overlap a memory entry read; 1 evidence ref(s) cite error/tool spans; signals are mixed; llm tiebreak: The failure description indicates the agent knew facts from the prospect (they already bought online; they purchase through a local vendor with in-country invoicing) but proceeded with an AE cycle that added delay and no value. That suggests the agent acted in the wrong sequence or failed to verify preconditions (e.g., purchase channel, decision status) before escalating\u2014behavioral/process issue\u2014not a knowledge gap or tool bug. Memory entries show relevant recalls but are not implicated, support; repair agent drafted the change",
       "status": "test_failed",
-      "title": "Fix: Mismatched qualification assumptions",
-      "summary": "3 failing runs graded by jev-demo-decision-failure. Evidence: \u201cProspect said the new plan was all they needed and bought online; the AE cycle added a week and no value.\u201d.",
+      "title": "Fix: Misaligned outreach effort",
+      "summary": "3 failing runs graded by jev-demo-decision-failure. Evidence: \u201cReview: \"Prospect said the new plan was all they needed and bought online; the AE cycle added a week and no value.\"\u201d. Method failure: the fix is a procedure, jev-demos/lead_routing/team3d-s11/senselab/procedure-misaligned-outreach-effort, for the next run to follow.",
       "corrective_entry": {
-        "entity_path": "jev-demos/lead_routing/team3b-s11/senselab",
-        "key": "risk-mismatched-qualification-assumptions-learned-mid-market-na-4",
-        "value": "Risk: Mismatched qualification assumptions \u2014 3 failing run(s) graded by jev-demo-decision-failure.\nEvidence: \u201cProspect said the new plan was all they needed and bought online; the AE cycle added a week and no value.\u201d\nEntry read in the failing runs: jev-demos/lead_routing/team3b-s11/senselab/learned-mid-market-na-4c052021 v11.\nRecommended change: verify learned-mid-market-na-4c052021 against the evidence above and correct or lower its confidence before relying on it again.",
-        "confidence": 0.79,
-        "memory_type": "belief",
-        "pattern_refs": [
-          "learned-mid-market-na-4c052021"
-        ],
-        "replaces_version": null,
-        "diff": null
-      },
-      "correction": null,
-      "handoff_available": true,
-      "shipped_at": null,
-      "handed_off_at": null,
-      "dismissed_at": null,
-      "dismiss_reason": null,
-      "prevention": null,
-      "case_set_id": "9d8af4db-3c30-49a7-ae7d-796260f2448d",
-      "last_check": null,
-      "manifest": {
-        "predicted_fixes": [
-          "4265fe0d-a46b-4b96-a820-bad04d51f11f",
-          "7c37b2e1-6771-4b74-acdb-6b8855ad5fa9",
-          "bd9e4d86-b7b9-4b87-ad03-10fa4cf30f66"
-        ],
-        "predicted_regressions": [
-          "ee7ecbbb-dadd-4de2-8be6-d6bafe92de81"
-        ],
-        "expected_prevention": 0.5,
-        "rationale": "1 evidence ref(s) cite tool calls that succeeded \u2014 the sequence, not the tool; 1 evidence ref(s) cite causal_entries; 1/3 unsupported claims overlap a memory entry read; 2 evidence ref(s) cite error/tool spans; template kept (repair agent gave up: timeout after 7 step(s), 256.7s)",
-        "source": "template",
-        "repairer_version": null,
-        "repairer_variant": null,
-        "model": null
-      },
-      "branch": "repair/cc0af615",
-      "pr_id": "068f07c6-2b04-4a23-9e88-7ee4282b0e7e",
-      "test": {
-        "id": "b91fbeb3-01e6-40dc-bc7d-01682b8dee54",
-        "fix_id": "cc0af615-01bc-412d-a872-88fc06f16de3",
-        "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "branch": "repair/cc0af615",
-        "status": "failed",
-        "passed": false,
-        "started_at": "2026-10-13T08:11:03.460694Z",
-        "finished_at": "2026-10-13T08:13:40.811590Z",
-        "repaired": 0,
-        "total": 3,
-        "regressed": 0,
-        "anchors": 1,
-        "fidelity": 1.0,
-        "unreplayable": 0,
-        "model": "gpt-5",
-        "cases": [
-          {
-            "case_id": null,
-            "trace_id": "4265fe0d-a46b-4b96-a820-bad04d51f11f",
-            "kind": "case",
-            "verdict": "fail",
-            "passed": false,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "attributes\": {\"outcome_type\": \"failure\"",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "7c37b2e1-6771-4b74-acdb-6b8855ad5fa9",
-            "kind": "case",
-            "verdict": "fail",
-            "passed": false,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "\"evidence_review_note: \"Prospect told the AE they purchase through a local vendor with in-country invoicing; closed-lost.\"",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "bd9e4d86-b7b9-4b87-ad03-10fa4cf30f66",
-            "kind": "case",
-            "verdict": "fail",
-            "passed": false,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "\"attributes\": {\"outcome_type\": \"failure\"",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "ee7ecbbb-dadd-4de2-8be6-d6bafe92de81",
-            "kind": "anchor",
-            "verdict": "pass",
-            "passed": true,
-            "replayed_steps": 1,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide"
-            ],
-            "notes": "\"evidence_severity: \"success\"\"",
-            "sealed_trace_id": null
-          }
-        ],
-        "notes": "3 of 3 replayed run(s) still fail"
-      },
-      "tested_at": "2026-10-13T08:13:40.811590Z",
-      "canary": null,
-      "canary_hold": null,
-      "situation": "mid_market/na",
-      "replay": null,
-      "reverted_at": null,
-      "revert_reason": null,
-      "source": "template",
-      "created_at": "2026-10-13T08:11:03.049052Z",
-      "updated_at": "2026-10-13T08:13:40.816106Z",
-      "events": [
-        {
-          "id": "6a3b3724-0977-46cc-be31-ea68dd25dffd",
-          "fix_id": "cc0af615-01bc-412d-a872-88fc06f16de3",
-          "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-          "kind": "tested",
-          "actor": "system",
-          "data": {
-            "model": "gpt-5",
-            "notes": "3 of 3 replayed run(s) still fail",
-            "total": 3,
-            "passed": false,
-            "status": "failed",
-            "anchors": 1,
-            "fidelity": 1.0,
-            "recorded": [
-              "lesson-fix-risk-mismatched-qualification-assumptions-learned-mid-market"
-            ],
-            "repaired": 0,
-            "regressed": 0,
-            "unreplayable": 0
-          },
-          "created_at": "2026-10-13T08:13:41.169198Z"
-        },
-        {
-          "id": "bd4c1c67-86c6-4bea-bec9-379742d9bb2e",
-          "fix_id": "cc0af615-01bc-412d-a872-88fc06f16de3",
-          "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-          "kind": "proposed",
-          "actor": "system",
-          "data": {
-            "lever": "knowledge",
-            "pr_id": "068f07c6-2b04-4a23-9e88-7ee4282b0e7e",
-            "branch": "repair/cc0af615",
-            "source": "template",
-            "predicted_fixes": 3,
-            "predicted_regressions": 1
-          },
-          "created_at": "2026-10-13T08:11:03.383584Z"
-        }
-      ],
-      "tests": [
-        {
-          "id": "b91fbeb3-01e6-40dc-bc7d-01682b8dee54",
-          "fix_id": "cc0af615-01bc-412d-a872-88fc06f16de3",
-          "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-          "branch": "repair/cc0af615",
-          "status": "failed",
-          "passed": false,
-          "started_at": "2026-10-13T08:11:03.460694Z",
-          "finished_at": "2026-10-13T08:13:40.811590Z",
-          "repaired": 0,
-          "total": 3,
-          "regressed": 0,
-          "anchors": 1,
-          "fidelity": 1.0,
-          "unreplayable": 0,
-          "model": "gpt-5",
-          "cases": [
-            {
-              "case_id": null,
-              "trace_id": "4265fe0d-a46b-4b96-a820-bad04d51f11f",
-              "kind": "case",
-              "verdict": "fail",
-              "passed": false,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "attributes\": {\"outcome_type\": \"failure\"",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "7c37b2e1-6771-4b74-acdb-6b8855ad5fa9",
-              "kind": "case",
-              "verdict": "fail",
-              "passed": false,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "\"evidence_review_note: \"Prospect told the AE they purchase through a local vendor with in-country invoicing; closed-lost.\"",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "bd9e4d86-b7b9-4b87-ad03-10fa4cf30f66",
-              "kind": "case",
-              "verdict": "fail",
-              "passed": false,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "\"attributes\": {\"outcome_type\": \"failure\"",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "ee7ecbbb-dadd-4de2-8be6-d6bafe92de81",
-              "kind": "anchor",
-              "verdict": "pass",
-              "passed": true,
-              "replayed_steps": 1,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide"
-              ],
-              "notes": "\"evidence_severity: \"success\"\"",
-              "sealed_trace_id": null
-            }
-          ],
-          "notes": "3 of 3 replayed run(s) still fail"
-        }
-      ]
-    },
-    {
-      "id": "bfa67c2b-8e6a-42ab-9fa2-abae895d16b6",
-      "account_id": "redacted",
-      "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-      "behavior_id": "ce0dc19f-d993-4f69-8f95-ef5553c3af9b",
-      "judge_id": "jev-demo-decision-failure",
-      "verdict_ids": [
-        "3279401f-96d3-4019-9009-18ffc0e04f47",
-        "decd1892-0914-41e7-8d9f-e15cbc607a93",
-        "9160d333-cd75-4eb6-8134-d88fdec334db"
-      ],
-      "lever": "knowledge",
-      "lever_confidence": 0.62,
-      "lever_rationale": "1 evidence ref(s) cite tool calls that succeeded \u2014 the sequence, not the tool; 1 evidence ref(s) cite causal_entries; 2/3 unsupported claims overlap a memory entry read; 1 evidence ref(s) cite error/tool spans; repair agent drafted the change",
-      "status": "test_failed",
-      "title": "Fix: Unclear escalation loop",
-      "summary": "3 failing runs graded by jev-demo-decision-failure. Evidence: \u201cEscalated later by a different team; root cause unclear.\u201d.",
-      "corrective_entry": {
-        "entity_path": "jev-demos/lead_routing/team3b-s11/senselab",
-        "key": "risk-unclear-escalation-loop-learned-mid-market-emea-5b6fddc3",
-        "value": "Risk: Unclear escalation loop in review notes.\nEvidence:\n- Failing run 83b903a2: review text \"Escalated later by a different team; root cause unclear.\" (also the live lesson at jev-demos/lead_routing/team3b-s11/senselab/learned-mid-market-emea-5b6fddc3@v35) and judge note: \"Escalated later by a different team; root cause unclear.\"\n- Failing run ff9759f7: review text \"Went badly for reasons outside the decision; flagged by the reviewing team.\" (read @v31 of the same entry).\n- Passing run af0ec625: review text \"Partner closed the deal in 30 days.\" (read @v33), which is clear and validated.\nProblem: The agent echoed vague, non-causal escalation notes from a learned entry (worked=false, low confidence, discredited in these runs) as the review, causing graders to flag the outcome.\nDo instead:\n- Do not use lessons that state escalation by another team or \"root cause unclear\" or \"outside the decision\" as the review text.\n- Prefer validated, worked=true mid_market/emea partner outcomes (e.g., \"Partner closed the deal in N days.\") when available.\n- If only ambiguous or non-causal notes are available, give a neutral rationale for the decision (e.g., \"Decision: partner per mid_market/emea playbook and intent\"), and avoid attributing outcomes.\nScope: Applies when the learned-mid-market-emea-5b6fddc3 text contains phrases like \"Escalated later by a different team\" or \"Went badly for reasons outside the decision\" or when the entry has low confidence/discredited evidence.",
-        "confidence": 0.82,
-        "memory_type": "belief",
-        "pattern_refs": [],
-        "replaces_version": null,
-        "diff": null
-      },
-      "correction": null,
-      "handoff_available": true,
-      "shipped_at": null,
-      "handed_off_at": null,
-      "dismissed_at": null,
-      "dismiss_reason": null,
-      "prevention": null,
-      "case_set_id": "60665036-6843-43f1-b494-aa2bfb10383a",
-      "last_check": null,
-      "manifest": {
-        "predicted_fixes": [
-          "83b903a2-39f2-4d6a-bb36-6a7dace7f398",
-          "ff9759f7-a795-437b-a70a-2bef2bb82545",
-          "019ce900-a01d-4b69-88af-d35530e4660f"
-        ],
-        "predicted_regressions": [
-          "af0ec625-6313-4eb9-9fa0-668cdde262df",
-          "35685fc7-db48-4710-a256-9ccc36ab6b27",
-          "88ad6cc0-c29e-42cc-bcfd-85b288da341e",
-          "0139a32e-dd50-4d57-a2aa-48b86772f212"
-        ],
-        "expected_prevention": 0.67,
-        "rationale": "The failing runs echo vague escalation notes as the review despite successful tool calls. Run 83b903a2 reads jev-demos/lead_routing/team3b-s11/senselab/learned-mid-market-emea-5b6fddc3@v35 (discredited) with text: \"Escalated later by a different team; root cause unclear.\" and responds: \"review: Escalated later by a different team; root cause unclear.\" The judge flags: \"Escalated later by a different team; root cause unclear.\" Run ff9759f7 reads @v31 (discredited) and responds: \"Went badly for reasons outside the decision; flagged by the reviewing team.\" The judge mirrors this quote. In contrast, passing run af0ec625 reads @v33 and uses the validated note: \"Partner closed the deal in 30 days.\" This shows that using ambiguous, non-causal lessons in reviews causes failure, while using validated, clear outcomes passes. A risk belief is the minimal, non-destructive change: it prevents relying on those vague entries for reviews and steers the agent to validated outcomes or neutral rationale without altering the learned entry that still supports passing runs.",
-        "source": "repair_agent",
-        "repairer_version": 0,
-        "repairer_variant": "active",
-        "model": "gpt-5"
-      },
-      "branch": "repair/bfa67c2b",
-      "pr_id": "cb9ff3af-d26b-4b4c-ab22-bdcce97865f8",
-      "test": {
-        "id": "cfa57c74-f978-40e0-baf1-dca9de91f1b0",
-        "fix_id": "bfa67c2b-8e6a-42ab-9fa2-abae895d16b6",
-        "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "branch": "repair/bfa67c2b",
-        "status": "failed",
-        "passed": false,
-        "started_at": "2026-10-13T08:02:58.903065Z",
-        "finished_at": "2026-10-13T08:06:03.521843Z",
-        "repaired": 0,
-        "total": 3,
-        "regressed": 0,
-        "anchors": 4,
-        "fidelity": 1.0,
-        "unreplayable": 0,
-        "model": "gpt-5",
-        "cases": [
-          {
-            "case_id": null,
-            "trace_id": "83b903a2-39f2-4d6a-bb36-6a7dace7f398",
-            "kind": "case",
-            "verdict": "fail",
-            "passed": false,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "\"Escalated later by a different team; root cause unclear.\"",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "ff9759f7-a795-437b-a70a-2bef2bb82545",
-            "kind": "case",
-            "verdict": "fail",
-            "passed": false,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "Went badly for reasons outside the decision; flagged by the reviewing team.",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "019ce900-a01d-4b69-88af-d35530e4660f",
-            "kind": "case",
-            "verdict": "fail",
-            "passed": false,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "\"Escalated later by a different team; root cause unclear.\"",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "af0ec625-6313-4eb9-9fa0-668cdde262df",
-            "kind": "anchor",
-            "verdict": "pass",
-            "passed": true,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "Partner closed the deal in 30 days.",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "35685fc7-db48-4710-a256-9ccc36ab6b27",
-            "kind": "anchor",
-            "verdict": "pass",
-            "passed": true,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "\"Partner closed the deal in 24 days.\"",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "88ad6cc0-c29e-42cc-bcfd-85b288da341e",
-            "kind": "anchor",
-            "verdict": "pass",
-            "passed": true,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "\"evidence_review_note\": \"Partner closed the deal in 32 days.\"",
-            "sealed_trace_id": null
-          },
-          {
-            "case_id": null,
-            "trace_id": "0139a32e-dd50-4d57-a2aa-48b86772f212",
-            "kind": "anchor",
-            "verdict": "pass",
-            "passed": true,
-            "replayed_steps": 2,
-            "unreplayable_steps": 0,
-            "action_sequence": [
-              "decide",
-              "record_action decide"
-            ],
-            "notes": "\"Partner closed the deal in 16 days.\"",
-            "sealed_trace_id": null
-          }
-        ],
-        "notes": "3 of 3 replayed run(s) still fail"
-      },
-      "tested_at": "2026-10-13T08:06:03.521843Z",
-      "canary": null,
-      "canary_hold": null,
-      "situation": "mid_market/emea",
-      "replay": null,
-      "reverted_at": null,
-      "revert_reason": null,
-      "source": "repair_agent",
-      "created_at": "2026-10-13T08:02:58.444423Z",
-      "updated_at": "2026-10-13T08:06:03.525313Z",
-      "events": [
-        {
-          "id": "8c2be1ad-7db3-4ab2-8d67-acb20c89ab4a",
-          "fix_id": "bfa67c2b-8e6a-42ab-9fa2-abae895d16b6",
-          "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-          "kind": "tested",
-          "actor": "system",
-          "data": {
-            "model": "gpt-5",
-            "notes": "3 of 3 replayed run(s) still fail",
-            "total": 3,
-            "passed": false,
-            "status": "failed",
-            "anchors": 4,
-            "fidelity": 1.0,
-            "recorded": [
-              "lesson-fix-risk-unclear-escalation-loop-learned-mid-market-emea-5b6fddc"
-            ],
-            "repaired": 0,
-            "regressed": 0,
-            "unreplayable": 0
-          },
-          "created_at": "2026-10-13T08:06:04.437322Z"
-        },
-        {
-          "id": "ef3f6688-8b8e-475a-a5fc-298fc08cef10",
-          "fix_id": "bfa67c2b-8e6a-42ab-9fa2-abae895d16b6",
-          "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-          "kind": "proposed",
-          "actor": "system",
-          "data": {
-            "lever": "knowledge",
-            "pr_id": "cb9ff3af-d26b-4b4c-ab22-bdcce97865f8",
-            "branch": "repair/bfa67c2b",
-            "source": "repair_agent",
-            "predicted_fixes": 3,
-            "predicted_regressions": 4
-          },
-          "created_at": "2026-10-13T08:02:58.853804Z"
-        }
-      ],
-      "tests": [
-        {
-          "id": "cfa57c74-f978-40e0-baf1-dca9de91f1b0",
-          "fix_id": "bfa67c2b-8e6a-42ab-9fa2-abae895d16b6",
-          "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-          "branch": "repair/bfa67c2b",
-          "status": "failed",
-          "passed": false,
-          "started_at": "2026-10-13T08:02:58.903065Z",
-          "finished_at": "2026-10-13T08:06:03.521843Z",
-          "repaired": 0,
-          "total": 3,
-          "regressed": 0,
-          "anchors": 4,
-          "fidelity": 1.0,
-          "unreplayable": 0,
-          "model": "gpt-5",
-          "cases": [
-            {
-              "case_id": null,
-              "trace_id": "83b903a2-39f2-4d6a-bb36-6a7dace7f398",
-              "kind": "case",
-              "verdict": "fail",
-              "passed": false,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "\"Escalated later by a different team; root cause unclear.\"",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "ff9759f7-a795-437b-a70a-2bef2bb82545",
-              "kind": "case",
-              "verdict": "fail",
-              "passed": false,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "Went badly for reasons outside the decision; flagged by the reviewing team.",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "019ce900-a01d-4b69-88af-d35530e4660f",
-              "kind": "case",
-              "verdict": "fail",
-              "passed": false,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "\"Escalated later by a different team; root cause unclear.\"",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "af0ec625-6313-4eb9-9fa0-668cdde262df",
-              "kind": "anchor",
-              "verdict": "pass",
-              "passed": true,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "Partner closed the deal in 30 days.",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "35685fc7-db48-4710-a256-9ccc36ab6b27",
-              "kind": "anchor",
-              "verdict": "pass",
-              "passed": true,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "\"Partner closed the deal in 24 days.\"",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "88ad6cc0-c29e-42cc-bcfd-85b288da341e",
-              "kind": "anchor",
-              "verdict": "pass",
-              "passed": true,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "\"evidence_review_note\": \"Partner closed the deal in 32 days.\"",
-              "sealed_trace_id": null
-            },
-            {
-              "case_id": null,
-              "trace_id": "0139a32e-dd50-4d57-a2aa-48b86772f212",
-              "kind": "anchor",
-              "verdict": "pass",
-              "passed": true,
-              "replayed_steps": 2,
-              "unreplayable_steps": 0,
-              "action_sequence": [
-                "decide",
-                "record_action decide"
-              ],
-              "notes": "\"Partner closed the deal in 16 days.\"",
-              "sealed_trace_id": null
-            }
-          ],
-          "notes": "3 of 3 replayed run(s) still fail"
-        }
-      ]
-    },
-    {
-      "id": "c006829b-a653-4ae6-8411-4fdc4ef0bed3",
-      "account_id": "redacted",
-      "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-      "behavior_id": "03dabd7a-2757-4c8c-83dc-68590c18daeb",
-      "judge_id": "jev-demo-decision-failure",
-      "verdict_ids": [
-        "ce93d92c-36bc-43ef-b07e-a75e2f3562ce",
-        "cd59e5c5-a377-4056-8bd8-59f23a5dcb51",
-        "40891ea7-46d5-4b3f-9878-3aceb47d60fd"
-      ],
-      "lever": "unknown",
-      "lever_confidence": 0.35,
-      "lever_rationale": "2 evidence ref(s) cite tool calls that succeeded \u2014 the sequence, not the tool; 1/3 unsupported claims overlap a memory entry read; signals are mixed; llm tiebreak: Reviewer simply marked the run a miss but provided no details describing what went wrong. The evidence includes only 'response' and 'tool_call' with no error logs, incorrect facts, or procedure omissions recorded. Memory-attribution entries show lifts but are marked implicated=False, so they don't implicate a knowledge error. Without concrete symptoms (wrong belief, incorrect steps, or tool malfunction), the root cause cannot be confidently classified as knowledge, procedure, or code.; repair agent drafted the change",
-      "status": "test_failed",
-      "title": "Fix: Missing rationale",
-      "summary": "3 failing runs graded by jev-demo-decision-failure. Evidence: \u201creview: Reviewer marked this one a miss; no detail recorded.\u201d.",
-      "corrective_entry": {
-        "entity_path": "jev-demos/lead_routing/team3b-s11/senselab",
-        "key": "procedure-include-decision-rationale",
-        "value": "{\"goal\": \"Always include a concise, evidence-based rationale with each lead routing decision.\", \"steps\": [\"Extract key lead attributes from the task: company size, region, industry, intent signal (e.g., pricing request, vendor evaluation), and contact role.\", \"Map these attributes to the known routing criteria in memory and determine the appropriate action and confidence.\", \"Draft the response to include both: 'decision: <action> (confidence <x>)' and 'rationale: <1\\u20133 short reasons linking the attributes to the routing rules>'.\", \"If any critical data is missing or ambiguous, note it explicitly in the rationale and state any assumptions used.\"], \"on_failure\": \"If you cannot cite at least two relevant factors or the rationale does not clearly support the chosen action, lower the confidence and state what additional information would change or firm up the decision.\", \"verify\": \"Before finalizing, ensure the response contains a 'rationale:' section and it mentions at least two concrete factors (e.g., size, region, intent) that support the chosen action.\"}",
-        "confidence": 0.73,
+        "entity_path": "jev-demos/lead_routing/team3d-s11/senselab",
+        "key": "procedure-misaligned-outreach-effort",
+        "value": "{\"goal\": \"Avoid misaligned AE escalation by verifying purchase channel and decision status before deciding to route to AE.\", \"steps\": [\"Extract from the prospect message: (a) decision status (already purchased / trialing / evaluating), (b) purchase channel or invoicing constraints (e.g., local vendor, in-country invoicing), and (c) requested help (pricing/quote, demo, or general guidance).\", \"If the prospect states they already bought online or that the current plan meets their needs, provide self-serve next steps and links; do not call decide:route_to_ae.\", \"If the prospect indicates they purchase through a local vendor or require in-country invoicing, hand off to the appropriate channel/partner path or provide vendor instructions; do not call decide:route_to_ae.\", \"Otherwise, if they are evaluating vendors or requesting pricing/quote or a demo and the account fits AE coverage (e.g., mid-market/NA), then call decide:route_to_ae.\", \"Record the reason for the decision (what cues were present or absent).\"], \"on_failure\": \"If verification reveals a disqualifying cue (already purchased online; local vendor/in-country invoicing), stop and explain the selected non-AE path; do not retry AE escalation.\", \"verify\": \"Before calling decide:route_to_ae, confirm the message does NOT contain cues like \\u201cbought online\\u201d, \\u201calready purchased\\u201d, \\u201cplan was all they needed\\u201d, \\u201clocal vendor\\u201d, or \\u201cin-country invoicing\\u201d. If any are present, choose a non-AE path instead.\"}",
+        "confidence": 0.78,
         "memory_type": "procedure",
         "pattern_refs": [],
         "replaces_version": null,
@@ -2231,34 +1537,273 @@
       "dismissed_at": null,
       "dismiss_reason": null,
       "prevention": null,
-      "case_set_id": "31332d5f-1360-4bec-a030-56ec543cccc4",
+      "case_set_id": "ca9cc472-7ea9-44ba-bc33-074a9f4cd1ba",
       "last_check": null,
       "manifest": {
         "predicted_fixes": [
-          "bce218cf-fabd-4809-992b-fa2a04482556",
-          "b09cd2e1-435f-4584-b5b6-39dc9963814a",
-          "8705573b-a8af-427c-9f1c-5e8012152f0f"
+          "8ca98975-8455-4ba6-be8a-9f612ccf142e",
+          "83f4b689-9ed2-48b8-b727-bd08b70718b7"
         ],
-        "predicted_regressions": [],
-        "expected_prevention": 0.9,
-        "rationale": "All three failing runs were marked by the reviewer as missing rationale: \"review: Reviewer marked this one a miss; no detail recorded.\" (e.g., trace bce218cf-fabd-4809-992b-fa2a04482556). The tool calls succeeded (e.g., \"decision recorded: partner\" and \"decision recorded: sdr_nurture\"), so the issue is not a tool or knowledge error but the absence of an explicit rationale accompanying the decision. Adding a procedure that requires including a 'rationale:' section tied to specific lead attributes directly addresses the reviewer\u2019s complaint.",
+        "predicted_regressions": [
+          "c8dab5c8-99d6-4583-aa85-889f5e7e86cd"
+        ],
+        "expected_prevention": 0.8,
+        "rationale": "Runs failed by escalating to AE despite cues that made AE unnecessary or counterproductive. Evidence quotes: \u201cProspect said the new plan was all they needed and bought online; the AE cycle added a week and no value.\u201d and \u201cProspect told the AE they purchase through a local vendor with in-country invoicing; closed-lost.\u201d A passing run shows AE escalation can be right when evaluating vendors: \u201cClosed-won in 63 days.\u201d The implicated memory entry read in a failure already recorded that routing to AE did not work in that situation (worked: false), so this is a process/sequence issue. The procedure requires checking for self-serve purchase or local vendor constraints before calling decide:route_to_ae, preserving AE routing where it still works and preventing misaligned outreach where it does not.",
         "source": "repair_agent",
         "repairer_version": 0,
         "repairer_variant": "active",
         "model": "gpt-5"
       },
-      "branch": "repair/c006829b",
-      "pr_id": "e2a5324e-c7e8-4354-91a0-d30c96dca32c",
+      "branch": "repair/862f672e",
+      "pr_id": "320e7ee9-5b45-428c-9aee-0b8f3bc8341d",
       "test": {
-        "id": "38496fdc-9f2a-407e-8217-cfa914932aeb",
-        "fix_id": "c006829b-a653-4ae6-8411-4fdc4ef0bed3",
+        "id": "6c16f4c5-8c8c-4733-ae85-d7056ee4065f",
+        "fix_id": "862f672e-8717-49ed-958c-8d886b4d72ae",
         "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "branch": "repair/c006829b",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+        "branch": "repair/862f672e",
         "status": "failed",
         "passed": false,
-        "started_at": "2026-10-13T07:50:54.938557Z",
-        "finished_at": "2026-10-13T07:52:56.546438Z",
+        "started_at": "2026-10-13T22:57:31.861250Z",
+        "finished_at": "2026-10-13T22:59:10.067626Z",
+        "repaired": 0,
+        "total": 2,
+        "regressed": 0,
+        "anchors": 1,
+        "fidelity": 1.0,
+        "unreplayable": 0,
+        "model": "gpt-5",
+        "cases": [
+          {
+            "case_id": null,
+            "trace_id": "8ca98975-8455-4ba6-be8a-9f612ccf142e",
+            "kind": "case",
+            "verdict": "fail",
+            "passed": false,
+            "replayed_steps": 2,
+            "unreplayable_steps": 0,
+            "action_sequence": [
+              "decide",
+              "record_action decide"
+            ],
+            "notes": "Prospect said the new plan was all they needed and bought online; the AE cycle added a week and no value.",
+            "sealed_trace_id": null
+          },
+          {
+            "case_id": null,
+            "trace_id": "83f4b689-9ed2-48b8-b727-bd08b70718b7",
+            "kind": "case",
+            "verdict": "fail",
+            "passed": false,
+            "replayed_steps": 2,
+            "unreplayable_steps": 0,
+            "action_sequence": [
+              "decide",
+              "record_action decide"
+            ],
+            "notes": "Prospect told the AE they purchase through a local vendor with in-country invoicing; closed-lost.",
+            "sealed_trace_id": null
+          },
+          {
+            "case_id": null,
+            "trace_id": "c8dab5c8-99d6-4583-aa85-889f5e7e86cd",
+            "kind": "anchor",
+            "verdict": "pass",
+            "passed": true,
+            "replayed_steps": 1,
+            "unreplayable_steps": 0,
+            "action_sequence": [
+              "decide"
+            ],
+            "notes": "\"Closed-won in 63 days.\"",
+            "sealed_trace_id": null
+          }
+        ],
+        "notes": "2 of 2 replayed run(s) still fail"
+      },
+      "tested_at": "2026-10-13T22:59:10.067626Z",
+      "canary": null,
+      "canary_hold": null,
+      "situation": "mid_market/na",
+      "replay": null,
+      "reverted_at": null,
+      "revert_reason": null,
+      "source": "repair_agent",
+      "created_at": "2026-10-13T22:57:29.659100Z",
+      "updated_at": "2026-10-13T22:59:10.071001Z",
+      "events": [
+        {
+          "id": "05bb39c4-e732-498f-ae11-0cdccd3dee74",
+          "fix_id": "862f672e-8717-49ed-958c-8d886b4d72ae",
+          "account_id": "redacted",
+          "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+          "kind": "tested",
+          "actor": "system",
+          "data": {
+            "model": "gpt-5",
+            "notes": "2 of 2 replayed run(s) still fail",
+            "total": 2,
+            "passed": false,
+            "status": "failed",
+            "anchors": 1,
+            "fidelity": 1.0,
+            "recorded": [
+              "lesson-fix-procedure-misaligned-outreach-effort"
+            ],
+            "repaired": 0,
+            "regressed": 0,
+            "unreplayable": 0
+          },
+          "created_at": "2026-10-13T22:59:10.510853Z"
+        },
+        {
+          "id": "3f7794f9-56b5-4d67-9a23-8e13d0bb874c",
+          "fix_id": "862f672e-8717-49ed-958c-8d886b4d72ae",
+          "account_id": "redacted",
+          "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+          "kind": "proposed",
+          "actor": "system",
+          "data": {
+            "lever": "procedure",
+            "pr_id": "320e7ee9-5b45-428c-9aee-0b8f3bc8341d",
+            "branch": "repair/862f672e",
+            "source": "repair_agent",
+            "predicted_fixes": 2,
+            "predicted_regressions": 1
+          },
+          "created_at": "2026-10-13T22:57:30.128287Z"
+        }
+      ],
+      "tests": [
+        {
+          "id": "6c16f4c5-8c8c-4733-ae85-d7056ee4065f",
+          "fix_id": "862f672e-8717-49ed-958c-8d886b4d72ae",
+          "account_id": "redacted",
+          "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+          "branch": "repair/862f672e",
+          "status": "failed",
+          "passed": false,
+          "started_at": "2026-10-13T22:57:31.861250Z",
+          "finished_at": "2026-10-13T22:59:10.067626Z",
+          "repaired": 0,
+          "total": 2,
+          "regressed": 0,
+          "anchors": 1,
+          "fidelity": 1.0,
+          "unreplayable": 0,
+          "model": "gpt-5",
+          "cases": [
+            {
+              "case_id": null,
+              "trace_id": "8ca98975-8455-4ba6-be8a-9f612ccf142e",
+              "kind": "case",
+              "verdict": "fail",
+              "passed": false,
+              "replayed_steps": 2,
+              "unreplayable_steps": 0,
+              "action_sequence": [
+                "decide",
+                "record_action decide"
+              ],
+              "notes": "Prospect said the new plan was all they needed and bought online; the AE cycle added a week and no value.",
+              "sealed_trace_id": null
+            },
+            {
+              "case_id": null,
+              "trace_id": "83f4b689-9ed2-48b8-b727-bd08b70718b7",
+              "kind": "case",
+              "verdict": "fail",
+              "passed": false,
+              "replayed_steps": 2,
+              "unreplayable_steps": 0,
+              "action_sequence": [
+                "decide",
+                "record_action decide"
+              ],
+              "notes": "Prospect told the AE they purchase through a local vendor with in-country invoicing; closed-lost.",
+              "sealed_trace_id": null
+            },
+            {
+              "case_id": null,
+              "trace_id": "c8dab5c8-99d6-4583-aa85-889f5e7e86cd",
+              "kind": "anchor",
+              "verdict": "pass",
+              "passed": true,
+              "replayed_steps": 1,
+              "unreplayable_steps": 0,
+              "action_sequence": [
+                "decide"
+              ],
+              "notes": "\"Closed-won in 63 days.\"",
+              "sealed_trace_id": null
+            }
+          ],
+          "notes": "2 of 2 replayed run(s) still fail"
+        }
+      ]
+    },
+    {
+      "id": "0eaeaa8a-fade-47e0-b4fe-076269a2cda6",
+      "account_id": "redacted",
+      "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+      "behavior_id": "9e12c08b-ee4b-411f-9cb1-8037c875f6e6",
+      "judge_id": "jev-demo-decision-failure",
+      "verdict_ids": [
+        "ebcc78c2-02af-41e6-b4cd-0487fd666431",
+        "ae8b5211-9654-440b-acb8-ea4a2496f5d8",
+        "fd248449-362d-4fac-84f5-2ca61189151d"
+      ],
+      "lever": "unknown",
+      "lever_confidence": 0.6,
+      "lever_rationale": "3 evidence ref(s) cite tool calls that succeeded \u2014 the sequence, not the tool; 1/3 unsupported claims overlap a memory entry read; 3 evidence ref(s) cite error/tool spans; signals are mixed; llm tiebreak: The provided evidence is minimal: repeated reviewer notes only state that the run was marked a miss with no details. Memory attribution shows some lifted entries with modest lift but explicitly marked implicated=false. There is no concrete information showing the agent held incorrect facts (knowledge), executed steps out of order or skipped verification (procedure), or that a tool/prompt/control flow bug occurred (code). Because the failure mode cannot be determined from the available notes, I c; repair agent drafted the change",
+      "status": "test_failed",
+      "title": "Fix: Unjustified miss labels",
+      "summary": "3 failing runs graded by jev-demo-decision-failure. Evidence: \u201creview: Reviewer marked this one a miss; no detail recorded.\u201d.",
+      "corrective_entry": {
+        "entity_path": "jev-demos/lead_routing/team3d-s11/senselab",
+        "key": "risk-unjustified-miss-labels",
+        "value": "If a review note marks a run as a miss without any justification (e.g., only says \"Reviewer marked this one a miss; no detail recorded.\"), treat it as unsubstantiated. Do not label the run a miss, do not echo that text in the response, and do not update lessons based solely on it. Proceed with the agent\u2019s own decision logic and only accept review feedback that includes concrete reasons or rubric references.",
+        "confidence": 0.7,
+        "memory_type": "belief",
+        "pattern_refs": [],
+        "replaces_version": null,
+        "diff": null
+      },
+      "correction": null,
+      "handoff_available": true,
+      "shipped_at": null,
+      "handed_off_at": null,
+      "dismissed_at": null,
+      "dismiss_reason": null,
+      "prevention": null,
+      "case_set_id": "94c8bae8-b4b1-41b4-8d00-d36e27c67df8",
+      "last_check": null,
+      "manifest": {
+        "predicted_fixes": [
+          "5823bc01-eb12-43ff-99c0-2b2b477cc34a",
+          "79d91f2b-39a2-4298-bc79-febc52517284",
+          "72e4c389-5fe0-4f30-9074-116d79332d7b"
+        ],
+        "predicted_regressions": [],
+        "expected_prevention": 0.85,
+        "rationale": "In failing trace 79d91f2b-39a2-4298-bc79-febc52517284, the response includes: \"review: Reviewer marked this one a miss; no detail recorded.\" and the trace attributes show evidence_review_note: \"Reviewer marked this one a miss; no detail recorded.\" (get_trace_summary). There is no concrete reason provided to justify a miss, and tool calls (decide) succeeded. A minimal risk note instructing the agent not to echo or act on unsubstantiated reviewer miss labels will prevent this failure without altering correct decision logic.",
+        "source": "repair_agent",
+        "repairer_version": 0,
+        "repairer_variant": "active",
+        "model": "gpt-5"
+      },
+      "branch": "repair/0eaeaa8a",
+      "pr_id": "75b078d9-fb33-4706-92c8-8eadfba6ce72",
+      "test": {
+        "id": "9565959e-0fc0-439c-b932-9e01257beae1",
+        "fix_id": "0eaeaa8a-fade-47e0-b4fe-076269a2cda6",
+        "account_id": "redacted",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+        "branch": "repair/0eaeaa8a",
+        "status": "failed",
+        "passed": false,
+        "started_at": "2026-10-13T22:36:32.509985Z",
+        "finished_at": "2026-10-13T22:39:51.779299Z",
         "repaired": 0,
         "total": 3,
         "regressed": 0,
@@ -2269,37 +1814,36 @@
         "cases": [
           {
             "case_id": null,
-            "trace_id": "bce218cf-fabd-4809-992b-fa2a04482556",
+            "trace_id": "5823bc01-eb12-43ff-99c0-2b2b477cc34a",
             "kind": "case",
             "verdict": "fail",
             "passed": false,
             "replayed_steps": 2,
             "unreplayable_steps": 0,
             "action_sequence": [
-              "decide",
-              "record_action decide"
+              "record_action decide",
+              "decide"
             ],
-            "notes": "Reviewer marked this one a miss; no detail recorded.",
+            "notes": "\"attributes\": {\"outcome_type\": \"minor_failure\",",
             "sealed_trace_id": null
           },
           {
             "case_id": null,
-            "trace_id": "b09cd2e1-435f-4584-b5b6-39dc9963814a",
+            "trace_id": "79d91f2b-39a2-4298-bc79-febc52517284",
             "kind": "case",
             "verdict": "fail",
             "passed": false,
-            "replayed_steps": 2,
+            "replayed_steps": 1,
             "unreplayable_steps": 0,
             "action_sequence": [
-              "decide",
-              "record_action decide"
+              "decide"
             ],
-            "notes": "Reviewer marked this one a miss; no detail recorded.",
+            "notes": "evidence_review_note: \"Reviewer marked this one a miss; no detail recorded.\"",
             "sealed_trace_id": null
           },
           {
             "case_id": null,
-            "trace_id": "8705573b-a8af-427c-9f1c-5e8012152f0f",
+            "trace_id": "72e4c389-5fe0-4f30-9074-116d79332d7b",
             "kind": "case",
             "verdict": "fail",
             "passed": false,
@@ -2315,7 +1859,7 @@
         ],
         "notes": "3 of 3 replayed run(s) still fail"
       },
-      "tested_at": "2026-10-13T07:52:56.546438Z",
+      "tested_at": "2026-10-13T22:39:51.779299Z",
       "canary": null,
       "canary_hold": null,
       "situation": "personal-email",
@@ -2323,14 +1867,14 @@
       "reverted_at": null,
       "revert_reason": null,
       "source": "repair_agent",
-      "created_at": "2026-10-13T07:50:54.507114Z",
-      "updated_at": "2026-10-13T07:52:56.549416Z",
+      "created_at": "2026-10-13T22:36:30.346889Z",
+      "updated_at": "2026-10-13T22:39:51.782134Z",
       "events": [
         {
-          "id": "156d5f6f-298e-4204-bd85-8dd70d225d67",
-          "fix_id": "c006829b-a653-4ae6-8411-4fdc4ef0bed3",
+          "id": "7205bdd1-abfc-4fd8-ac45-97f8057d6e41",
+          "fix_id": "0eaeaa8a-fade-47e0-b4fe-076269a2cda6",
           "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+          "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
           "kind": "tested",
           "actor": "system",
           "data": {
@@ -2342,43 +1886,43 @@
             "anchors": 0,
             "fidelity": 1.0,
             "recorded": [
-              "lesson-fix-procedure-include-decision-rationale"
+              "lesson-fix-risk-unjustified-miss-labels"
             ],
             "repaired": 0,
             "regressed": 0,
             "unreplayable": 0
           },
-          "created_at": "2026-10-13T07:52:56.926460Z"
+          "created_at": "2026-10-13T22:39:52.158363Z"
         },
         {
-          "id": "9d4cfd71-df4c-4040-ac10-95182680260b",
-          "fix_id": "c006829b-a653-4ae6-8411-4fdc4ef0bed3",
+          "id": "45911f48-f92c-4e95-8660-651ba0cc0505",
+          "fix_id": "0eaeaa8a-fade-47e0-b4fe-076269a2cda6",
           "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+          "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
           "kind": "proposed",
           "actor": "system",
           "data": {
             "lever": "unknown",
-            "pr_id": "e2a5324e-c7e8-4354-91a0-d30c96dca32c",
-            "branch": "repair/c006829b",
+            "pr_id": "75b078d9-fb33-4706-92c8-8eadfba6ce72",
+            "branch": "repair/0eaeaa8a",
             "source": "repair_agent",
             "predicted_fixes": 3,
             "predicted_regressions": 0
           },
-          "created_at": "2026-10-13T07:50:54.855259Z"
+          "created_at": "2026-10-13T22:36:30.553137Z"
         }
       ],
       "tests": [
         {
-          "id": "38496fdc-9f2a-407e-8217-cfa914932aeb",
-          "fix_id": "c006829b-a653-4ae6-8411-4fdc4ef0bed3",
+          "id": "9565959e-0fc0-439c-b932-9e01257beae1",
+          "fix_id": "0eaeaa8a-fade-47e0-b4fe-076269a2cda6",
           "account_id": "redacted",
-          "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-          "branch": "repair/c006829b",
+          "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+          "branch": "repair/0eaeaa8a",
           "status": "failed",
           "passed": false,
-          "started_at": "2026-10-13T07:50:54.938557Z",
-          "finished_at": "2026-10-13T07:52:56.546438Z",
+          "started_at": "2026-10-13T22:36:32.509985Z",
+          "finished_at": "2026-10-13T22:39:51.779299Z",
           "repaired": 0,
           "total": 3,
           "regressed": 0,
@@ -2389,37 +1933,36 @@
           "cases": [
             {
               "case_id": null,
-              "trace_id": "bce218cf-fabd-4809-992b-fa2a04482556",
+              "trace_id": "5823bc01-eb12-43ff-99c0-2b2b477cc34a",
               "kind": "case",
               "verdict": "fail",
               "passed": false,
               "replayed_steps": 2,
               "unreplayable_steps": 0,
               "action_sequence": [
-                "decide",
-                "record_action decide"
+                "record_action decide",
+                "decide"
               ],
-              "notes": "Reviewer marked this one a miss; no detail recorded.",
+              "notes": "\"attributes\": {\"outcome_type\": \"minor_failure\",",
               "sealed_trace_id": null
             },
             {
               "case_id": null,
-              "trace_id": "b09cd2e1-435f-4584-b5b6-39dc9963814a",
+              "trace_id": "79d91f2b-39a2-4298-bc79-febc52517284",
               "kind": "case",
               "verdict": "fail",
               "passed": false,
-              "replayed_steps": 2,
+              "replayed_steps": 1,
               "unreplayable_steps": 0,
               "action_sequence": [
-                "decide",
-                "record_action decide"
+                "decide"
               ],
-              "notes": "Reviewer marked this one a miss; no detail recorded.",
+              "notes": "evidence_review_note: \"Reviewer marked this one a miss; no detail recorded.\"",
               "sealed_trace_id": null
             },
             {
               "case_id": null,
-              "trace_id": "8705573b-a8af-427c-9f1c-5e8012152f0f",
+              "trace_id": "72e4c389-5fe0-4f30-9074-116d79332d7b",
               "kind": "case",
               "verdict": "fail",
               "passed": false,
@@ -2439,20 +1982,20 @@
     }
   ],
   "lifecycle": {
-    "test_failed": 3
+    "test_failed": 2
   },
   "incidents": {
     "items": [
       {
-        "id": "c669ac47-abea-4801-b3eb-16bde1b4cf57",
+        "id": "5c57adbf-a819-4ffb-81a3-7a8428b73c2b",
         "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "behavior_id": "d9a1f288-84e2-40ed-8d2e-79c07efc501d",
-        "title": "Mismatched qualification assumptions: 3 runs today vs 0.0/day over the last 14 days",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+        "behavior_id": "84ac0cfd-803c-4afe-a2a1-415567c82200",
+        "title": "Misaligned outreach effort: 3 runs today vs 0.0/day over the last 14 days",
         "status": "open",
         "window_start": "2026-10-13T00:00:00Z",
         "window_end": "2026-10-13T23:59:59Z",
-        "trace_count": 3,
+        "trace_count": 4,
         "affected_accounts": 0,
         "attribute_breakdown": {
           "case_id": [
@@ -2473,13 +2016,19 @@
               "value": "lead_routing-11-066",
               "matched": 1,
               "percent": 100.0
+            },
+            {
+              "total": 1,
+              "value": "lead_routing-11-067",
+              "matched": 1,
+              "percent": 100.0
             }
           ],
           "evidence_severity": [
             {
-              "total": 3,
+              "total": 4,
               "value": "failure",
-              "matched": 3,
+              "matched": 4,
               "percent": 100.0
             }
           ],
@@ -2488,6 +2037,12 @@
               "total": 2,
               "value": "Prospect said the new plan was all they needed and bought online; the AE cycle added a week and no value.",
               "matched": 2,
+              "percent": 100.0
+            },
+            {
+              "total": 1,
+              "value": "Prospect bought on the pricing page before the AE called back; 5 AE hours logged.",
+              "matched": 1,
               "percent": 100.0
             },
             {
@@ -2505,128 +2060,23 @@
           0,
           0,
           0,
-          3
+          4
         ],
         "muted_until": null,
-        "created_at": "2026-10-13T08:06:45.627020Z",
-        "updated_at": "2026-10-13T08:06:45.627020Z",
+        "created_at": "2026-10-13T22:55:41.555001Z",
+        "updated_at": "2026-10-13T22:55:56.289926Z",
         "resolved_at": null
       },
       {
-        "id": "2e8e4da0-26b0-475c-97f1-66e0ea9845b4",
+        "id": "408beaf7-88b9-4737-9d07-ce977d5334fa",
         "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "behavior_id": "ce0dc19f-d993-4f69-8f95-ef5553c3af9b",
-        "title": "Unclear escalation loop: 3 runs today vs 0.0/day over the last 14 days",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+        "behavior_id": "9e12c08b-ee4b-411f-9cb1-8037c875f6e6",
+        "title": "Unjustified miss labels: 3 runs today vs 0.0/day over the last 14 days",
         "status": "open",
         "window_start": "2026-10-13T00:00:00Z",
         "window_end": "2026-10-13T23:59:59Z",
-        "trace_count": 8,
-        "affected_accounts": 0,
-        "attribute_breakdown": {
-          "case_id": [
-            {
-              "total": 1,
-              "value": "lead_routing-11-015",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "lead_routing-11-042",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "lead_routing-11-046",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "lead_routing-11-075",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "lead_routing-11-083",
-              "matched": 1,
-              "percent": 100.0
-            }
-          ],
-          "guidance_id": [
-            {
-              "total": 1,
-              "value": "4502bec66e7f6d8b",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "5c4191c418501141",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "6d6dd4344ef9ff37",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "81d6e7592b0296e9",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "91719938f7bd4ec2",
-              "matched": 1,
-              "percent": 100.0
-            }
-          ],
-          "evidence_review_note": [
-            {
-              "total": 5,
-              "value": "Escalated later by a different team; root cause unclear.",
-              "matched": 5,
-              "percent": 100.0
-            },
-            {
-              "total": 3,
-              "value": "Went badly for reasons outside the decision; flagged by the reviewing team.",
-              "matched": 3,
-              "percent": 100.0
-            }
-          ]
-        },
-        "trend": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          8
-        ],
-        "muted_until": null,
-        "created_at": "2026-10-13T07:59:19.262254Z",
-        "updated_at": "2026-10-13T08:23:28.340596Z",
-        "resolved_at": null
-      },
-      {
-        "id": "4e8c1ea9-dca9-4555-94f4-9cea1190e414",
-        "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "behavior_id": "03dabd7a-2757-4c8c-83dc-68590c18daeb",
-        "title": "Missing rationale: 3 runs today vs 0.0/day over the last 14 days",
-        "status": "open",
-        "window_start": "2026-10-13T00:00:00Z",
-        "window_end": "2026-10-13T23:59:59Z",
-        "trace_count": 8,
+        "trace_count": 15,
         "affected_accounts": 0,
         "attribute_breakdown": {
           "case_id": [
@@ -2644,6 +2094,12 @@
             },
             {
               "total": 1,
+              "value": "lead_routing-11-015",
+              "matched": 1,
+              "percent": 100.0
+            },
+            {
+              "total": 1,
               "value": "lead_routing-11-016",
               "matched": 1,
               "percent": 100.0
@@ -2653,51 +2109,33 @@
               "value": "lead_routing-11-020",
               "matched": 1,
               "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "lead_routing-11-027",
-              "matched": 1,
-              "percent": 100.0
             }
           ],
-          "guidance_id": [
+          "evidence_severity": [
             {
-              "total": 1,
-              "value": "46affba078954438",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "52eb5dc9a33eaf90",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "7a73769fb7b43ab5",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "82eaf46cd624c423",
-              "matched": 1,
-              "percent": 100.0
-            },
-            {
-              "total": 1,
-              "value": "aeff97c054f45997",
-              "matched": 1,
+              "total": 15,
+              "value": "minor_failure",
+              "matched": 15,
               "percent": 100.0
             }
           ],
           "evidence_review_note": [
             {
-              "total": 6,
+              "total": 5,
+              "value": "Escalated later by a different team; root cause unclear.",
+              "matched": 5,
+              "percent": 100.0
+            },
+            {
+              "total": 5,
               "value": "Reviewer marked this one a miss; no detail recorded.",
-              "matched": 6,
+              "matched": 5,
+              "percent": 100.0
+            },
+            {
+              "total": 3,
+              "value": "Went badly for reasons outside the decision; flagged by the reviewing team.",
+              "matched": 3,
               "percent": 100.0
             },
             {
@@ -2715,11 +2153,11 @@
           0,
           0,
           0,
-          8
+          15
         ],
         "muted_until": null,
-        "created_at": "2026-10-13T07:50:18.938090Z",
-        "updated_at": "2026-10-13T08:26:24.114393Z",
+        "created_at": "2026-10-13T22:35:03.805067Z",
+        "updated_at": "2026-10-13T23:17:27.510373Z",
         "resolved_at": null
       }
     ],
@@ -2729,18 +2167,18 @@
   "behaviors": {
     "items": [
       {
-        "id": "d9a1f288-84e2-40ed-8d2e-79c07efc501d",
+        "id": "84ac0cfd-803c-4afe-a2a1-415567c82200",
         "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "name": "Mismatched qualification assumptions",
-        "description": "Agent assumes or records incorrect buyer procurement details or decision timing, causing unnecessary handoffs or outreach; leads to wasted sales effort when the prospect had different buying channels or already decided.",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+        "name": "Misaligned outreach effort",
+        "description": "Agent pursued full sales engagement despite signals that the prospect already purchased elsewhere or self-served, causing wasted time and a negative impact on conversion efficiency.",
         "polarity": "negative",
         "source": "discovered",
         "judge_id": null,
-        "centroid_id": "a7ae9331-4c23-4e6e-859a-64e596abe4b7",
-        "trace_count": 3,
-        "first_seen": "2026-10-13T07:46:26.844057Z",
-        "last_seen": "2026-10-13T08:06:44.270840Z",
+        "centroid_id": "c704d88d-7819-49c7-809b-7918bce503a4",
+        "trace_count": 4,
+        "first_seen": "2026-10-13T22:28:39.955579Z",
+        "last_seen": "2026-10-13T22:55:56.099541Z",
         "trend_7d": [
           0,
           0,
@@ -2748,27 +2186,27 @@
           0,
           0,
           0,
-          3
+          4
         ],
         "novel": true,
         "enabled": true,
         "origin": null,
-        "created_at": "2026-10-13T08:06:45.327484Z",
-        "updated_at": "2026-10-13T08:06:45.454962Z"
+        "created_at": "2026-10-13T22:55:41.398764Z",
+        "updated_at": "2026-10-13T22:55:56.200664Z"
       },
       {
-        "id": "ce0dc19f-d993-4f69-8f95-ef5553c3af9b",
+        "id": "9e12c08b-ee4b-411f-9cb1-8037c875f6e6",
         "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "name": "Unclear escalation loop",
-        "description": "Issues resurface after initial handling and are escalated by other teams without a documented root cause, causing repeated failures and delayed resolution.",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
+        "name": "Unjustified miss labels",
+        "description": "Agent marks items as misses without providing any rationale or supporting details, leaving reviewers unable to understand or verify the decision.",
         "polarity": "negative",
         "source": "discovered",
         "judge_id": null,
-        "centroid_id": "deb6d506-8da1-43a2-8169-47156d79146c",
-        "trace_count": 8,
-        "first_seen": "2026-10-13T07:50:03.042994Z",
-        "last_seen": "2026-10-13T08:23:28.116449Z",
+        "centroid_id": "3ae03c4b-6568-4a3e-90c2-8f6d9ef57a89",
+        "trace_count": 15,
+        "first_seen": "2026-10-13T22:31:54.815665Z",
+        "last_seen": "2026-10-13T23:17:27.194127Z",
         "trend_7d": [
           0,
           0,
@@ -2776,52 +2214,24 @@
           0,
           0,
           0,
-          8
+          15
         ],
         "novel": true,
         "enabled": true,
         "origin": null,
-        "created_at": "2026-10-13T07:59:19.138362Z",
-        "updated_at": "2026-10-13T08:23:28.239296Z"
+        "created_at": "2026-10-13T22:35:03.672852Z",
+        "updated_at": "2026-10-13T23:17:27.327935Z"
       },
       {
-        "id": "03dabd7a-2757-4c8c-83dc-68590c18daeb",
+        "id": "5e198992-612d-4771-849f-2ee339163bde",
         "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
-        "name": "Missing rationale",
-        "description": "Agent marks items as correct or makes decisions without providing reasoning or evidence, leaving reviewers unable to verify or reproduce the decision.",
-        "polarity": "negative",
-        "source": "discovered",
-        "judge_id": null,
-        "centroid_id": "da482351-e321-4cbe-9cae-186c6a7cfc3d",
-        "trace_count": 8,
-        "first_seen": "2026-10-13T07:48:30.383100Z",
-        "last_seen": "2026-10-13T08:26:23.915268Z",
-        "trend_7d": [
-          0,
-          0,
-          0,
-          0,
-          0,
-          0,
-          8
-        ],
-        "novel": true,
-        "enabled": true,
-        "origin": null,
-        "created_at": "2026-10-13T07:50:18.826007Z",
-        "updated_at": "2026-10-13T08:26:24.019466Z"
-      },
-      {
-        "id": "d0414b20-00f8-417a-b725-76dda7ee8e7c",
-        "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
         "name": "Recovered after error",
         "description": "A tool or step failed during the run and the agent recovered: it retried successfully, used a fallback, or told the user what went wrong.",
         "polarity": "baseline",
         "source": "discovered",
         "judge_id": null,
-        "centroid_id": "220f2da1-3a7d-4758-8185-460732eaa113",
+        "centroid_id": "4b42d3ed-9803-4ed1-a901-5c83b4e34cc2",
         "trace_count": 0,
         "first_seen": null,
         "last_seen": null,
@@ -2837,22 +2247,22 @@
         "novel": false,
         "enabled": true,
         "origin": null,
-        "created_at": "2026-10-13T07:46:06.146442Z",
-        "updated_at": "2026-10-13T07:46:06.246328Z"
+        "created_at": "2026-10-13T22:28:42.730875Z",
+        "updated_at": "2026-10-13T22:28:42.751487Z"
       },
       {
-        "id": "1372b782-2c42-40d1-8c92-f60bce4313f1",
+        "id": "17ca9af0-763b-4b1e-beeb-75563ca79b1b",
         "account_id": "redacted",
-        "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+        "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
         "name": "Properly handled",
         "description": "The agent completed the task correctly: no judge found an unsupported claim, a missing tool call, a retry loop or an unhandled error.",
         "polarity": "baseline",
         "source": "discovered",
         "judge_id": null,
-        "centroid_id": "116c7802-e15d-45a9-b05d-6e2b578f8e69",
-        "trace_count": 101,
-        "first_seen": "2026-10-13T07:46:05.930881Z",
-        "last_seen": "2026-10-13T08:25:27.408462Z",
+        "centroid_id": "af9fdbc6-69e7-440c-8b54-3b95330e6dbf",
+        "trace_count": 100,
+        "first_seen": "2026-10-13T22:28:42.589506Z",
+        "last_seen": "2026-10-13T23:18:53.542175Z",
         "trend_7d": [
           0,
           0,
@@ -2860,20 +2270,20 @@
           0,
           0,
           0,
-          101
+          100
         ],
         "novel": false,
         "enabled": true,
         "origin": null,
-        "created_at": "2026-10-13T07:46:06.047910Z",
-        "updated_at": "2026-10-13T08:25:27.548892Z"
+        "created_at": "2026-10-13T22:28:42.653133Z",
+        "updated_at": "2026-10-13T23:18:53.624778Z"
       }
     ],
     "next_cursor": null,
     "has_more": false
   },
   "contract": {
-    "agent_id": "jev-demo-lead_routing-team3b-s11-senselab",
+    "agent_id": "jev-demo-lead_routing-team3d-s11-senselab",
     "policy": "auto_after_canary",
     "met": true,
     "missing": [],
@@ -2896,11 +2306,11 @@
   "repairs_summary": {
     "days": 7,
     "statuses": {
-      "test_failed": 3
+      "test_failed": 2
     },
     "events": {
-      "proposed": 3,
-      "tested": 3
+      "proposed": 2,
+      "tested": 2
     },
     "replays_awaited": 0,
     "replays_awaited_by_status": {}
@@ -2911,10 +2321,10 @@
     "judge_backlog": 0,
     "calls": 0,
     "fixes": {
-      "test_failed": 3
+      "test_failed": 2
     },
     "changed": [],
-    "ms": 363.1
+    "ms": 648.4
   },
   "judge_pending_at_end": 0
 }

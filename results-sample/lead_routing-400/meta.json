@@ -1,5 +1,5 @@
 {
-  "run_id": "lh400",
+  "run_id": "lh400c",
   "scenario": {
     "name": "lead_routing",
     "title": "Inbound lead routing",
@@ -53,6 +53,7 @@
     "retrieval:meta-k8",
     "senselab"
   ],
+  "agents": 1,
   "knobs": {
     "policy": "auto_after_canary",
     "canary_pct": 50,
@@ -64,32 +65,32 @@
   },
   "jev_model": "jev-1.13.0",
   "amfs_url": "https://amfs-login.sense-lab.ai",
-  "started_at": "2026-10-13T06:46:45.891156+00:00",
+  "started_at": "2026-10-13T22:40:10.058500+00:00",
   "resumes": [],
   "platform_budget": [
     {
       "before": {
         "account_id": "redacted",
-        "monthly_usd_cap": 25.0,
-        "spent_usd": 11.530639,
+        "monthly_usd_cap": 80.0,
+        "spent_usd": 25.341311,
         "degrade_threshold": 0.8,
         "period_start": "2026-10-01T00:00:00Z",
-        "updated_at": "2026-10-13T06:43:32.479967Z",
-        "remaining_usd": 13.469361,
-        "utilisation": 0.4612
+        "updated_at": "2026-10-13T22:39:57.419271Z",
+        "remaining_usd": 54.658689,
+        "utilisation": 0.3168
       },
       "after": {
         "account_id": "redacted",
-        "monthly_usd_cap": 25.0,
-        "spent_usd": 21.804971,
+        "monthly_usd_cap": 80.0,
+        "spent_usd": 29.60386,
         "degrade_threshold": 0.8,
         "period_start": "2026-10-01T00:00:00Z",
-        "updated_at": "2026-10-13T09:10:08.225684Z",
-        "remaining_usd": 3.195029,
-        "utilisation": 0.8722
+        "updated_at": "2026-10-14T00:52:06.194221Z",
+        "remaining_usd": 50.39614,
+        "utilisation": 0.37
       },
-      "spent_usd": 10.2743
+      "spent_usd": 4.2625
     }
   ],
-  "finished_at": "2026-10-13T09:10:15.422144+00:00"
+  "finished_at": "2026-10-14T00:52:22.033618+00:00"
 }

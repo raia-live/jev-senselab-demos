@@ -23,9 +23,9 @@ thing that changes between rows is what Jev gets told about the situation.
 
 | arm | wrong decisions | dollars lost | accuracy | tacit rule | after the change | new wording | recovered in |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `jev` (policy only) | 60 | $143,100 | 50% | 0% | 0% | 0% | never |
+| `jev` (policy only) | 59 | $142,900 | 51% | 0% | 0% | 0% | never |
 | `jev+retrieval:meta-k8` (8 past cases) | 7 | $12,900 | 94% | 95% | 80% | 100% | 7 episodes |
-| `jev+senselab` | 5 | $7,900 | 96% | 98% | 87% | 100% | 6 episodes |
+| `jev+senselab` | 6 | $10,400 | 95% | 98% | 80% | 100% | 7 episodes |
 
 This is [`results-sample/lead_routing`](results-sample/lead_routing). You can rebuild it
 with `--replay results-sample` without any keys, and every number here can be recomputed
@@ -34,15 +34,16 @@ hidden truth; the arms only ever saw the review.
 
 What the rows say:
 
-- Jev with SenseLab lost $7,900. Jev on the policy alone lost $143,100 (94% more), and Jev
-  with the best lookup we could build lost $12,900 (39% more). 5 wrong decisions against 60
+- Jev with SenseLab lost $10,400. Jev on the policy alone lost $142,900 (93% more), and Jev
+  with the best lookup we could build lost $12,900 (19% more). 6 wrong decisions against 59
   and 7.
 - There is a rule nobody wrote down (EMEA mid-market deals only close through a partner),
   and 42 of the 120 leads hit it. SenseLab got it wrong once, the very first time, then
-  never again. That's the 98%.
-- The business changes at episode 60. Two leads were lost before memory switched the action.
-  The lookup lost three, took one episode longer to recover, and flipped its action 3x as
-  often on the way there (7% churn vs 2%).
+  never again. That's the 98%. The lookup got it wrong twice (episodes 0 and 13).
+- The business changes at episode 60. Three leads were lost before memory switched the
+  action (60, 66, 67), and the lookup lost the same three. SenseLab waits for a working
+  action to fail three times in a row before it drops it, on purpose; the 400-episode runs
+  below say why. The lookup flipped its action 3x as often on the way (7% churn vs 2%).
 - The wording of the leads changes at episode 90. Neither memory arm cared, because the
   lessons are keyed to the situation and the words don't matter.
 - The memory Jev gets does not grow. The slot is capped at 3,200 characters, and everything
@@ -54,10 +55,11 @@ What the rows say:
 ## Where the gap grows
 
 The table above is one agent, 120 leads, 10% review noise. Both memory arms sit close to the
-floor there. About five of those misses are the price of learning from outcomes at all,
-whatever does the learning: first contact with the tacit rule, the two losses it takes to
-notice the change, a flipped review landing on a one-case record. So the gap at 120 is two
-decisions. Here's what happens when you change the things a real deployment changes.
+floor there. About six of those misses are the price of learning from outcomes at all,
+whatever does the learning: first contact with the tacit rule, the three losses it takes to
+be sure the business changed, a flipped review landing on a one-case record. So the gap at
+120 is one decision. Here's what happens when you change the things a real deployment
+changes.
 
 ### Three instances, one stream
 
@@ -68,17 +70,18 @@ whichever worker is deciding: one memory, one repair loop, the worker recorded o
 
 | arm | wrong decisions | dollars lost | after the change | wrong per worker | workers that paid the EMEA rule's first miss |
 |---|---:|---:|---:|---|---|
-| `jev` | 61 | $143,300 | 0% | 21 / 22 / 18 | 3 of 3 |
-| `jev+retrieval:meta-k8` | 15 | $35,200 | 47% | 4 / 6 / 5 | 3 of 3 |
-| `jev+senselab` | 5 | $7,900 | 87% | 5 / 0 / 0 | 1 of 3 |
+| `jev` | 59 | $142,900 | 0% | 22 / 21 / 16 | 3 of 3 |
+| `jev+retrieval:meta-k8` | 13 | $30,200 | 47% | 3 / 6 / 4 | 3 of 3 |
+| `jev+senselab` | 6 | $10,400 | 80% | 5 / 1 / 0 | 1 of 3 |
 
 The lookup paid for the EMEA rule three times (episodes 0, 1 and 2, one per worker), paid for
-the change three times too (60, 66, 67), and lost 4x the dollars it lost with one worker.
-SenseLab made the same five misses as the single agent and no others: the first failure
-anywhere teaches everyone, so workers 1 and 2 walked into their first EMEA lead already
-knowing, and neither got anything wrong all run. (All five misses land on worker 0 because
-episodes 0, 27, 36, 60 and 66 happen to be its turns.) One judge graded the 120 traces, one
-repair loop ran, for $3.75 of platform spend, the same as a single-agent run.
+the change three times too (60, 66, 67), then kept paying for it (76, 80, 83, 85, 113) because
+each worker's store had only a third of the evidence, and lost 2.3x the dollars it lost with
+one worker. SenseLab made the same six misses as the single agent and no others: the first
+failure anywhere teaches everyone, so workers 1 and 2 walked into their first EMEA lead
+already knowing. Worker 2 got nothing wrong all run; worker 1's one miss is episode 67, the
+third lead at the change, which falls on its turn. One judge graded the 120 traces and one
+repair loop ran, the same as for a single agent.
 
 Worth saying out loud: a lookup that three workers share is a memory service, with everything
 that comes with running one. That's the thing you'd be building. Run:
@@ -91,29 +94,32 @@ again with one review in five wrong instead of one in ten.
 
 | run | arm | wrong decisions | dollars lost | after the change | recovered in |
 |---|---|---:|---:|---:|---:|
-| 400, noise 0.1 | `jev` | 187 | $444,500 | 0% | never |
-| | `jev+retrieval:meta-k8` | 9 | $17,900 | 88% | 41 episodes |
-| | `jev+senselab` | 6 | $8,100 | 95% | 5 episodes |
+| 400, noise 0.1 | `jev` | 185 | $444,100 | 0% | never |
+| | `jev+retrieval:meta-k8` | 7 | $12,900 | 90% | 41 episodes |
+| | `jev+senselab` | 6 | $10,400 | 92% | 6 episodes |
 | 400, noise 0.2 | `jev` | 187 | $444,500 | 0% | never |
 | | `jev+retrieval:meta-k8` | 11 | $22,900 | 85% | 5 episodes |
 | | `jev+senselab` | 7 | $10,600 | 92% | 6 episodes |
 
-Over the longer run the lookup loses 2.2x the dollars at noise 0.1. The difference is the
-change: after episode 200 the lookup's eight nearest cases are mostly the old, confirmed
-`route_to_ae` outcomes, so it takes 41 episodes to settle, with three more lost leads along
-the way (206, 236, 241). SenseLab's record for the situation shows the action failing twice
-in a row, and the third such lead goes self-serve.
+At noise 0.1 the two learners are one lead apart over 400 episodes, and it is worth being
+plain about where. Up to the change they miss the same three: the first EMEA mid-market lead
+(0), then two small ones (27, 36) after a wrong review at 16 marked a correct disqualify as
+a miss and both went looking for a better action until 53. At the change both lose three
+(200, 205, 206) before switching. SenseLab's record then shows `route_to_ae` failing three
+times in a row and the next such lead goes self-serve. The lookup loses one more at 241:
+its eight nearest cases are still mostly the old, confirmed `route_to_ae` outcomes, and it
+takes 41 episodes for the new ones to outnumber them.
 
 With more wrong reviews the lookup picks up misses late in the run (351, 373, 393), all on
 the changed situation: a wrong review on `self_serve` plus the old `route_to_ae` wins still
 among its eight neighbours, and it drifts back to the action the business left behind.
 SenseLab's seven are three first exposures, one bad pair of reviews on a thin record at 49,
-and three leads at the change, one more than at noise 0.1. That extra one is deliberate. An
-action that has worked three or more times is only written off after three straight
-failures, because two wrong reviews in a row happen one pair in 25 at this noise level and
-a real change costs one more lead to confirm. Before that rule, the same run was behind the
-lookup at episode 140 (8 wrong to 5), every extra miss a working action dropped after two
-bad reviews. The rule is `turned_streak` in `core/senselab.py`.
+and three leads at the change, the same three as at noise 0.1. That third one is
+deliberate. An action that has worked three or more times is only written off after three
+straight failures, because two wrong reviews in a row happen one pair in 25 at this noise
+level and a real change costs one more lead to confirm. Before that rule, the same run was
+behind the lookup at episode 140 (8 wrong to 5), every extra miss a working action dropped
+after two bad reviews. The rule is `turned_streak` in `core/senselab.py`.
 
 Runs: [`results-sample/lead_routing-400`](results-sample/lead_routing-400) and
 [`results-sample/lead_routing-400-noise20`](results-sample/lead_routing-400-noise20).
@@ -266,8 +272,10 @@ Jev: 900 to 2,000 input tokens per decision depending on the arm. A 120-episode 
 default three arms is 360 calls.
 
 SenseLab: the memory calls are part of your plan. The judge and repair agent spend from your
-account's evaluation budget (the cap is yours to set; the dashboard shows it). The committed
-120-episode run spent $0.86, the three-instance run $3.75.
+account's evaluation budget (the cap is yours to set; the dashboard shows it). Judging the
+committed 120-episode run cost $0.78 and the three-instance run $0.75 (`metrics.json` has the
+figure); the repair agent's proposals and their replay tests come on top. `meta.json` records
+the account's budget before and after each run.
 
 Time: `--quick` is about 8 minutes. A full demo is about 35 minutes, including the loop's
 drain at the end. The Jev-only and retrieval arms finish in under two minutes and run in
@@ -296,8 +304,8 @@ results-sample/   the committed runs this README quotes; CI rebuilds them with -
 could build them. `jev+history` pastes all of them and gets refused by Jev at case 276.
 `jev+retrieval:meta-k8` picks the 8 nearest with local embeddings, recency weighting and the
 scenario's own situation label as a filter, which is more than most deployments have. The
-table at the top is the comparison: 7 wrong and $12,900 against 5 and $7,900, slower after
-the change, 3x the churn. And a lookup has no idea whether a past review was noise or
+table at the top is the comparison: 7 wrong and $12,900 against 6 and $10,400 with one
+agent, 13 and $30,200 against 6 and $10,400 with three, 3x the churn. And a lookup has no idea whether a past review was noise or
 signal, nothing that notices a validated pattern has started failing, no corrected rule to
 fall back on, and nothing running when the agent isn't.
 

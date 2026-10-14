@@ -1,93 +1,96 @@
 {
- "run_id": "lr9",
- "scenario": {
-  "name": "lead_routing",
-  "title": "Inbound lead routing",
-  "actions": [
-   "route_to_ae",
-   "sdr_nurture",
-   "self_serve",
-   "partner",
-   "disqualify"
+  "run_id": "lr11",
+  "scenario": {
+    "name": "lead_routing",
+    "title": "Inbound lead routing",
+    "actions": [
+      "route_to_ae",
+      "sdr_nurture",
+      "self_serve",
+      "partner",
+      "disqualify"
+    ],
+    "policy": [
+      {
+        "key": "policy-enterprise",
+        "text": "Enterprise leads (1000+ employees) with a corporate email and buying intent: route to an account executive."
+      },
+      {
+        "key": "policy-mid-market",
+        "text": "Mid-market leads (100-999 employees) with buying intent (demo, pricing or trial): route to an account executive."
+      },
+      {
+        "key": "policy-smb",
+        "text": "SMB leads (under 100 employees): send to self-serve signup."
+      },
+      {
+        "key": "policy-personal-email",
+        "text": "Leads from personal email addresses (gmail, yahoo, outlook, etc.): disqualify."
+      },
+      {
+        "key": "policy-low-intent",
+        "text": "Content downloads and webinar signups with no demo, pricing or trial request: SDR nurture sequence."
+      }
+    ],
+    "tacit_rule": "EMEA mid-market leads close only through a regional partner; the AE queue loses them.",
+    "change_rule": "After the pricing update, NA mid-market leads buy self-serve; routing them to an AE loses the deal.",
+    "expected_fix": "Mid-market leads in EMEA: hand to a regional partner, not an account executive.",
+    "cost_by_severity": {
+      "minor_failure": 200.0,
+      "failure": 2500.0,
+      "critical_failure": 15000.0
+    }
+  },
+  "episodes": 120,
+  "seeds": [
+    11
   ],
-  "policy": [
-   {
-    "key": "policy-enterprise",
-    "text": "Enterprise leads (1000+ employees) with a corporate email and buying intent: route to an account executive."
-   },
-   {
-    "key": "policy-mid-market",
-    "text": "Mid-market leads (100-999 employees) with buying intent (demo, pricing or trial): route to an account executive."
-   },
-   {
-    "key": "policy-smb",
-    "text": "SMB leads (under 100 employees): send to self-serve signup."
-   },
-   {
-    "key": "policy-personal-email",
-    "text": "Leads from personal email addresses (gmail, yahoo, outlook, etc.): disqualify."
-   },
-   {
-    "key": "policy-low-intent",
-    "text": "Content downloads and webinar signups with no demo, pricing or trial request: SDR nurture sequence."
-   }
+  "change_at": 60,
+  "probe_at": 90,
+  "noise": 0.1,
+  "arms": [
+    "jev",
+    "retrieval:meta-k8",
+    "senselab"
   ],
-  "tacit_rule": "EMEA mid-market leads close only through a regional partner; the AE queue loses them.",
-  "change_rule": "After the pricing update, NA mid-market leads buy self-serve; routing them to an AE loses the deal.",
-  "expected_fix": "Mid-market leads in EMEA: hand to a regional partner, not an account executive.",
-  "cost_by_severity": {
-   "minor_failure": 200.0,
-   "failure": 2500.0,
-   "critical_failure": 15000.0
-  }
- },
- "episodes": 120,
- "seeds": [
-  11
- ],
- "change_at": 60,
- "probe_at": 90,
- "noise": 0.1,
- "arms": [
-  "jev",
-  "retrieval:meta-k8",
-  "senselab"
- ],
- "knobs": {
-  "policy": "auto_after_canary",
-  "canary_pct": 50,
-  "canary_min_outcomes": 5,
-  "canary_timeout_sessions": 60,
-  "look_every": 5,
-  "judge": true,
-  "judge_mode": "continuous"
- },
- "jev_model": "jev-1.13.0",
- "amfs_url": "https://amfs-login.sense-lab.ai",
- "started_at": "2026-10-13T05:42:20.839977+00:00",
- "resumes": [],
- "platform_budget": [
-  {
-   "before": {
-    "monthly_usd_cap": 25.0,
-    "spent_usd": 10.61306,
-    "degrade_threshold": 0.8,
-    "period_start": "2026-10-01T00:00:00Z",
-    "updated_at": "2026-10-13T05:42:15.986934Z",
-    "remaining_usd": 14.38694,
-    "utilisation": 0.4245
-   },
-   "after": {
-    "monthly_usd_cap": 25.0,
-    "spent_usd": 11.469836,
-    "degrade_threshold": 0.8,
-    "period_start": "2026-10-01T00:00:00Z",
-    "updated_at": "2026-10-13T06:19:36.747303Z",
-    "remaining_usd": 13.530164,
-    "utilisation": 0.4588
-   },
-   "spent_usd": 0.8568
-  }
- ],
- "finished_at": "2026-10-13T06:19:50.112209+00:00"
+  "agents": 1,
+  "knobs": {
+    "policy": "auto_after_canary",
+    "canary_pct": 50,
+    "canary_min_outcomes": 5,
+    "canary_timeout_sessions": 60,
+    "look_every": 5,
+    "judge": true,
+    "judge_mode": "continuous"
+  },
+  "jev_model": "jev-1.13.0",
+  "amfs_url": "https://amfs-login.sense-lab.ai",
+  "started_at": "2026-10-13T22:27:03.078471+00:00",
+  "resumes": [],
+  "platform_budget": [
+    {
+      "before": {
+        "account_id": "redacted",
+        "monthly_usd_cap": 80.0,
+        "spent_usd": 24.478864,
+        "degrade_threshold": 0.8,
+        "period_start": "2026-10-01T00:00:00Z",
+        "updated_at": "2026-10-13T22:23:41.240675Z",
+        "remaining_usd": 55.521136,
+        "utilisation": 0.306
+      },
+      "after": {
+        "account_id": "redacted",
+        "monthly_usd_cap": 80.0,
+        "spent_usd": 27.874933,
+        "degrade_threshold": 0.8,
+        "period_start": "2026-10-01T00:00:00Z",
+        "updated_at": "2026-10-13T23:26:36.360483Z",
+        "remaining_usd": 52.125067,
+        "utilisation": 0.3484
+      },
+      "spent_usd": 3.3961
+    }
+  ],
+  "finished_at": "2026-10-13T23:26:48.938089+00:00"
 }
