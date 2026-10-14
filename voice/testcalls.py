@@ -13,8 +13,15 @@ were calling today, was any tool answer lost, did it hang up on them.
     uv run python -m voice.testcalls --list           # what there is
     uv run python -m voice.testcalls --report <run>   # the report for a run again
 
+The scenarios are the ``[[scenarios]]`` of the business file the server is running (the
+script the tester follows, the persona it calls as, the yes/no questions the judge answers
+from the transcript), so a business writes its own test calls next to its callers and this
+harness runs them unchanged. The checks that need no judge (tool answers delivered, decided
+after the caller spoke, no hang-up before the caller was done, how long the agent talks in
+one go) are the same for every business.
+
 Needs the server running (``uv run python -m voice.server``) and ``VAPI_PRIVATE_KEY``. The
-demo callers' records are not written to: a scenario with a history calls as a twin
+demo callers' records are not written to: a scenario with a persona calls as a twin
 (``<persona>-sim``) seeded with the same history, so Bruno's record stays Bruno's.
 Vapi bills the simulated calls like any other call, a few cents a minute each.
 
@@ -45,6 +52,7 @@ from typing import Any
 import httpx
 
 from .assistant import VapiApi
+from .business import Business, CallScenario
 
 SERVER = os.environ.get("VOICE_SERVER_URL") or "http://127.0.0.1:8787"
 TOOL_ERROR = "An unexpected error occurred."
@@ -73,154 +81,21 @@ def personality(name: str) -> dict[str, Any]:
 
 # -- the scenarios -------------------------------------------------------------------------
 
-@dataclass
-class Scenario:
-    id: str
-    title: str
-    persona: str | None  # a persona id from business.toml, or None for a caller we do not know
-    script: str
-    evaluations: list[tuple[str, str]]  # (name, what the judge checks), each a yes/no
-    decisions: int = 1  # how many decide_next_step calls the server should see
-    known: bool = True  # the opening should use the caller's name
-    tags: list[str] = field(default_factory=list)
+def scenarios_of(business: dict[str, Any]) -> list[CallScenario]:
+    """The test calls of the business the server is running, from ``/api/config``."""
+    rows = business.get("scenarios") or []
+    if not rows:
+        sys.exit(f"the business file has no [[scenarios]] ({business.get('file') or 'business.toml'}); "
+                 "see voice/README.md, Test calls")
+    return [CallScenario.from_row(r) for r in rows]
 
 
-SCENARIOS: list[Scenario] = [
-    Scenario(
-        id="bruno",
-        title="Bruno, fourth call about the same $49: history, pushback, number read back, slow close",
-        persona="bruno-andrade",
-        script=(
-            "You are Bruno, a long-time customer. Facts: a $49 charge has been on your invoice twice; you have "
-            "called three times about it; a credit was given and then disappeared; last week someone promised a "
-            "billing specialist would call you back and nobody did. Your mobile is 650 555 0142. Steps:\n"
-            "1. When the agent finishes its greeting, ask: 'Do you actually know who this is, or do I have to "
-            "explain everything again?'\n"
-            "2. Ask: 'So what did we talk about last time?' Let the agent answer in full.\n"
-            "3. Say: 'Right. I'm calling about that same forty-nine dollar charge again. Nobody called me back and "
-            "I'm done waiting.'\n"
-            "4. When the agent tells you what happens next, push back once: 'Why would it work this time? That's "
-            "exactly what they told me last week.'\n"
-            "5. If the agent asks which number to use, say: 'The mobile you have on file, six five zero, five five "
-            "five, zero one four two.' If it asks when, say afternoons.\n"
-            "6. If the agent asks whether there is anything else, say: 'No, that's everything.'\n"
-            "7. After the agent says goodbye, say 'Bye.' and end the call. Do not hang up before step 6."
-        ),
-        evaluations=[
-            ("knew_the_caller", "The agent greeted the caller as Bruno by name and treated him as someone it already knew, without asking him to identify himself or explain his situation from the start."),
-            ("recounted_history", "When asked what was discussed last time, the agent described the earlier calls from its records in its own words: the $49 charge appearing twice, a credit that was later reversed, and a promised callback that did not happen."),
-            ("decided_after_listening", "The agent only stated what would happen next after the caller said, on this call, that he was calling about the $49 charge again; it did not announce a next step before that."),
-            ("gave_a_reason", "When the caller asked why it would work this time, the agent gave a specific reason that referred to what had been tried before for him or what has worked for callers like him, rather than a generic reassurance."),
-            ("number_read_back", "If the agent took a callback number or time from the caller, it repeated it back to confirm it. (Pass if no number was asked for.)"),
-            ("proper_close", "Before ending, the agent asked whether there was anything else, waited for the caller's answer, and said goodbye only after the caller said he was done. It did not end the call right after taking a detail from him."),
-        ],
-        tags=["known", "history", "pushback", "close"],
-    ),
-    Scenario(
-        id="stranger",
-        title="A caller we have no record of: plain greeting, honest about being automated, first-time decision",
-        persona=None,
-        known=False,
-        script=(
-            "You are Sam Ortiz, a new customer who has never called before. Facts: your first invoice has a $30 "
-            "charge you do not understand; you signed up two weeks ago on the consumer plan; your email is "
-            "sam.ortiz@example.com. Steps:\n"
-            "1. After the greeting, say: 'Hi, I just got my first invoice and there's a thirty dollar charge on it "
-            "I don't understand.'\n"
-            "2. Ask: 'Wait, am I talking to a real person?' Accept whatever the answer is.\n"
-            "3. Answer the agent's questions from the facts. If it asks for your account email, give it.\n"
-            "4. When the agent tells you what happens next, say: 'Okay, that works.'\n"
-            "5. If the agent asks whether there is anything else, say: 'No, that's it, thanks.'\n"
-            "6. After the agent says goodbye, say 'Bye.' and end the call."
-        ),
-        evaluations=[
-            ("greeted_as_new", "The agent's greeting did not use a name or claim to know the caller or their history; it asked what it could help with."),
-            ("honest_about_ai", "When asked whether it was a real person, the agent said plainly that it was an automated agent, without evasion."),
-            ("did_not_invent", "The agent did not state account details it could not know about this caller (no invented charges, dates, previous calls or account facts)."),
-            ("next_step_stated", "The agent told the caller clearly what would happen about the $30 charge."),
-            ("proper_close", "Before ending, the agent asked whether there was anything else, waited for the answer, and said goodbye only after the caller said they were done."),
-        ],
-        tags=["unknown", "honesty", "close"],
-    ),
-    Scenario(
-        id="priya",
-        title="Priya changes topic: cancelling, then a second thing, plus a detail not in the file",
-        persona="priya-raman",
-        decisions=2,
-        script=(
-            "You are Priya. Facts: you have had the monthly plan for about eleven months, you barely use it any "
-            "more, and you want to cancel. Separately, you were charged twice this month, two identical charges "
-            "of $19. You do not remember what email is on your account. Steps:\n"
-            "1. After the greeting, say: 'Hi. I want to cancel my account, I'm just not using it enough.'\n"
-            "2. Whatever the agent proposes about the cancellation, say: 'Okay, fine.'\n"
-            "3. Then say: 'Oh, one more thing. I was charged twice this month, two nineteen dollar charges.'\n"
-            "4. When the agent answers that, ask: 'What email do you have on file for me?'\n"
-            "5. Whatever the answer, say: 'Okay. That's all then.'\n"
-            "6. After the agent says goodbye, say 'Bye.' and end the call."
-        ),
-        evaluations=[
-            ("knew_the_caller", "The agent greeted the caller as Priya by name."),
-            ("handled_cancellation", "The agent told the caller what would happen about the cancellation (resolved it, offered something, arranged a transfer or a callback)."),
-            ("handled_second_topic", "After the caller raised the double $19 charge, the agent treated it as a new matter and told her what would happen about it, rather than ignoring it or folding it into the cancellation answer."),
-            ("did_not_invent_email", "When asked what email was on file, the agent said it did not have that detail rather than stating an email address."),
-            ("grounded_on_the_charges", "What the agent said about the two $19 charges came from its records (two monthly plan payments this month, the second from a retried card charge, not yet reversed) or was a plain statement that it did not see them. Fail if it claimed a refund, reversal or credit had already happened, or described the charges as something else."),
-            ("proper_close", "The agent said goodbye only after the caller said she was done, and did not end the call abruptly."),
-        ],
-        tags=["known", "topic-change", "honesty"],
-    ),
-    Scenario(
-        id="tomas",
-        title="Tomas, enterprise outage: wants a named person and a time",
-        persona="tomas-eriksen",
-        script=(
-            "You are Tomas, who runs IT at an enterprise customer with 240 seats. Facts: your whole team has been "
-            "locked out of the dashboard for twenty minutes; two weeks ago you had an SSO outage that turned out "
-            "to be a certificate rotation; your account manager is Jordan Blake. Steps:\n"
-            "1. After the greeting, say: 'Our whole team is locked out. The dashboard has been down for twenty "
-            "minutes.'\n"
-            "2. Ask: 'Is this the SSO thing again? We had this two weeks ago.'\n"
-            "3. When the agent tells you what happens next, ask: 'Who is calling me, and when?'\n"
-            "4. Whatever the answer, say: 'Fine. Nothing else, go.'\n"
-            "5. After the agent says goodbye, say 'Bye.' and end the call."
-        ),
-        evaluations=[
-            ("knew_the_caller", "The agent greeted the caller as Tomas by name and did not ask him to explain who he was."),
-            ("remembered_sso", "When asked whether this was the SSO issue again, the agent referred to the earlier incident from its records (an SSO outage about two weeks ago, a certificate rotation) rather than saying it had no record."),
-            ("escalated_to_a_person", "The agent arranged for a named person or an engineer to take over or call back, rather than offering only self-service steps or a status page."),
-            ("proper_close", "The agent said goodbye only after the caller said he was done."),
-        ],
-        tags=["known", "enterprise", "outage"],
-    ),
-    Scenario(
-        id="marcus",
-        title="Marcus, a plain question answered from the file, quick goodbye",
-        persona="marcus-oyelaran",
-        script=(
-            "You are Marcus, who manages a business account. Facts: there is a $29 line on this month's invoice "
-            "you do not recognise; a couple of months ago you added three seats yourself in the admin page. Steps:\n"
-            "1. After the greeting, say: 'Hi, there's a twenty-nine dollar line on this month's invoice I don't "
-            "recognise.'\n"
-            "2. If the agent explains it, say: 'Oh, the extra seats. Right, that makes sense. That's all, thanks.' "
-            "If it does not explain it, ask: 'Is that the extra seats I added a while back?' and then say the same.\n"
-            "3. After the agent says goodbye, say 'Bye.' and end the call."
-        ),
-        evaluations=[
-            ("knew_the_caller", "The agent greeted the caller as Marcus by name."),
-            ("explained_the_charge", "The agent connected the $29 line to the seats added on the account (from its records or after the caller suggested it) and said what would happen about it."),
-            ("did_not_invent", "The agent never described the $29 line as anything other than the added seats. Fail if it called it a storage overage, a usage add-on, a setup fee, a service fee, or any other charge not in the caller's records, even if it corrected itself later."),
-            ("proper_close", "The agent said goodbye only after the caller said he was done; it did not hang up before that."),
-        ],
-        tags=["known", "plain"],
-    ),
-]
-
-
-def by_id(ids: list[str] | None) -> list[Scenario]:
+def by_id(ids: list[str] | None, scenarios: list[CallScenario]) -> list[CallScenario]:
     if not ids:
-        return SCENARIOS
+        return scenarios
     out = []
     for i in ids:
-        s = next((s for s in SCENARIOS if s.id == i), None)
+        s = next((s for s in scenarios if s.id == i), None)
         if s is None:
             sys.exit(f"no scenario {i!r}; try --list")
         out.append(s)
@@ -236,7 +111,7 @@ def server_config(server: str) -> dict[str, Any]:
         sys.exit(f"the voice server is not answering at {server} ({exc}); start it with: uv run python -m voice.server")
 
 
-def twin_profile(server: str, business: dict[str, Any], s: Scenario) -> dict[str, Any]:
+def twin_profile(server: str, business: dict[str, Any], s: CallScenario) -> dict[str, Any]:
     """Register who this test call is from, and get the opening and the prompt values the
     server would give a real call from them. A persona calls as its twin."""
     if s.persona is None:
@@ -264,7 +139,7 @@ def server_events(server: str, call_id: str) -> list[dict[str, Any]]:
 
 # -- the run -------------------------------------------------------------------------------
 
-def start_run(api: VapiApi, assistant_id: str, server: str, business: dict[str, Any], scenarios: list[Scenario],
+def start_run(api: VapiApi, assistant_id: str, server: str, business: dict[str, Any], scenarios: list[CallScenario],
               *, chat: bool, iterations: int, profile_ids: dict[str, str] | None = None) -> dict[str, Any]:
     sims = []
     for s in scenarios:
@@ -279,7 +154,7 @@ def start_run(api: VapiApi, assistant_id: str, server: str, business: dict[str, 
                 "instructions": s.script,
                 "targetOverrides": {"firstMessage": prof["first_message"], "variableValues": prof["variable_values"]},
                 "evaluations": [{"structuredOutput": {"name": name, "description": desc, "schema": {"type": "boolean"}},
-                                 "comparator": "=", "value": True, "required": True} for name, desc in s.evaluations],
+                                 "comparator": "=", "value": True, "required": True} for name, desc in s.judge],
             },
         })
     body = {"simulations": sims, "target": {"type": "assistant", "assistantId": assistant_id},
@@ -484,7 +359,7 @@ def turns_of(call: dict[str, Any]) -> list[Turn]:
     return out
 
 
-def our_checks(s: Scenario, call: dict[str, Any], turns: list[Turn], events: list[dict[str, Any]], caller_name: str) -> list[tuple[bool, str]]:
+def our_checks(s: CallScenario, call: dict[str, Any], turns: list[Turn], events: list[dict[str, Any]], caller_name: str) -> list[tuple[bool, str]]:
     """What the transcript and the server's own events show, independent of Vapi's judge."""
     out: list[tuple[bool, str]] = []
     bots = [t for t in turns if t.role == "bot"]
@@ -565,17 +440,18 @@ def our_checks(s: Scenario, call: dict[str, Any], turns: list[Turn], events: lis
     return out
 
 
-def print_call(s: Scenario, item: dict[str, Any], call: dict[str, Any], turns: list[Turn], events: list[dict[str, Any]],
-               caller_name: str, workdir: str) -> bool:
+def print_call(s: CallScenario, item: dict[str, Any], call: dict[str, Any], turns: list[Turn], events: list[dict[str, Any]],
+               caller_name: str, workdir: str, *, agent_name: str = "AGENT") -> bool:
     print("\n" + "=" * 100)
     print(f"{s.id}: {s.title}")
     print(f"  item {item.get('id')}  status={item.get('status')}  call={item.get('callId')}  ended={call.get('endedReason')}")
     if item.get("failureReason"):
         print(f"  failure: {item['failureReason']}")
     print("-" * 100)
+    who = agent_name.upper()[:6]
     for t in turns:
         if t.role == "bot":
-            print(f"  [{t.t:6.1f}] JOHN:   {t.text}")
+            print(f"  [{t.t:6.1f}] {who + ':':8s}{t.text}")
         elif t.role == "user":
             print(f"  [{t.t:6.1f}] CALLER: {t.text}")
         elif t.role == "tool_call":
@@ -630,7 +506,7 @@ def fetch_call(api: VapiApi, call_id: str, attempts: int = 4) -> dict[str, Any]:
     return {}
 
 
-def report(api: VapiApi, server: str, run: dict[str, Any], scenarios: list[Scenario], business: dict[str, Any]) -> bool:
+def report(api: VapiApi, server: str, run: dict[str, Any], scenarios: list[CallScenario], business: dict[str, Any]) -> bool:
     items = run_items(api, run["id"])
     names = {p["id"]: p["name"] for p in business.get("personas") or []}
     workdir = os.path.join(os.environ.get("TMPDIR") or "/tmp", "jev-testcalls")
@@ -649,7 +525,7 @@ def report(api: VapiApi, server: str, run: dict[str, Any], scenarios: list[Scena
         turns = turns_of(call)
         events = wait_for_seal(server, str(call_id), s.decisions)
         caller_name = names.get(s.persona or "", "") if s.persona else ""
-        all_ok &= print_call(s, item, call, turns, events, caller_name, workdir)
+        all_ok &= print_call(s, item, call, turns, events, caller_name, workdir, agent_name=str(business.get("agent_name") or "agent"))
     if seen == 0:
         print("no items for these scenarios in that run")
         return False
@@ -666,11 +542,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--report", metavar="RUN_ID", help="print the report for an earlier run")
     ap.add_argument("--server", default=SERVER)
     ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--business", help="list the scenarios of this business file instead of the running server's (with --list)")
     a = ap.parse_args(argv)
 
     if a.list:
-        for s in SCENARIOS:
-            print(f"{s.id:10s} {s.title}  [{', '.join(s.tags)}]")
+        # No server needed: the file's scenarios (the server's own, when it is up and no
+        # file is named, so what is listed is what would run).
+        try:
+            rows = scenarios_of(server_config(a.server)["business"]) if not a.business else []
+        except SystemExit:
+            rows = []
+        if not rows:
+            b = Business.load(a.business)
+            rows = list(b.scenarios)
+            print(f"from {b.path}:")
+        for s in rows:
+            print(f"{s.id:10s} {s.title}  [{', '.join(s.tags)}]"
+                  f"{'' if s.persona else '  (a stranger)'}{'' if s.decisions == 1 else f'  ({s.decisions} decisions)'}")
         return 0
 
     key = os.environ.get("VAPI_PRIVATE_KEY")
@@ -684,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit("VAPI_PRIVATE_KEY is not set")
     api = VapiApi(key)
     cfg = server_config(a.server)
-    scenarios = by_id(a.only.split(",") if a.only else None)
+    scenarios = by_id(a.only.split(",") if a.only else None, scenarios_of(cfg["business"]))
 
     if a.report:
         run = api._call("GET", f"/eval/simulation/run/{a.report}")

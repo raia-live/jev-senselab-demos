@@ -243,15 +243,25 @@ Three stacks, chosen with `VOICE_STACK`:
 Jev's decision works the same on all three: a tool call, answered by this server. Two
 things GPT-Live does differently, both found on real calls and visible in Vapi's call logs:
 
-- Vapi sends the server nothing before the first tool call: no status update when the call
+- Vapi sends the server nothing live but the tool calls: no status update when the call
   starts, no speech or transcript messages (a `gpt-realtime-2` call sends well over a
-  hundred). A phone call is unaffected, because the number asks the server who should
-  answer. A browser call would be unknown to the server until its first decision, so the
-  runs could not open ahead and the caller waited 3 to 6 s at the decision point. The page
-  therefore registers the call itself the moment the Vapi SDK connects
-  (`POST /api/calls/{id}/start` with the chosen profile), and relays the SDK's transcript
-  and speech events to `POST /api/calls/{id}/notes`, which is what the page's timeline and
-  the caller's wait are measured from. The test harness does the same.
+  hundred), and asking for `conversation-update` or `model-output` changes nothing. A phone
+  call is unaffected, because the number asks the server who should answer. A browser call
+  would be unknown to the server until its first decision, so the runs could not open ahead
+  and the caller waited 3 to 6 s at the decision point. The page therefore registers the
+  call itself the moment the Vapi SDK connects (`POST /api/calls/{id}/start` with the
+  chosen profile). The SDK's `call-start` event does not fire on GPT-Live either; the page
+  treats the call as live from the moment `start()` returns.
+- The conversation reaches the page two ways, because Vapi gives it two ways. The browser
+  SDK gets the agent's transcript as one growing string, a few words at a time while it
+  speaks, and a single final at the end of the call; the page turns that into words on
+  screen as they are said, a speaking segment on the timeline, and one line per utterance
+  (a pause of 1.2 s ends one), and relays those to `POST /api/calls/{id}/notes`. The
+  caller's words, and exact turn timing for both sides, come to the server inside each
+  tool call and the end-of-call report (`artifact.messages`), so the timeline fills in the
+  caller's turns at each decision and at hang-up. On a phone call that second path is the
+  only one, which is why the caller's lane fills in at the decision rather than as they
+  speak.
 - The speaker has no tools. It delegates to the reasoner, and anything the reasoner does
   not do, does not happen: a goodbye without `endCall` leaves the line open. The reasoner's
   prompt checks for a goodbye before anything else, and a `customer.speech.timeout` hook
@@ -267,31 +277,68 @@ for a recording use a browser call.
 `voice/testcalls.py` runs scripted calls against the live agent through Vapi Simulations:
 Vapi plays the caller, an AI tester following a script, on a real voice call, and every
 webhook goes through the running server, so SenseLab is read, Jev decides and the outcome is
-sealed exactly as on a call from you. Five scenarios, each one thing a caller obviously
-needs: Bruno's fourth call about the same $49 (does John know him, recount the history,
-give a reason when pushed back on, read the number back, close slowly), a caller nobody has
-a record of (is John honest about being automated, does he invent nothing), Priya changing
-topic mid-call, Tomas's enterprise outage (a name and a time), and Marcus's plain question
-answered from the file (and only from it: one run had John call his $29 "a storage
-overage" when the file said three seats, so the judge now fails any charge the file does
-not name). Each scenario has judge criteria that Vapi grades from the
-transcript and a set of our own checks on the call record and the server's events: every
-tool answer delivered, one tool call per turn, our answers within 6 s, the caller's wait on
-a hand-off within 10 s, the decision made only after the caller said why they were calling,
-no internal names said aloud, the call ended by the right side, and the outcome sealed.
+sealed exactly as on a call from you. The scenarios are `[[scenarios]]` in the business
+file, next to the callers, so the harness runs whatever business the server is running.
+Northwind's five are each one thing a caller obviously needs: Bruno's fourth call about the
+same $49 (does John know him, recount the history, give a reason when pushed back on, read
+the number back, close slowly), a caller nobody has a record of (is John honest about being
+automated, does he invent nothing), Priya changing topic mid-call, Tomas's enterprise outage
+(a name and a time), and Marcus's plain question answered from the file (and only from it:
+one run had John call his $29 "a storage overage" when the file said three seats, so the
+judge now fails any charge the file does not name).
+
+A scenario is the script the tester follows, who it calls as, and the yes/no questions the
+judge answers from the transcript, every one of which must be a yes:
+
+```toml
+[[scenarios]]
+id = "ana"
+title = "Ana moves her cleaning"
+persona = "ana-reyes"        # a [[personas]] id; leave it out for a caller you have no record of
+decisions = 1                # how many decisions the server should make on the call (default 1)
+tags = ["known"]
+script = """
+You are Ana. Facts: you have a cleaning next Tuesday at 3 and need it moved to Thursday. Steps:
+1. After the greeting, say: 'Hi, I need to move my cleaning to Thursday.'
+2. Whatever the agent proposes, say: 'That works. Thanks, bye.'
+"""
+[[scenarios.judge]]
+name = "knew_the_booking"
+check = "The agent referred to the existing Tuesday booking without being told about it."
+[[scenarios.judge]]
+name = "proper_close"
+check = "The agent said goodbye only after the caller said she was done."
+```
+
+Write the script as facts plus numbered steps, one step per turn, with the words in
+quotes; the tester says each in its own words and waits for the agent before the next.
+Give it the facts the agent might ask for (a number, an email), and tell it what to say
+when the agent asks whether there is anything else, or it will be left without a line and
+start improvising. The judge entries are the things that went wrong on your real calls; a
+check that can be answered yes or no from the transcript alone is one the judge grades
+well. On top of them, every scenario gets the same checks on the call record and the
+server's events: every tool answer delivered, one tool call per turn, our answers within
+6 s, the caller's wait on a hand-off within 10 s, the decision made only after the caller
+said why they were calling, no internal names said aloud, the call ended by the right side,
+the outcome sealed, and from the stereo recording, no agent turn over 30 s and no talking
+on through a caller who speaks up.
 
 ```
 uv run python -m voice.testcalls                  # every scenario, as voice calls, about six minutes
-uv run python -m voice.testcalls --only bruno     # one of them
+uv run python -m voice.testcalls --only bruno     # one of them (comma-separated for several)
+uv run python -m voice.testcalls --list           # what the running server's business has
 uv run python -m voice.testcalls --report <run>   # the report for an earlier run
 ```
 
-It needs the server running and `VAPI_PRIVATE_KEY`. The demo callers' records are not
-written to: a scenario with a history calls as a twin (`<persona>-sim`) seeded with the same
+It needs the server running and `VAPI_PRIVATE_KEY`. The callers' records are not written
+to: a scenario with a persona calls as a twin (`<persona>-sim`) seeded with the same
 history. Vapi bills the simulated calls like any other call, a few cents a minute each. One
 difference from a real call: the tester speaks first and the assistant's opening line is
 dropped, so John's first words in these transcripts are his reply to the caller, which is
-also what a caller who talks over the greeting gets.
+also what a caller who talks over the greeting gets. Run them after every change to the
+prompts or the business file: GPT-Live is a beta and its speaker is not deterministic, so
+a prompt that passed once is not a prompt that passes, and the transcripts are where the
+bad turns show up.
 
 ## Make it your business
 
@@ -328,6 +375,9 @@ The server rebuilds the Vapi assistant from the file on start (`python -m voice.
 - `[memory]`: the agent id and entity path in SenseLab. A new entity path is an empty memory.
 - `[[personas]]`: callers to try, each with the account facts, a seeded history and a
   script. Delete the demo's, or write your own.
+- `[[scenarios]]`: the test calls (see Test calls), each a script, who it calls as, and the
+  judge's yes/no checks. Write one for every kind of call you expect; the harness runs
+  whatever is here.
 
 What stays the same: the account facts a call carries (name, tier, prior contacts in 30
 days, tenure), which come from the page or from `POST /api/profiles`; wire your own lookup
@@ -353,14 +403,14 @@ review and the seal run after the call, off the webhook's path.
 ## Files
 
 ```
-voice/business.toml  the business: company, intents, actions, policy, situations, outcomes, demo callers
+voice/business.toml  the business: company, intents, actions, policy, situations, outcomes, demo callers, test calls
 voice/business.py    reads it; builds the scenario Jev and SenseLab see, names situations, opens runs ahead
 voice/agent.py       Jev + SenseLab per call: open ahead, recall the caller, decide, seal with the outcome, repair loop
 voice/customers.py   the per-caller memory: seeded history, the brief the agent gets, the note it writes after a call
 voice/server.py      FastAPI: /vapi/webhook, the page, /api/*
 voice/assistant.py   create/update the Vapi assistant from the business file (prompt, tools, voice stack, server URL); --number
 voice/simulate.py    the scenario's callers, sent as Vapi tool calls
-voice/testcalls.py   scripted voice calls through Vapi Simulations, with judge criteria and our own checks
+voice/testcalls.py   runs the business file's [[scenarios]] as voice calls through Vapi Simulations, judge plus our own checks
 voice/web/index.html the page
 demos/call_handling/ the demo's scenario: the batch harness runs it, and it reviews the live agent's decisions
 ```

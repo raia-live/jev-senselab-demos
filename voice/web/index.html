@@ -292,7 +292,13 @@ function apply(e, live) {
       break; }
     case "transcript": {
       c.lines.push({ role: e.role, text: e.text, t: e.t });
-      if (live && isCur) { if (e.role === "user") pulse("e-you-riley", { label: "", color: C.you, dur: 700 }); else pulse("e-you-riley", { label: "", color: C.riley, reverse: true, dur: 700 }); $("sub").innerHTML = `<span style="color:${e.role === "user" ? C.you : C.riley}">${e.role === "user" ? "Caller" : esc(AGENT)}:</span> “${esc(e.text)}”`; }
+      if (live && isCur) { if (e.role === "user") pulse("e-you-riley", { label: "", color: C.you, dur: 700 }); else pulse("e-you-riley", { label: "", color: C.riley, reverse: true, dur: 700 }); subtitle(e.role, e.text); }
+      break; }
+    case "turn": {
+      // A line reported after the fact (GPT-Live: the server learns the caller's words at
+      // each decision and at hang-up), with the real start and end of the speech.
+      c.speech[e.role].push({ t0: e.t0, t1: e.t1 }); c.lines.push({ role: e.role, text: e.text, t: e.t1 });
+      if (live && isCur && now() - e.t1 < 20) { pulse("e-you-riley", { label: "", color: e.role === "user" ? C.you : C.riley, reverse: e.role !== "user", dur: 700 }); subtitle(e.role, e.text); }
       break; }
     case "recall": {
       c.recall = { t: e.t, ms: e.ms, contacts: e.contacts, seeded: e.seeded, name: e.name, brief: e.brief };
@@ -356,9 +362,13 @@ function apply(e, live) {
   }
   if (live && isCur) drawTimeline();
 }
+const STACK_LABEL = { live: "Vapi · GPT-Live", realtime: "Vapi · gpt-realtime", pipeline: "Vapi · GPT-4.1 · ElevenLabs" };
 function resetNodes() {
   ["you", "riley", "jev", "sl", "world"].forEach(unglow);
-  status("jev", "decides the next step"); status("world", "survey, churn, the callback"); status("riley", "Vapi · GPT-4.1 · ElevenLabs");
+  status("jev", "decides the next step"); status("world", "survey, churn, the callback"); status("riley", STACK_LABEL[cfg.stack] || "Vapi");
+}
+function subtitle(role, text) {
+  $("sub").innerHTML = `<span style="color:${role === "user" ? C.you : C.riley}">${role === "user" ? "Caller" : esc(AGENT)}:</span> “${esc(text)}”`;
 }
 
 /* -- timeline -------------------------------------------------------------------------- */
@@ -485,11 +495,47 @@ $("call").onclick = async () => {
     const call = await vapi.start(cfg.assistant_id, { firstMessage: prof.first_message, variableValues: prof.variable_values, metadata: { profile_id: prof.profile_id } });
     // Tell the server the call is on, so the runs open ahead now. (GPT-Live sends the server no
     // status update at the start, nor speech or transcript updates; the page relays those.)
-    if (call?.id) { liveCallId = call.id; post(`/api/calls/${call.id}/start`, { profile_id: prof.profile_id }); }
+    // The SDK's call-start event does not fire on GPT-Live either, so the call is live from here.
+    if (call?.id) { liveCallId = call.id; resetLiveText(); $("hangup").disabled = false; post(`/api/calls/${call.id}/start`, { profile_id: prof.profile_id }); }
   }
   catch (e) { caption("Could not start the call", esc(e?.message || e)); $("call").disabled = false; }
 };
 $("hangup").onclick = () => vapi && vapi.stop();
+
+/* -- GPT-Live's transcript stream ------------------------------------------------------- */
+// What Vapi's browser SDK sends on GPT-Live: the agent's words as one growing string, a few
+// words at a time while it speaks ("partial"), and a single "final" at the end of the call
+// with everything in it. No speech-update, nothing for the caller (their words reach the
+// server with each decision and at hang-up, as "turn" events). The stream is turned into
+// what the timeline runs on: a speech start when words begin to arrive, a stop and one
+// final line when they pause for a moment, and the words on screen as they are said.
+const PAUSE_MS = 1200, CHARS_PER_S = 14;  // a pause this long ends an utterance; about how fast it is spoken
+const liveText = {};
+function resetLiveText() { for (const role of ["assistant", "user"]) liveText[role] = { seen: "", flushed: 0, speaking: false, first: 0, last: 0, timer: null }; }
+resetLiveText();
+function onLiveTranscript(m) {
+  const role = m.role === "user" ? "user" : "assistant"; const s = liveText[role]; const text = String(m.transcript || "");
+  const callId = liveCallId;
+  if (!text.startsWith(s.seen)) { flushLive(role); s.seen = ""; s.flushed = 0; }  // the string started over
+  s.seen = text;
+  const cur = text.slice(s.flushed).trim();
+  if (cur) {
+    s.last = now();
+    if (!s.speaking) { s.speaking = true; s.first = s.last; post(`/api/calls/${callId}/notes`, { type: "speech-update", role, status: "started", t: s.first }).catch(() => {}); glow(role === "user" ? "you" : "riley"); if (role === "assistant") status("riley", "speaking"); }
+    if (current === callId) subtitle(role, cur);
+    clearTimeout(s.timer); s.timer = setTimeout(() => flushLive(role), PAUSE_MS);
+  }
+  if (m.transcriptType === "final") flushLive(role);
+}
+function flushLive(role) {
+  const s = liveText[role]; if (!s) return; clearTimeout(s.timer); s.timer = null;
+  const callId = liveCallId; const cur = s.seen.slice(s.flushed).trim(); s.flushed = s.seen.length;
+  // The words arrive faster than they are spoken (a short line lands in one piece), so the
+  // stop is the later of the last words' arrival and how long the line takes to say.
+  const stop = Math.max(s.last, s.first + cur.length / CHARS_PER_S);
+  if (s.speaking) { s.speaking = false; unglow(role === "user" ? "you" : "riley"); if (role === "assistant") status("riley", "listening"); if (callId) post(`/api/calls/${callId}/notes`, { type: "speech-update", role, status: "stopped", t: stop }).catch(() => {}); }
+  if (cur && callId) post(`/api/calls/${callId}/notes`, { type: "transcript", role, transcriptType: "final", transcript: cur, t: stop }).catch(() => {});
+}
 $("t-send").onclick = async () => {
   const { call_id } = await post("/api/calls", { caller: caller() });
   await post(`/api/calls/${call_id}/decide`, { intent: $("t-intent").value, amount_usd: Number($("t-amount").value), summary: $("t-text").value, sentiment: "frustrated" });
@@ -519,11 +565,14 @@ async function init() {
     try {
       const mod = await import("https://esm.sh/@vapi-ai/web");
       vapi = new mod.default(cfg.public_key);
-      vapi.on("call-start", () => { $("hangup").disabled = false; $("call").disabled = true; });
-      vapi.on("call-end", () => { $("hangup").disabled = true; $("call").disabled = false; liveCallId = null; });
+      vapi.on("call-start", () => { $("hangup").disabled = false; $("call").disabled = true; resetLiveText(); });
+      vapi.on("call-end", () => { flushLive("assistant"); flushLive("user"); $("hangup").disabled = true; $("call").disabled = false; liveCallId = null; });
       vapi.on("message", (m) => {
-        if (cfg.stack !== "live" || !liveCallId) return;
-        if (m?.type === "transcript" || m?.type === "speech-update") post(`/api/calls/${liveCallId}/notes`, m).catch(() => {});
+        // On GPT-Live the server gets no speech or transcript messages from Vapi during the
+        // call; the browser does, so the page relays them (see onLiveTranscript).
+        if (cfg.stack !== "live" || !liveCallId || !m?.type) return;
+        if (m.type === "transcript") onLiveTranscript(m);
+        else if (m.type === "speech-update") post(`/api/calls/${liveCallId}/notes`, { ...m, t: now() }).catch(() => {});
       });
       vapi.on("error", (e) => { caption("Call error", esc(e?.message || JSON.stringify(e))); $("call").disabled = false; console.error(e); });
     } catch (e) { $("call").disabled = true; $("call").textContent = "browser calls unavailable"; console.error(e); }

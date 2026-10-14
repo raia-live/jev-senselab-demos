@@ -225,9 +225,9 @@ behaviours, opens an incident, and a repair agent drafts a corrective entry (a n
 the rule that stopped working and what to do instead) on a memory branch. The draft is
 replayed against the runs that failed (Tier 1). Only if it would have fixed them does it go
 to half of live sessions (the canary) to be compared with control, and only if it holds does
-it ship to `main`. In the committed run the judge graded all 120 decisions for $0.44, opened
-one incident, and the repair agent's one draft was stopped at Tier 1 because it wouldn't have
-fixed the failed runs. A draft the gate rejects never touches a live decision, which is what
+it ship to `main`. In the committed run the judge graded 119 of the 120 decisions for $0.78
+(one trace upload hit a rate limit), opened three incidents, and both of the repair agent's
+drafts were stopped at Tier 1 because they wouldn't have fixed the failed runs. A draft the gate rejects never touches a live decision, which is what
 you want from a loop that edits memory on its own. Every step is an event on the dashboard
 and in the report.
 

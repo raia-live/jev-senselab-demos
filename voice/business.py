@@ -74,6 +74,47 @@ class Split:
         return self.below if value < self.at else self.from_
 
 
+@dataclass(frozen=True)
+class CallScenario:
+    """One scripted test call for ``voice.testcalls``: who calls (a persona from the file,
+    or nobody we know), the script Vapi's tester follows, and the yes/no questions the
+    judge answers from the transcript. Read from ``[[scenarios]]`` in the business file, so
+    a business writes its own test calls next to its callers, in TOML, not Python."""
+
+    id: str
+    title: str
+    script: str
+    judge: tuple[tuple[str, str], ...]  # (name, what the judge checks), each a yes/no
+    persona: str | None = None  # a persona id, or None for a caller we have no record of
+    decisions: int = 1  # how many decide_next_step calls the server should see
+    tags: tuple[str, ...] = ()
+
+    @property
+    def known(self) -> bool:
+        """The opening should use the caller's name."""
+        return self.persona is not None
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any], *, where: str = "") -> CallScenario:
+        sid = str(row.get("id") or "").strip()
+        if not sid:
+            raise ValueError(f"{where}: a scenario needs an id")
+        script = str(row.get("script") or "").strip()
+        if not script:
+            raise ValueError(f"{where}: scenario {sid} needs a script")
+        judge = tuple((str(j["name"]), str(j["check"])) for j in row.get("judge") or ())
+        if not judge:
+            raise ValueError(f"{where}: scenario {sid} needs at least one [[scenarios.judge]] entry (name, check)")
+        persona = row.get("persona")
+        return cls(id=sid, title=str(row.get("title") or sid), script=script, judge=judge,
+                   persona=(str(persona) if persona else None), decisions=int(row.get("decisions", 1)),
+                   tags=tuple(str(t) for t in row.get("tags") or ()))
+
+    def public(self) -> dict[str, Any]:
+        return {"id": self.id, "title": self.title, "persona": self.persona, "script": self.script,
+                "judge": [{"name": n, "check": c} for n, c in self.judge], "decisions": self.decisions, "tags": list(self.tags)}
+
+
 @dataclass
 class ConfiguredScenario(Scenario):
     """The ``Scenario`` the live agent hands to Jev and SenseLab, built from the file. In
@@ -132,6 +173,7 @@ class Business:
     cost_by_severity: dict[str, float]
     change_label: str = ""  # the page's name for the simulated world's mid-run change
     personas: tuple[Persona, ...] = field(default_factory=tuple)
+    scenarios: tuple[CallScenario, ...] = field(default_factory=tuple)  # the test calls
 
     # -- loading -----------------------------------------------------------------------------
 
@@ -180,6 +222,14 @@ class Business:
         for p in personas:
             if p.intent not in {i.id for i in intents}:
                 raise ValueError(f"{path}: persona {p.id} has intent {p.intent!r}, not one of the intents")
+        scenarios = tuple(CallScenario.from_row(s, where=str(path)) for s in raw.get("scenarios") or ())
+        seen: set[str] = set()
+        for s in scenarios:
+            if s.id in seen:
+                raise ValueError(f"{path}: two scenarios with id {s.id!r}")
+            seen.add(s.id)
+            if s.persona is not None and s.persona not in {p.id for p in personas}:
+                raise ValueError(f"{path}: scenario {s.id} calls as persona {s.persona!r}, which is not in [[personas]]")
         return cls(
             path=path, name=name, what=str(company.get("what") or ""), agent_name=agent_name,
             greeting=str(company.get("greeting") or f"Hi, thanks for calling {name}, this is {agent_name}. What can I help you with?"),
@@ -194,7 +244,7 @@ class Business:
             outcomes_mode=mode, simulator_ref=(str(outcomes["simulator"]) if outcomes.get("simulator") else None),
             cost_by_severity={str(k): float(v) for k, v in (outcomes.get("cost_by_severity") or
                                                             {"minor_failure": 100, "failure": 1000, "critical_failure": 10000}).items()},
-            change_label=str(outcomes.get("change_label") or ""), personas=personas,
+            change_label=str(outcomes.get("change_label") or ""), personas=personas, scenarios=scenarios,
         )
 
     # -- lookups -----------------------------------------------------------------------------
@@ -294,6 +344,8 @@ class Business:
             "outcomes_mode": self.outcomes_mode, "change_rule": self.scenario.change_rule or None,
             "change_label": self.change_label or None,
             "personas": [p.public() for p in self.personas], "file": str(self.path),
+            # The test calls, so voice.testcalls runs the business the server is running.
+            "scenarios": [s.public() for s in self.scenarios],
         }
 
 
@@ -305,4 +357,4 @@ def load_object(ref: str) -> Any:
     return getattr(importlib.import_module(module), attr)
 
 
-__all__ = ["Action", "Business", "ConfiguredScenario", "DEFAULT_PATH", "Intent", "Split", "load_object"]
+__all__ = ["Action", "Business", "CallScenario", "ConfiguredScenario", "DEFAULT_PATH", "Intent", "Split", "load_object"]

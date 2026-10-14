@@ -457,21 +457,57 @@ class LiveAgent:
             log.warning("opening ahead for %s failed: %s", situation, exc)
             return None
 
-    def note_speech(self, call_id: str, role: str, status: str) -> None:
-        """Vapi's speech-update: who started or stopped talking. Timeline material."""
+    def note_speech(self, call_id: str, role: str, status: str, *, t: float | None = None) -> None:
+        """Vapi's speech-update: who started or stopped talking. Timeline material. *t* is
+        when it happened, if the sender knows better than now (the page does: on GPT-Live it
+        derives these from the transcript stream, and the stop is known only after a pause)."""
         if call_id in self.calls:
             self._event("speech", {"call_id": call_id, "role": "assistant" if role in ("assistant", "bot") else "user",
-                                   "status": "started" if status == "started" else "stopped"})
+                                   "status": "started" if status == "started" else "stopped", **({"t": t} if t else {})})
 
-    def note_transcript(self, call_id: str, role: str, text: str) -> None:
+    def note_transcript(self, call_id: str, role: str, text: str, *, t: float | None = None) -> None:
         """A final transcript line from Vapi, kept on the call and announced."""
         text = " ".join(str(text or "").split())
         if not text or call_id not in self.calls:
             return
         who = "assistant" if role in ("assistant", "bot") else "user"
         with self._lock:
-            self.calls[call_id].setdefault("live", []).append({"role": who, "text": text, "t": time.time()})
-        self._event("transcript", {"call_id": call_id, "role": who, "text": text[:300]})
+            self.calls[call_id].setdefault("live", []).append({"role": who, "text": text, "t": t or time.time()})
+        self._event("transcript", {"call_id": call_id, "role": who, "text": text[:300], **({"t": t} if t else {})})
+
+    def note_turns(self, call_id: str, messages: list[Any] | None) -> int:
+        """The conversation so far, as Vapi's ``artifact.messages``: ``bot`` and ``user`` rows
+        with epoch-ms ``time`` and ``endTime``. On GPT-Live this is the one source of the
+        caller's words and of turn timing that reaches the server during a call: it comes
+        with every tool call, and in full with the end-of-call report. Rows whose words are
+        already on the call (relayed live by the page) are skipped; the rest are announced
+        as ``turn`` events, each a line with the real start and end of the speech, so the
+        timeline fills in at the right places even when the words arrive late. Returns the
+        rows added."""
+        if not messages or call_id not in self.calls:
+            return 0
+        squash = lambda s: "".join(ch for ch in s.lower() if ch.isalnum())  # noqa: E731
+        new: list[dict[str, Any]] = []
+        with self._lock:
+            call = self.calls[call_id]
+            live = call.setdefault("live", [])
+            said = {who: squash(" ".join(ln["text"] for ln in live if ln["role"] == who)) for who in ("assistant", "user")}
+            for m in messages:
+                if not isinstance(m, dict) or m.get("role") not in ("bot", "user"):
+                    continue
+                text = " ".join(str(m.get("message") or "").split())
+                who = "assistant" if m["role"] == "bot" else "user"
+                key = squash(text)
+                if not key or key in said[who]:
+                    continue
+                t0 = float(m["time"]) / 1000 if m.get("time") else float(call["started"]) + float(m.get("secondsFromStart") or 0)
+                t1 = float(m["endTime"]) / 1000 if m.get("endTime") else t0 + float(m.get("duration") or max(1.0, len(text) / 15))
+                said[who] += key
+                live.append({"role": who, "text": text, "t": t1})
+                new.append({"call_id": call_id, "role": who, "text": text[:300], "t0": round(t0, 3), "t1": round(max(t1, t0 + 0.3), 3)})
+        for row in sorted(new, key=lambda r: r["t0"]):
+            self._event("turn", row)
+        return len(new)
 
     # -- the caller ------------------------------------------------------------------------
 
@@ -904,6 +940,8 @@ class LiveAgent:
             return [e for e in self.events if e["seq"] > seq]
 
     def _event(self, kind: str, data: dict[str, Any]) -> None:
+        """Announce *kind* to the page. The event's time is now unless *data* carries its own
+        ``t`` (a speech stop known only after the pause, a turn reported after the fact)."""
         with self._lock:
             self._seq += 1
             self.events.append({"seq": self._seq, "t": time.time(), "kind": kind, **data})

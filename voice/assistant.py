@@ -427,6 +427,12 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
         "firstMessage": b.greeting,
         "firstMessageMode": "assistant-speaks-first",
         "server": {"url": server_url, "timeoutSeconds": 20, **({"secret": secret} if secret else {})},
+        # On GPT-Live, during the call, the server gets only tool-calls (each carrying the
+        # conversation so far in artifact.messages), one ended status-update and the
+        # end-of-call report, whatever is asked for here: conversation-update, model-output
+        # and the rest were requested and never came (checked October 2026). The browser
+        # SDK gets the agent's transcript as a growing string of partials. The classic
+        # stacks send all of these.
         "serverMessages": ["status-update", "speech-update", "transcript", "tool-calls", "end-of-call-report"],
         "clientMessages": ["transcript", "tool-calls", "tool-calls-result", "status-update", "speech-update"],
         # Every call is recorded (stereo: caller one channel, the agent the other); the

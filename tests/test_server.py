@@ -1,5 +1,6 @@
 """The voice server's page API, with a stand-in for the agent (no SenseLab, no Vapi)."""
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -9,6 +10,7 @@ pytest.importorskip("fastapi", reason="the voice server's tests need the voice e
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+import voice.agent as agent  # noqa: E402
 import voice.server as server  # noqa: E402
 from voice.agent import Caller, caller_line
 
@@ -67,11 +69,11 @@ class FakeAgent:
     def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall", brief: str | None = None) -> None:
         self.calls[call_id] = {"caller": caller, "type": call_type, "brief": brief}
 
-    def note_speech(self, call_id: str, role: str, status: str) -> None:
-        self.notes.append(("speech", call_id, role, status))
+    def note_speech(self, call_id: str, role: str, status: str, *, t: float | None = None) -> None:
+        self.notes.append(("speech", call_id, role, status, t))
 
-    def note_transcript(self, call_id: str, role: str, text: str) -> None:
-        self.notes.append(("transcript", call_id, role, text))
+    def note_transcript(self, call_id: str, role: str, text: str, *, t: float | None = None) -> None:
+        self.notes.append(("transcript", call_id, role, text, t))
 
 
 def test_page_registers_a_browser_call_and_relays_what_vapi_does_not_send(monkeypatch):
@@ -89,9 +91,49 @@ def test_page_registers_a_browser_call_and_relays_what_vapi_does_not_send(monkey
     # An unknown profile is a stranger, not the defaults.
     c.post("/api/calls/c2/start", json={"profile_id": "nope"})
     assert fake.calls["c2"]["caller"].name == "" and fake.calls["c2"]["brief"] is None
-    # Transcript and speech messages, in Vapi's shape; partial transcripts are dropped.
+    # Transcript and speech messages, in Vapi's shape; partial transcripts are dropped. The
+    # page may say when it happened (GPT-Live: a stop is known only after the pause).
     c.post("/api/calls/c1/notes", json={"type": "transcript", "role": "user", "transcriptType": "partial", "transcript": "hel"})
     c.post("/api/calls/c1/notes", json={"type": "transcript", "role": "user", "transcriptType": "final", "transcript": "hello"})
     c.post("/api/calls/c1/notes", json={"type": "speech-update", "role": "assistant", "status": "started"})
-    assert fake.notes == [("transcript", "c1", "user", "hello"), ("speech", "c1", "assistant", "started")]
+    c.post("/api/calls/c1/notes", json={"type": "speech-update", "role": "assistant", "status": "stopped", "t": 1700000000.5})
+    assert fake.notes == [("transcript", "c1", "user", "hello", None), ("speech", "c1", "assistant", "started", None),
+                          ("speech", "c1", "assistant", "stopped", 1700000000.5)]
     assert c.get("/api/config").json()["stack"] == server.cfg.stack
+
+
+class _Turns:
+    """Just enough of a LiveAgent for note_turns: the calls, the lock, the event log."""
+
+    def __init__(self, started: float) -> None:
+        self.calls: dict[str, Any] = {"c1": {"id": "c1", "started": started, "live": []}}
+        self._lock = threading.Lock()
+        self.events: list[dict[str, Any]] = []
+
+    def _event(self, kind: str, data: dict[str, Any]) -> None:
+        self.events.append({"kind": kind, **data})
+
+
+def test_turns_from_the_artifact_fill_in_what_the_page_did_not_relay():
+    """On GPT-Live the caller's words reach the server only inside artifact.messages, with
+    each tool call and at the end; the agent's own words the page relayed already. The rows
+    become turn events at their real times, once each, and never repeat a line on the call."""
+    ag = _Turns(started=1_700_000_000.0)
+    ag.calls["c1"]["live"].append({"role": "assistant", "text": "Hi Bruno, it's John. What's going on today?", "t": 1_700_000_004.0})
+    rows = [
+        {"role": "bot", "message": "Hi Bruno, it's John.", "time": 1_700_000_000_500, "endTime": 1_700_000_002_000, "secondsFromStart": 0.5},
+        {"role": "bot", "message": "What's going on today?", "time": 1_700_000_002_000, "endTime": 1_700_000_004_000, "secondsFromStart": 2.0},
+        {"role": "user", "message": "You charged me twice.", "time": 1_700_000_005_000, "endTime": 1_700_000_007_000, "secondsFromStart": 5.0},
+        {"role": "tool_calls", "message": "", "toolCalls": [{"id": "x"}]},
+        {"role": "user", "message": "Hello?", "secondsFromStart": 9.0, "duration": 0.8},
+    ]
+    assert agent.LiveAgent.note_turns(ag, "c1", rows) == 2
+    assert [e["kind"] for e in ag.events] == ["turn", "turn"]
+    first, second = ag.events
+    assert (first["role"], first["text"], first["t0"], first["t1"]) == ("user", "You charged me twice.", 1_700_000_005.0, 1_700_000_007.0)
+    assert (second["role"], second["t0"], second["t1"]) == ("user", 1_700_000_009.0, 1_700_000_009.8)  # from secondsFromStart
+    # The same rows again, plus one new one: only the new one is announced.
+    rows.append({"role": "bot", "message": "Right, the two charges.", "time": 1_700_000_010_000, "endTime": 1_700_000_012_000})
+    assert agent.LiveAgent.note_turns(ag, "c1", rows) == 1
+    assert ag.events[-1]["text"] == "Right, the two charges." and len(ag.calls["c1"]["live"]) == 4
+    assert agent.LiveAgent.note_turns(ag, "nope", rows) == 0 and agent.LiveAgent.note_turns(ag, "c1", None) == 0

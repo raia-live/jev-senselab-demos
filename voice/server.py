@@ -240,6 +240,9 @@ async def vapi_webhook(request: Request) -> JSONResponse:
 
     if typ == "tool-calls":
         t0 = time.monotonic()
+        # The conversation so far rides along with the tool call. On GPT-Live it is the only
+        # live record of the caller's words that reaches the server (see note_turns).
+        ag.note_turns(call_id, (msg.get("artifact") or {}).get("messages"))
         results = []
         for tc in msg.get("toolCallList") or []:
             fn = tc.get("function") or {}
@@ -277,6 +280,7 @@ async def vapi_webhook(request: Request) -> JSONResponse:
         for k in ("recordingUrl", "stereoRecordingUrl", "transcript"):
             if msg.get(k) and not artifact.get(k):
                 artifact[k] = msg[k]
+        ag.note_turns(call_id, artifact.get("messages"))  # whatever the call did not show live
         ag.end_call_later(call_id, ended_reason=str(msg.get("endedReason") or ""), artifact=artifact,
                           fetch_recording=(lambda cid=call_id: va.presigned_recording(cfg.private_key, cid)) if cfg.private_key else None)
         return JSONResponse({})
@@ -408,15 +412,20 @@ async def api_call_start(call_id: str, request: Request) -> dict[str, Any]:
 @app.post("/api/calls/{call_id}/notes")
 async def api_call_notes(call_id: str, request: Request) -> dict[str, Any]:
     """A ``transcript`` or ``speech-update`` message relayed by the page from the browser
-    SDK, in Vapi's own shape. The page relays only on GPT-Live, where the server gets none
-    of them from Vapi; the timeline is the same either way."""
+    SDK, in Vapi's own shape, with an optional ``t`` (epoch seconds, the server's clock) for
+    when it happened. The page relays only on GPT-Live, where the server gets none of them
+    from Vapi. What Vapi's browser SDK sends on GPT-Live is the agent's transcript as one
+    growing string, a few words at a time, with a single final at the end of the call; the
+    page turns that into speech starts and stops and one line per utterance before relaying,
+    so what arrives here is the same shape as on the other stacks."""
     msg = await request.json()
     ag = _agent()
     typ = str(msg.get("type") or "")
+    t = float(msg["t"]) if isinstance(msg.get("t"), (int, float)) else None
     if typ == "speech-update":
-        ag.note_speech(call_id, str(msg.get("role") or ""), str(msg.get("status") or ""))
+        ag.note_speech(call_id, str(msg.get("role") or ""), str(msg.get("status") or ""), t=t)
     elif typ == "transcript" and str(msg.get("transcriptType") or "final") == "final":
-        ag.note_transcript(call_id, str(msg.get("role") or ""), str(msg.get("transcript") or ""))
+        ag.note_transcript(call_id, str(msg.get("role") or ""), str(msg.get("transcript") or ""), t=t)
     return {}
 
 

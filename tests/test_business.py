@@ -217,3 +217,98 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     assert [t.get("function", {}).get("name", t["type"]) for t in pl["model"]["tools"]] == ["recall_customer", "decide_next_step", "endCall"]
     with pytest.raises(ValueError):
         assistant_config(b, server_url="https://x", secret=None, stack="telepathy")
+
+
+# -- test calls ([[scenarios]]) --------------------------------------------------------------
+
+HARBOR_SCENARIOS = """
+[[personas]]
+id = "ana-reyes"
+label = "Ana, moving a cleaning"
+name = "Ana"
+tier = "patient"
+prior_contacts_30d = 1
+tenure_months = 30
+intent = "appointment"
+amount_usd = 0
+history = [[9, "Booked a cleaning for next Tuesday at 3."]]
+script = ["Hi, I need to move my cleaning."]
+why = "A booking the front desk should not need to touch."
+
+[[scenarios]]
+id = "ana"
+title = "Ana moves her cleaning"
+persona = "ana-reyes"
+tags = ["known"]
+script = \"\"\"
+You are Ana. Facts: you have a cleaning next Tuesday at 3 and need it moved to Thursday. Steps:
+1. After the greeting, say: 'Hi, I need to move my cleaning to Thursday.'
+2. Whatever the agent proposes, say: 'That works. Thanks, bye.'
+\"\"\"
+[[scenarios.judge]]
+name = "knew_the_booking"
+check = "The agent referred to the existing Tuesday booking without being told about it."
+[[scenarios.judge]]
+name = "proper_close"
+check = "The agent said goodbye only after the caller said she was done."
+
+[[scenarios]]
+id = "walk-in"
+title = "Someone we have never seen asks about a bill"
+decisions = 1
+script = \"\"\"
+You are a new patient. Steps:
+1. After the greeting, say: 'I got a bill for eighty dollars and I don't know what it is for.'
+2. Whatever the agent says, say: 'Okay, bye.'
+\"\"\"
+[[scenarios.judge]]
+name = "did_not_invent"
+check = "The agent did not state details of the bill it could not know."
+"""
+
+
+def test_the_demo_file_carries_its_test_calls():
+    ids = [s.id for s in DEMO.scenarios]
+    assert ids == ["bruno", "stranger", "priya", "tomas", "marcus"]
+    personas = {p.id for p in DEMO.personas}
+    for s in DEMO.scenarios:
+        assert s.persona is None or s.persona in personas, s.id
+        assert s.script.startswith("You are ") and "Steps:" in s.script, s.id
+        assert len(s.judge) >= 4 and all(name and check for name, check in s.judge), s.id
+        assert s.known == (s.persona is not None)
+    stranger = next(s for s in DEMO.scenarios if s.id == "stranger")
+    assert stranger.persona is None and not stranger.known
+    assert next(s for s in DEMO.scenarios if s.id == "priya").decisions == 2
+    # The page's config carries them, which is where voice.testcalls reads them from.
+    pub = DEMO.public()["scenarios"]
+    assert [p["id"] for p in pub] == ids and pub[0]["judge"][0] == {"name": "knew_the_caller", "check": DEMO.scenarios[0].judge[0][1]}
+
+
+def test_another_business_writes_its_own_test_calls(tmp_path: Path):
+    b = Business.from_dict(tomllib.loads(ANOTHER + HARBOR_SCENARIOS), path=tmp_path / "harbor.toml")
+    assert [s.id for s in b.scenarios] == ["ana", "walk-in"]
+    ana, walk_in = b.scenarios
+    assert ana.persona == "ana-reyes" and ana.known and ana.decisions == 1 and ana.tags == ("known",)
+    assert ana.judge == (("knew_the_booking", "The agent referred to the existing Tuesday booking without being told about it."),
+                         ("proper_close", "The agent said goodbye only after the caller said she was done."))
+    assert "1. After the greeting, say: 'Hi, I need to move my cleaning to Thursday.'" in ana.script
+    assert walk_in.persona is None and not walk_in.known and walk_in.title == "Someone we have never seen asks about a bill"
+    # What the server publishes is what the harness rebuilds, unchanged.
+    from voice.business import CallScenario
+    assert [CallScenario.from_row(r) for r in b.public()["scenarios"]] == list(b.scenarios)
+
+
+def test_a_scenario_must_be_whole(tmp_path: Path):
+    def load(extra: str) -> Business:
+        return Business.from_dict(tomllib.loads(ANOTHER + extra), path=tmp_path / "x.toml")
+
+    with pytest.raises(ValueError, match="persona 'nobody'"):
+        load('[[scenarios]]\nid = "a"\nscript = "You are X. Steps: 1. Say hi."\npersona = "nobody"\n[[scenarios.judge]]\nname = "n"\ncheck = "c"\n')
+    with pytest.raises(ValueError, match="needs a script"):
+        load('[[scenarios]]\nid = "a"\n[[scenarios.judge]]\nname = "n"\ncheck = "c"\n')
+    with pytest.raises(ValueError, match="at least one \\[\\[scenarios.judge\\]\\]"):
+        load('[[scenarios]]\nid = "a"\nscript = "You are X. Steps: 1. Say hi."\n')
+    with pytest.raises(ValueError, match="two scenarios with id 'a'"):
+        load('[[scenarios]]\nid = "a"\nscript = "s"\n[[scenarios.judge]]\nname = "n"\ncheck = "c"\n'
+             '[[scenarios]]\nid = "a"\nscript = "s"\n[[scenarios.judge]]\nname = "n"\ncheck = "c"\n')
+    assert Business.from_dict(tomllib.loads(ANOTHER), path=tmp_path / "x.toml").scenarios == ()  # none is allowed
