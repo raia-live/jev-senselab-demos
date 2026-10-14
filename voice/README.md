@@ -14,9 +14,11 @@ the first would have cost. That is the comparison the demo exists for.
 SenseLab also remembers the caller. Each person who rings has their own history in memory
 (earlier contacts, what was tried, what came of it). It is read before the call connects and
 goes into the prompt, so John knows who is on the line from the first word, and it is written
-to when the call's outcome is known. He opens the call himself, by name, picking up the thread
-("I've got your file here. Is this about that charge again?"). Ask him "what do you know about
-me?" or "what did we talk about last time?" and he tells you, in order, from the file. When
+to when the call's outcome is known. The first line is built from that file: a known caller is
+greeted by name and told their history is in hand ("I can see you've been in touch three times
+this past month, most recently five days ago, so no need to start from the beginning. What's
+going on today?"), and presumes nothing about why they are calling. Ask him "what do you know
+about me?" or "what did we talk about last time?" and he tells you, in order, from the file. When
 the decision comes he says why, from your own history and from what has and has not worked
 for people in your situation, and "why would it work this time?" gets what actually happened
 the last three times. Call twice as the same person and the second call starts from the first.
@@ -71,8 +73,8 @@ Thirty calls take about five minutes and leave SenseLab with a record for every 
 including the one the written policy gets wrong. You can watch them land on the page.
 
 Then pick Bruno (consumer, third call about the same $49) and have a conversation, not a line.
-John speaks first, and he already has the file: he greets Bruno by name and asks whether this
-is about that charge again rather than making him explain. Try "what do you know about me?"
+John speaks first, and he already has the file: he greets Bruno by name, says he can see the
+three calls this month, and asks what is going on today. Try "what do you know about me?"
 or "what did we talk about last time?" and he tells you: the duplicate charge, the credit
 finance reversed, the callback that never came. Then tell him why you are calling today
 ("Details" has a script with five turns; the first is just "I'm calling about my bill.
@@ -173,8 +175,10 @@ record a browser call.
 The system prompt (`voice/assistant.py`, `system_prompt`) is a character and the shape of a
 call, not a flowchart: who John is on the phone, how he reacts before he acts, what he never
 says, what he knows about the person calling (their account facts and their history, filled
-in per call), and six beats a call goes through. He opens, by name if he knows them. He
-listens for why they are calling today, and the prompt is blunt that the file is the past
+in per call), and six beats a call goes through. The opening is the one line the server
+writes (`voice/customers.py`, `opening`), from the file; left to the realtime model it
+greeted a known caller as a stranger and asked for their name. From the caller's first words
+the model is on its own. It listens for why they are calling today, and the prompt is blunt that the file is the past
 and not today's request: a question about history is answered from the file and is never a
 reason to call a tool. He checks he has it and gets the one detail he needs. He decides,
 through Jev, only once the caller has said on this call what they need; the tool requires
@@ -210,6 +214,14 @@ Two stacks, chosen with `VOICE_STACK`:
   connected to your Vapi account.
 
 Jev's decision works the same on both: a tool call from the model, answered by this server.
+One thing the realtime stack needs that the pipeline does not: a tool answer that reaches
+Vapi while the model's turn is still open is dropped (Vapi logs "An unexpected error
+occurred." against the tool, and the model never hears it). On one real call both answers
+came back in under 400 ms and both were lost; the agent went quiet and the caller hung up.
+Answers that took 1.5 s and 4.6 s on an earlier call landed. So on that stack the server
+holds every tool answer until 1.5 s after the request came in (`VOICE_TOOL_MIN_MS`), the
+prompt tells the model a tool call is a silent turn, and the tools carry no spoken "still
+with you" filler, which would open a turn of its own.
 
 ## Make it your business
 

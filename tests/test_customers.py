@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from voice.agent import Caller
 from voice.business import Business
-from voice.customers import CustomerMemory, brief, contact_entry, seed_entries
+from voice.customers import CustomerMemory, brief, contact_entry, opening, seed_entries
 
 TODAY = dt.date(2026, 10, 14)
 BUSINESS = Business.load()
@@ -44,6 +44,23 @@ def test_brief_reads_as_prose_with_recent_first():
     assert "Notes: Mobile on file: (650) 555-0142." in text
     assert "what has worked: a scheduled specialist callback" in text
     assert "before decide_next_step has answered" in text
+
+
+def test_opening_line_is_built_from_the_file():
+    bruno = next(p for p in PERSONAS if p.id == "bruno-andrade")
+    entries = [SimpleNamespace(key=k, value=v) for k, v in seed_entries(bruno, today=TODAY)]
+    mem = CustomerMemory.from_entries("bruno-andrade", entries)
+    caller = Caller(name="Bruno", tier="consumer", prior_contacts_30d=3, tenure_months=39, customer_id="bruno-andrade")
+    line = opening(caller, mem, agent_name="John", company="Northwind Cloud", greeting=BUSINESS.greeting, today=TODAY)
+    assert line == ("Hi Bruno, it's John at Northwind Cloud. I've got your file open here. I can see you've been in touch "
+                    "three times this past month, most recently 5 days ago, so no need to start from the beginning. "
+                    "What's going on today?")
+    # Known, but nothing on record yet: named, no claims about history.
+    assert opening(Caller(name="Lena"), None, agent_name="John", company="Northwind Cloud", greeting="g") == \
+        "Hi Lena, it's John at Northwind Cloud. I've got your file open here. What can I do for you today?"
+    # A stranger gets the business's greeting.
+    assert opening(Caller(name=""), None, agent_name="John", company="N", greeting=BUSINESS.greeting) == BUSINESS.greeting
+    assert opening(Caller(name="unknown"), None, agent_name="John", company="N", greeting="g") == "g"
 
 
 def test_brief_for_an_unknown_caller():

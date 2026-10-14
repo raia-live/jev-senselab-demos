@@ -119,10 +119,10 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     assert "booking or moving an appointment (appointment)" in prompt
     assert "for a bill they have a question about, the amount in dollars" in prompt
     assert "Northwind" not in prompt and "John" not in prompt
-    # The agent opens the call itself (by name when it knows the caller), the business's
-    # greeting is the fallback for a stranger, and the decision waits for the caller's words.
-    assert b.greeting in prompt and "1. Open. You speak first." in prompt
-    assert "only then use endCall" in prompt
+    # The opening is built by the server; the prompt tells the model it has been said. The
+    # decision waits for the caller's words, the close waits for the caller.
+    assert "1. Open. The greeting has been said" in prompt and "only then use endCall" in prompt
+    assert "say NOTHING in the turn you call a tool in" in prompt
     tool = decide_tool(b)
     assert tool["function"]["parameters"]["properties"]["intent"]["enum"] == ["appointment", "bill"]
     assert "amount_usd" in tool["function"]["parameters"]["properties"]
@@ -130,10 +130,14 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     assert all(m["type"] != "request-start" for m in tool["messages"])  # nothing scripted
     rt = assistant_config(b, server_url="https://x/vapi/webhook", secret=None)
     assert rt["model"]["model"] == "gpt-realtime-2" and rt["voice"] == {"provider": "openai", "voiceId": "cedar"}
-    assert rt["firstMessageMode"] == "assistant-speaks-first-with-model-generated-message"
+    assert rt["firstMessageMode"] == "assistant-speaks-first"
     assert "transcriber" not in rt and rt["firstMessage"] == b.greeting and "endCallMessage" not in rt
+    # No spoken filler during a tool call on the realtime stack; the pipeline keeps it.
+    rt_msgs = [m["type"] for t in rt["model"]["tools"] for m in t.get("messages", [])]
+    assert "request-response-delayed" not in rt_msgs and "request-failed" in rt_msgs
     assert rt["backchannelingEnabled"] is True
     pl = assistant_config(b, server_url="https://x/vapi/webhook", secret=None, stack="pipeline", voice_id="sarah")
     assert pl["model"]["model"] == "gpt-4.1" and pl["voice"]["voiceId"] == "sarah" and pl["transcriber"]["provider"] == "deepgram"
+    assert "request-response-delayed" in [m["type"] for t in pl["model"]["tools"] for m in t.get("messages", [])]
     with pytest.raises(ValueError):
         assistant_config(b, server_url="https://x", secret=None, stack="telepathy")

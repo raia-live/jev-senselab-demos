@@ -481,7 +481,7 @@ $("call").onclick = async () => {
   if (!vapi) return;
   const prof = await post("/api/profiles", caller());
   $("call").disabled = true; caption("Connecting…", "");
-  try { await vapi.start(cfg.assistant_id, { variableValues: prof.variable_values, metadata: { profile_id: prof.profile_id } }); }
+  try { await vapi.start(cfg.assistant_id, { firstMessage: prof.first_message, variableValues: prof.variable_values, metadata: { profile_id: prof.profile_id } }); }
   catch (e) { caption("Could not start the call", esc(e?.message || e)); $("call").disabled = false; }
 };
 $("hangup").onclick = () => vapi && vapi.stop();

@@ -170,4 +170,28 @@ def brief(caller: Any, memory: CustomerMemory | None, *, record: str = "", today
     return "\n".join(lines)
 
 
-__all__ = ["CustomerMemory", "Persona", "brief", "contact_entry", "customer_entity", "seed_entries"]
+def opening(caller: Any, memory: CustomerMemory | None, *, agent_name: str, company: str, greeting: str,
+            today: dt.date | None = None) -> str:
+    """The first thing the caller hears, built from the file rather than left to the model:
+    a known caller is greeted by name and told, in a clause, that their history is in hand
+    (how many times they have been in touch, how recently), then asked what is going on
+    today. It presumes nothing about today's reason. A stranger gets the business's greeting.
+    The conversational model takes over from the caller's first words, with the same history
+    in its prompt."""
+    if not caller.name or caller.name.lower() == "unknown":
+        return greeting
+    contacts = memory.contacts if memory else []
+    today = today or dt.date.today()
+    recent = [c for c in contacts if _days_ago(c["date"], today) <= 30]
+    n = max(len(recent), int(caller.prior_contacts_30d or 0))
+    lead = f"Hi {caller.name}, it's {agent_name} at {company}."
+    if contacts and n:
+        when = _nice_date(contacts[0]["date"], today)
+        when = when if when in ("today", "yesterday") or when.endswith("ago") else f"on {when}"
+        times = {1: "once", 2: "twice", 3: "three times", 4: "four times", 5: "five times"}.get(n, f"{n} times")
+        return (f"{lead} I've got your file open here. I can see you've been in touch {times} this past month, "
+                f"most recently {when}, so no need to start from the beginning. What's going on today?")
+    return f"{lead} I've got your file open here. What can I do for you today?"
+
+
+__all__ = ["CustomerMemory", "Persona", "brief", "contact_entry", "customer_entity", "opening", "seed_entries"]

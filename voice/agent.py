@@ -297,16 +297,22 @@ class LiveAgent:
             return warm
         return None
 
-    def brief_for(self, caller: Caller) -> str:
-        """What the agent knows about this caller before the first word: the account facts and
-        their history, as prose for the prompt. Read from SenseLab now."""
+    def intro_for(self, caller: Caller) -> tuple[str, str]:
+        """What the agent knows about this caller before the first word, read from SenseLab
+        now: the brief (account facts and history, as prose for the prompt) and the opening
+        line the caller hears, built from the same file."""
         memory: cust.CustomerMemory | None = None
         if caller.customer_id:
             try:
                 memory = self._fetch_customer(caller)
             except Exception as exc:  # noqa: BLE001 - the brief is the account facts alone
                 log.warning("customer memory for %s: %s", caller.customer_id, exc)
-        return cust.brief(caller, memory)
+        b = self.business
+        return cust.brief(caller, memory), cust.opening(caller, memory, agent_name=b.agent_name, company=b.name,
+                                                        greeting=b.greeting)
+
+    def brief_for(self, caller: Caller) -> str:
+        return self.intro_for(caller)[0]
 
     def call_started(self, call_id: str, caller: Caller, *, call_type: str = "webCall", brief: str | None = None) -> None:
         """A call is connecting. *brief* is the caller's history as it went into the prompt,

@@ -85,12 +85,10 @@ the past is answered from the history. It is NOT a reason to call any tool.
 - If the history is empty, say so lightly and ask what is going on.
 
 # How a call goes
-1. Open. You speak first. If you know this person, greet them by name and pick up the thread in one or two short lines \
-("Hi {{{{name}}}}, it's {b.agent_name} at {b.name}. I've got your file here. Is this about that charge again?"). If the \
-history is empty or the name is unknown, say: "{b.greeting}" Then stop and listen.
+1. Open. The greeting has been said, and if we know this person it used their name and said their file is open. Listen.
 2. Listen. Let them tell you, in their words, why they are calling TODAY. Do not assume it from the file. Do not act on \
-the file as if it were today's request. Only once they have said what they need, say one short natural thing that fits, \
-then call recall_customer with what they said: it brings what has worked for people in their situation.
+the file as if it were today's request. Once they have said what they need, call recall_customer with what they said: it \
+brings what has worked for people in their situation.
 3. Check you have it. Reflect it back in one sentence. Get the one detail you still need (see below), one question at a \
 time; if the file has it, confirm rather than ask. If they are upset, let them be upset for a moment before you move on.
    What they can be calling about: {_intent_lines(b)}. {_needs_lines(b)}
@@ -104,6 +102,11 @@ because they are unhappy. Call decide_next_step again only if a different proble
 6. Close, slowly. Never end the call in the same breath as taking a detail from them. Repeat back what is arranged (the \
 number, the time, the amount). Ask if there is anything else you can help with, and WAIT for the answer. When they say \
 they are done, say goodbye the way you would to a regular, and only then use endCall.
+
+# Tools
+- A tool call is its own turn: say NOTHING in the turn you call a tool in. Finish your sentence first, then call it, \
+then speak again when the result is back. The result takes a second or two.
+- Use what the result says. If it says something is not available, say so and carry on.
 
 # Rules
 - NEVER mention tools, systems, models, Jev or SenseLab by name. What you know is "your file" or "my notes here".
@@ -191,12 +194,12 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
     tools = [recall_tool(b), decide_tool(b), {"type": "endCall"}]
     cfg: dict[str, Any] = {
         "name": ASSISTANT_NAME,
-        # The model opens the call from the prompt, where the caller's history already is, so
-        # a known caller is greeted by name and the thread picked up in the first breath. An
-        # unknown caller gets the business's greeting (it is in the prompt too). The fixed
-        # firstMessage stays as the fallback Vapi uses if the model cannot speak first.
+        # The first line is built by the server from the caller's file (name, how often and
+        # how recently they have been in touch) and sent per call as a firstMessage override;
+        # the business's greeting here is what a stranger hears. Left to the model, the
+        # realtime stack greeted a known caller as a stranger and asked for their name.
         "firstMessage": b.greeting,
-        "firstMessageMode": "assistant-speaks-first-with-model-generated-message",
+        "firstMessageMode": "assistant-speaks-first",
         # The conversational settings. Backchannels ("mm-hm") while the caller talks; a short
         # wait plus smart endpointing so a pause mid-thought is not taken for the end of the
         # turn; a couple of words from the caller interrupt, a cough does not; a word if the
@@ -217,6 +220,12 @@ def assistant_config(b: Business, *, server_url: str, secret: str | None, stack:
     }
     if stack == "realtime":
         voice = voice_id if voice_id in REALTIME_VOICES else "cedar"
+        # No "still with you" filler on this stack: the platform would have the model speak
+        # it, and a tool result arriving while the model is mid-turn is lost (see
+        # voice/server.py, tool_floor_ms). The model is told the result takes a moment.
+        for t in tools:
+            if "messages" in t:
+                t["messages"] = [m for m in t["messages"] if m["type"] != "request-response-delayed"]
         cfg["model"] = {"provider": "openai", "model": REALTIME_MODEL, "temperature": 0.7, "maxTokens": 300,
                         "messages": [{"role": "system", "content": system_prompt(b)}], "tools": tools}
         cfg["voice"] = {"provider": "openai", "voiceId": voice}

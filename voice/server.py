@@ -24,6 +24,7 @@ VOICE_PUBLIC_URL (the tunnel URL Vapi can reach), VOICE_BUSINESS (the business f
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -64,6 +65,14 @@ class Config:
         self.entity_path = (os.environ.get("VOICE_ENTITY_PATH") or self.business.entity_path).strip()
         self.noise = float(os.environ.get("VOICE_NOISE") or 0.0)
         self.repair_loop = (os.environ.get("VOICE_REPAIR_LOOP") or "1").strip() not in ("0", "false", "no")
+        self.stack = (os.environ.get("VOICE_STACK") or "realtime").strip()
+        # On the realtime stack a tool result that comes back while the model's turn is still
+        # open is dropped by the platform ("An unexpected error occurred."), and the model
+        # never hears it. Both tool answers on one real call came back in under 400 ms and
+        # were lost; the ones that took 1.5 s and 4.6 s on an earlier call landed. So on that
+        # stack a tool answer is held until this many ms have passed since the call came in.
+        default_floor = "1500" if self.stack == "realtime" else "0"
+        self.tool_floor_ms = int(os.environ.get("VOICE_TOOL_MIN_MS") or default_floor)
         self.phone_numbers: list[str] = []
 
 
@@ -201,12 +210,17 @@ async def vapi_webhook(request: Request) -> JSONResponse:
         prof = profile_from_call(call)
         # Nobody registered on the page: a stranger, greeted as one (no name, no history).
         caller = ag.caller_from(prof) if prof.get("name") else Caller(name="")
-        history = str(prof.get("history") or "") or ag.brief_for(caller)
+        if prof.get("history") and prof.get("first_message"):
+            history, first = str(prof["history"]), str(prof["first_message"])
+        else:
+            history, first = ag.intro_for(caller)
         ag.call_started(call_id, caller, call_type=str(call.get("type") or "inboundPhoneCall"), brief=history)
         return JSONResponse({"assistantId": cfg.assistant_id,
-                             "assistantOverrides": {"variableValues": variable_values({**asdict(caller), "history": history})}})
+                             "assistantOverrides": {"firstMessage": first,
+                                                    "variableValues": variable_values({**asdict(caller), "history": history})}})
 
     if typ == "tool-calls":
+        t0 = time.monotonic()
         results = []
         for tc in msg.get("toolCallList") or []:
             fn = tc.get("function") or {}
@@ -225,6 +239,9 @@ async def vapi_webhook(request: Request) -> JSONResponse:
                 results.append({"toolCallId": tc.get("id"), "name": name, "result": text})
             else:
                 results.append({"toolCallId": tc.get("id"), "name": name, "error": f"unknown tool {name}"})
+        wait = cfg.tool_floor_ms / 1000 - (time.monotonic() - t0)
+        if wait > 0:
+            await asyncio.sleep(wait)
         return JSONResponse({"results": results})
 
     if typ == "speech-update":
@@ -313,11 +330,12 @@ async def api_profiles(request: Request) -> dict[str, Any]:
     ag = _agent()
     pid = uuid.uuid4().hex[:10]
     c = ag.caller_from(body)
-    history = await run_in_threadpool(ag.brief_for, c)
-    profiles[pid] = {"profile_id": pid, "registered": time.time(), **asdict(c), "history": history}
+    history, first = await run_in_threadpool(ag.intro_for, c)
+    profiles[pid] = {"profile_id": pid, "registered": time.time(), **asdict(c), "history": history, "first_message": first}
     for old in [k for k, v in profiles.items() if time.time() - v["registered"] > 3600]:
         del profiles[old]
-    return {"profile_id": pid, "variable_values": {"profile_id": pid, **variable_values(profiles[pid])}}
+    return {"profile_id": pid, "first_message": first,
+            "variable_values": {"profile_id": pid, **variable_values(profiles[pid])}}
 
 
 @app.post("/api/world")
