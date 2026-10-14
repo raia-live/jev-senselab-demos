@@ -27,7 +27,7 @@ Vapi runs the call: the phone or browser audio and the speech. By default the sp
 GPT-Live (`gpt-live-1`), OpenAI's full-duplex model as Vapi runs it: a speaker that hears
 and talks and keeps listening while it talks, and a reasoner it hands work to, which calls
 our tools and passes the answer back while the conversation carries on. No transcription
-step in between; that is what makes it sound like a person on a line rather than text read
+step in between; that is what makes it sound like a person on a line and not like text read
 aloud ("The voice", below). This folder is the server Vapi talks to, the page you call from,
 a simulator for when you have no microphone, and a set of scripted test calls that Vapi
 plays as the caller.
