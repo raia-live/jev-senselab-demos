@@ -30,8 +30,8 @@ def test_situation_labels_reproduce_the_scenario_everywhere():
 
 
 def test_candidate_fields_open_the_common_situations_first():
-    dana = Caller(name="Dana", tier="consumer", prior_contacts_30d=3)
-    labels = [DEMO.situation_of(f) for f in DEMO.candidate_fields(dana)]
+    bruno = Caller(name="Bruno", tier="consumer", prior_contacts_30d=3)
+    labels = [DEMO.situation_of(f) for f in DEMO.candidate_fields(bruno)]
     assert labels[0] == "billing_dispute/consumer/repeat/small"
     assert labels[1] == "cancellation/consumer"
     assert labels[-1] == "billing_dispute/consumer/repeat/large"

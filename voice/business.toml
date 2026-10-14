@@ -170,9 +170,9 @@ cost_by_severity = { minor_failure = 35, failure = 600, critical_failure = 5000 
 # for your own business, or write your own callers.
 
 [[personas]]
-id = "dana-whitfield"
-label = "Dana, third call about the same $49 (consumer)"
-name = "Dana"
+id = "bruno-andrade"
+label = "Bruno, third call about the same $49 (consumer)"
+name = "Bruno"
 tier = "consumer"
 prior_contacts_30d = 3
 tenure_months = 39
@@ -191,7 +191,7 @@ script = [
   "Fine. Will the credit come back too, or is that gone?",
   "Okay. Thanks.",
 ]
-why = "The written policy says a small billing dispute is resolved on the call. For Dana that has been tried, and a credit, and a transfer; each time she called back. Only the outcomes of those calls can teach the agent that, and only a memory of Dana lets John say so instead of asking her to explain a fourth time."
+why = "The written policy says a small billing dispute is resolved on the call. For Bruno that has been tried, and a credit, and a transfer; each time he called back. Only the outcomes of those calls can teach the agent that, and only a memory of Bruno lets John say so instead of asking him to explain a fourth time."
 pushback = "John has what was tried and what came of it, so 'why would it work this time' gets a real answer."
 
 [[personas]]

@@ -21,8 +21,8 @@ def test_personas_are_distinct_and_scripted():
 
 
 def test_seed_entries_are_dated_oldest_first():
-    dana = next(p for p in PERSONAS if p.id == "dana-whitfield")
-    rows = seed_entries(dana, today=TODAY)
+    bruno = next(p for p in PERSONAS if p.id == "bruno-andrade")
+    rows = seed_entries(bruno, today=TODAY)
     dates = [v["date"] for k, v in rows if k.startswith("contact-")]
     assert dates == sorted(dates)
     assert dates[0] == "2026-09-23" and dates[-1] == "2026-10-09"
@@ -31,14 +31,14 @@ def test_seed_entries_are_dated_oldest_first():
 
 
 def test_brief_reads_as_prose_with_recent_first():
-    dana = next(p for p in PERSONAS if p.id == "dana-whitfield")
-    entries = [SimpleNamespace(key=k, value=v) for k, v in seed_entries(dana, today=TODAY)]
-    mem = CustomerMemory.from_entries("dana-whitfield", entries)
+    bruno = next(p for p in PERSONAS if p.id == "bruno-andrade")
+    entries = [SimpleNamespace(key=k, value=v) for k, v in seed_entries(bruno, today=TODAY)]
+    mem = CustomerMemory.from_entries("bruno-andrade", entries)
     assert [c["date"] for c in mem.contacts] == ["2026-10-09", "2026-10-02", "2026-09-23"]
-    caller = Caller(name="Dana", tier="consumer", prior_contacts_30d=3, tenure_months=39, customer_id="dana-whitfield")
+    caller = Caller(name="Bruno", tier="consumer", prior_contacts_30d=3, tenure_months=39, customer_id="bruno-andrade")
     text = brief(caller, mem, record="For callers in this situation, what has worked: a scheduled specialist callback (6 of 6).",
                  today=TODAY)
-    assert text.startswith("Caller: Dana. Consumer plan, customer for 39 months. 3 contact(s)")
+    assert text.startswith("Caller: Bruno. Consumer plan, customer for 39 months. 3 contact(s)")
     assert "- 5 days ago: Called a third time" in text
     assert "- Sep 23:" in text
     assert "Notes: Mobile on file: (650) 555-0142." in text
@@ -67,8 +67,8 @@ def test_contact_entry_from_an_outcome():
 
 
 def test_caller_customer_id_is_a_slug():
-    c = Caller.from_mapping({"customer_id": "Dana Whitfield!"})
-    assert c.customer_id == "danawhitfield"
+    c = Caller.from_mapping({"customer_id": "Bruno Andrade!"})
+    assert c.customer_id == "brunoandrade"
     assert Caller.from_mapping({}).customer_id == ""
 
 

@@ -70,18 +70,18 @@ uv run python -m voice.simulate --calls 30 --no-change
 Thirty calls take about five minutes and leave SenseLab with a record for every situation,
 including the one the written policy gets wrong. You can watch them land on the page.
 
-Then pick Dana (consumer, third call about the same $49) and have a conversation, not a line.
-John speaks first, and he already has her file: he greets her by name and asks whether this
-is about that charge again rather than making her explain. Try "what do you know about me?"
+Then pick Bruno (consumer, third call about the same $49) and have a conversation, not a line.
+John speaks first, and he already has the file: he greets Bruno by name and asks whether this
+is about that charge again rather than making him explain. Try "what do you know about me?"
 or "what did we talk about last time?" and he tells you: the duplicate charge, the credit
 finance reversed, the callback that never came. Then tell him why you are calling today
 ("Details" has a script with five turns; the first is just "I'm calling about my bill.
 Again."). Push back when the decision comes ("why would it work this time?") and John answers
 from the history. The written policy says a dispute under $200 is resolved in the bot; Jev
 alone follows it, or hands the frustrated caller to a human. SenseLab's record says both of
-those lost this caller before and a specialist callback kept her. Jev with SenseLab books the
+those lost this caller before and a specialist callback kept him. Jev with SenseLab books the
 callback. When you hang up, the world confirms it, the page tells you what Jev alone would
-have cost, and a line about this call is added to Dana's history.
+have cost, and a line about this call is added to Bruno's history.
 
 Then flip "retention offer live" and call as Priya. The policy still says transfer. The
 first call transfers, the queue loses the caller, the review says so, and the next call keeps
