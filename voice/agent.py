@@ -133,6 +133,11 @@ class LiveDecision:
     causal_keys: list[str] = field(default_factory=list)
     commit_error: str | None = None
     ended_reason: str | None = None
+    # Which arm of a live repair canary this call drew: "canary" read the rewrite on the
+    # fix's branch, "control" kept the old rule, "unrouted" when no canary was running.
+    canary_arm: str | None = None
+    memory_branch: str | None = None
+    corrective_entries: list[str] = field(default_factory=list)  # rewritten rules in Jev's view
 
     def public(self) -> dict[str, Any]:
         d = asdict(self)
@@ -229,6 +234,8 @@ class LiveAgent:
         self.client = SenseLabClient(settings.amfs_api_key, base_url=settings.amfs_url)
         self.eval_api = EvalClient(settings.amfs_api_key, base_url=settings.amfs_url) if repair_loop else None
         self.loop: RepairLoop | None = None
+        self._loop_fut: Any = None  # the look in flight, off the page's request path
+        self._loop_note: dict[str, Any] = {}
         self.history = ReviewHistory()
         self.decisions: list[LiveDecision] = []
         self.calls: dict[str, dict[str, Any]] = {}
@@ -271,7 +278,7 @@ class LiveAgent:
         }
         if self.eval_api is not None:
             self.loop = RepairLoop(self.eval_api, agent_id=self.agent_id, scenario=self.scenario,
-                                   look_every=3, judge_mode="continuous")
+                                   look_every=3, look_seconds=45, judge_mode="continuous")
             try:
                 info["loop"] = self.loop.ready()
             except EvalApiError as exc:
@@ -904,6 +911,8 @@ class LiveAgent:
             jev_ms=round(decision.latency_ms), jev_input_tokens=decision.input_tokens, jev_error=decision.error,
             alone_action=alone.action if alone else None,
             alone_confidence=round(alone.confidence, 3) if alone else None,
+            canary_arm=ep.trace.canary, memory_branch=ep.trace.memory_branch,
+            corrective_entries=list(ep.trace.corrective_entries),
         )
         with self._lock:
             self.decisions.append(live)
@@ -913,7 +922,9 @@ class LiveAgent:
         self._event("decision", {"call_id": call_id, "decision": live.id, "situation": situation, "action": decision.action,
                                  "confidence": live.confidence, "basis": decision.basis, "prefetched": prefetched,
                                  "memory_ms": live.memory_ms, "jev_ms": live.jev_ms,
-                                 "alone_action": live.alone_action, "alone_confidence": live.alone_confidence})
+                                 "alone_action": live.alone_action, "alone_confidence": live.alone_confidence,
+                                 "canary_arm": live.canary_arm, "memory_branch": live.memory_branch,
+                                 "corrective_entries": live.corrective_entries})
         return live
 
     # -- the outcome -----------------------------------------------------------------------
@@ -1125,13 +1136,33 @@ class LiveAgent:
         return {"entity_path": self.entity_path, "lessons": lessons, "seen": seen, "policy": policy, "other": other[:40]}
 
     def loop_snapshot(self) -> dict[str, Any]:
+        """What the repair loop has: the last look's note and the fixes seen. The look itself
+        runs in the pool (a due one can propose a fix or evaluate a canary, a minute of
+        platform calls), so the page never waits on it."""
         if self.loop is None:
             return {"enabled": False}
+        if self._loop_fut is None or self._loop_fut.done():
+            self._loop_fut = self._pool.submit(self._loop_tick)
+        return {"enabled": True, **self._loop_note, "fixes_seen": list(self.loop.fixes_seen.values())[-10:]}
+
+    def _loop_tick(self) -> None:
+        assert self.loop is not None
         try:
             note = self.loop.look(-1)
         except Exception as exc:  # noqa: BLE001
-            return {"enabled": True, "error": str(exc)[:200]}
-        return {"enabled": True, **note, "fixes_seen": list(self.loop.fixes_seen.values())[-10:]}
+            self._loop_note = {"error": str(exc)[:200]}
+            return
+        before = (self._loop_note.get("canary_active") or {})
+        self._loop_note = note
+        after = note.get("canary_active") or {}
+
+        def counts(c: dict[str, Any]) -> tuple[Any, Any, Any]:
+            return (c.get("canary") or {}).get("outcomes"), (c.get("control") or {}).get("outcomes"), c.get("status")
+
+        # A status move carries the fix in ``changed`` and the page captions it; a count move
+        # on the running split carries nothing and the page just refreshes the panel.
+        if note.get("changed") or (after and counts(after) != counts(before)):
+            self._event("repair_loop", note)
 
     def state(self) -> dict[str, Any]:
         with self._lock:

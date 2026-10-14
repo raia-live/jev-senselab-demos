@@ -221,15 +221,22 @@ reviews were pointing at.
 ### The repair loop runs between decisions, behind a gate
 
 The platform grades every decision with a judge as it happens, clusters the failures into
-behaviours, opens an incident, and a repair agent drafts a corrective entry (a note naming
-the rule that stopped working and what to do instead) on a memory branch. The draft is
-replayed against the runs that failed (Tier 1). Only if it would have fixed them does it go
-to half of live sessions (the canary) to be compared with control, and only if it holds does
-it ship to `main`. In the committed run the judge graded 119 of the 120 decisions for $0.78,
-opened three incidents, and both of the repair agent's drafts were stopped at Tier 1 because
-they wouldn't have fixed the failed runs. A draft the gate rejects never touches a live
-decision, which is what you want from a loop that edits memory on its own. Every step is an event on the dashboard
-and in the report.
+behaviours, opens an incident, and a repair agent drafts a rewrite of the rule the failures
+were pinned on, as a new version of that entry on a memory branch. The draft is replayed
+against the runs that failed (Tier 1). Only if it would have fixed them does it go to half
+of live sessions (the canary) to be compared with control, and only if it holds does it
+ship to `main`. A draft the gate rejects never touches a live decision, which is what you
+want from a loop that edits memory on its own. Every step is an event on the dashboard and
+in the report.
+
+For the judge to pin a failure on a rule, the rule has to be charged with the outcome of
+following it. Each scenario declares which written policy line speaks for which situations
+(`policy_claims`); when Jev does what the line says, the line is a causal entry of the run,
+and the outcome lands on it. Without that the drafts came back as code fixes with no entry
+to rewrite, and the Tier 1 replay failed them all. The committed `results-sample` runs
+predate this: in them the judge graded 119 of the 120 decisions for $0.78, opened three
+incidents, and both drafts were stopped at Tier 1. The voice demo's README shows what the
+loop does now, including a draft that passed replay and was then held back by the canary.
 
 ### What this means for a Jev deployment
 

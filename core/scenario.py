@@ -21,6 +21,7 @@ Scoring uses the hidden truth; learning uses only the review.
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import random
 from abc import ABC, abstractmethod
@@ -77,6 +78,20 @@ class Outcome:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class PolicyClaim:
+    """One written rule as a claim: on the situations matching *situations* (``fnmatch``
+    patterns over the situation label), *action* is the right thing to do. The policy entry
+    *key* is what an outcome then confirms or refutes."""
+
+    key: str
+    action: str
+    situations: tuple[str, ...]
+
+    def matches(self, situation: str) -> bool:
+        return any(fnmatch.fnmatchcase(situation, pat) for pat in self.situations)
+
+
 @dataclass
 class Scenario(ABC):
     """Subclass per demo. The class attributes below are the contract."""
@@ -92,6 +107,9 @@ class Scenario(ABC):
     #: The written policy as (key, text) lines. In Jev's state for the plain arms; seeded
     #: as memory entries for the SenseLab arms, so the repair loop has something to correct.
     policy: list[tuple[str, str]] = field(default_factory=list)
+    #: The policy lines as claims, in order: the first whose situations match a case is the
+    #: rule for it. A scenario that leaves this empty charges no policy entry with outcomes.
+    policy_claims: list[PolicyClaim] = field(default_factory=list)
     #: Scenario notes appended to the judge prompt (what a failure looks like here).
     judge_rubric: str = ""
     #: Dollars a wrong decision costs, by severity.
@@ -173,6 +191,10 @@ class Scenario(ABC):
 
     def policy_text(self) -> str:
         return "\n".join(f"- {text}" for _, text in self.policy)
+
+    def policy_claim(self, case: Case) -> PolicyClaim | None:
+        """The written rule that decides *case*, when one does."""
+        return next((c for c in self.policy_claims if c.matches(case.situation)), None)
 
     def candidate_actions(self) -> list[str]:
         return [f"decide:{a}" for a in self.actions]

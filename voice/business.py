@@ -24,7 +24,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
-from core.scenario import Case, Outcome, Scenario
+from core.scenario import Case, Outcome, PolicyClaim, Scenario
 
 from .customers import Persona
 
@@ -166,6 +166,7 @@ class Business:
     field_words: dict[str, str]
     actions: tuple[Action, ...]
     policy: tuple[tuple[str, str], ...]
+    policy_claims: tuple[PolicyClaim, ...]
     jev_instructions: str
     judge_rubric: str
     outcomes_mode: str
@@ -241,6 +242,8 @@ class Business:
             tiers=tiers, default_tier=str(caller.get("default_tier") or tiers[0]),
             splits=splits, intents=intents, field_words={str(k): str(v) for k, v in (raw.get("fields") or {}).items()},
             actions=actions, policy=tuple((str(p["key"]), str(p["text"])) for p in raw.get("policy") or ()),
+            policy_claims=tuple(PolicyClaim(str(p["key"]), str(p["action"]), tuple(str(x) for x in p["situations"]))
+                                for p in raw.get("policy") or () if p.get("action") and p.get("situations")),
             jev_instructions=str(jev.get("instructions") or "Choose what the agent does next on this call."),
             judge_rubric=str(jev.get("judge_rubric") or ""),
             outcomes_mode=mode, simulator_ref=(str(outcomes["simulator"]) if outcomes.get("simulator") else None),
@@ -332,7 +335,8 @@ class Business:
             name=(simulator.name if simulator else self.name.lower().replace(" ", "_")),
             title=f"{self.name} support line", case_noun="call", actions=list(self.action_ids),
             jev_instructions=self.jev_instructions, jev_criteria={a.id: a.jev for a in self.actions},
-            policy=list(self.policy), judge_rubric=self.judge_rubric, cost_by_severity=dict(self.cost_by_severity),
+            policy=list(self.policy), policy_claims=list(self.policy_claims),
+            judge_rubric=self.judge_rubric, cost_by_severity=dict(self.cost_by_severity),
             tacit_rule=(simulator.tacit_rule if simulator else ""), change_rule=(simulator.change_rule if simulator else ""),
             expected_fix=(simulator.expected_fix if simulator else ""), simulator=simulator,
         )

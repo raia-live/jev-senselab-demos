@@ -120,30 +120,48 @@ then_no_file = "No account matched this caller, so the credit cannot go on anyth
 # -- the written policy -------------------------------------------------------------------
 # What Jev is told to do. Seeded into SenseLab as memory entries too, so the repair loop
 # has something to correct when the outcomes say a rule is wrong.
-
-[[policy]]
-key = "policy-billing-small"
-text = "Billing questions and disputes under $200: resolve in the bot. Explain the charge and adjust it if it is clearly wrong."
-
-[[policy]]
-key = "policy-billing-large"
-text = "Billing disputes of $200 or more: transfer to a billing agent."
-
-[[policy]]
-key = "policy-cancellation"
-text = "Cancellation requests: transfer to the retention team."
-
-[[policy]]
-key = "policy-outage"
-text = "Outage and service-down reports: resolve in the bot with the status page information and the current ETA."
-
-[[policy]]
-key = "policy-upgrade-howto"
-text = "Upgrades, plan changes and how-to questions: resolve in the bot."
+#
+# A row with `action` and `situations` is also a claim: on calls whose situation label
+# (intent/tier/splits, see above) matches one of the patterns, the rule says `action` is
+# right. Rows are tried in order and the first match is the rule for the call; the outcome
+# of a call decided that way is credited or charged to the row's entry in SenseLab, which
+# is what the repair loop corrects. A row without them is text for Jev only.
 
 [[policy]]
 key = "policy-enterprise"
 text = "Enterprise accounts: transfer to the enterprise desk for anything other than a how-to question."
+action = "transfer_to_agent"
+situations = ["billing_dispute/enterprise/*", "cancellation/enterprise", "outage/enterprise", "upgrade/enterprise"]
+
+[[policy]]
+key = "policy-billing-small"
+text = "Billing questions and disputes under $200: resolve in the bot. Explain the charge and adjust it if it is clearly wrong."
+action = "resolve_in_bot"
+situations = ["billing_dispute/*/*/small"]
+
+[[policy]]
+key = "policy-billing-large"
+text = "Billing disputes of $200 or more: transfer to a billing agent."
+action = "transfer_to_agent"
+situations = ["billing_dispute/*/*/large"]
+
+[[policy]]
+key = "policy-cancellation"
+text = "Cancellation requests: transfer to the retention team."
+action = "transfer_to_agent"
+situations = ["cancellation/*"]
+
+[[policy]]
+key = "policy-outage"
+text = "Outage and service-down reports: resolve in the bot with the status page information and the current ETA."
+action = "resolve_in_bot"
+situations = ["outage/*"]
+
+[[policy]]
+key = "policy-upgrade-howto"
+text = "Upgrades, plan changes and how-to questions: resolve in the bot."
+action = "resolve_in_bot"
+situations = ["upgrade/*", "how_to/*"]
 
 [[policy]]
 key = "policy-broken-promise"

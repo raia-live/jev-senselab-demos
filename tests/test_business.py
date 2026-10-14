@@ -24,6 +24,28 @@ def test_demo_file_matches_the_scenario():
     assert [k for k, _ in DEMO.policy[len(SCENARIO.policy):]] == ["policy-broken-promise"]
     assert DEMO.scenario.jev_criteria == SCENARIO.jev_criteria
     assert DEMO.scenario.change_rule == SCENARIO.change_rule
+    assert list(DEMO.policy_claims) == SCENARIO.policy_claims == DEMO.scenario.policy_claims
+
+
+def test_every_situation_has_one_written_rule_and_it_says_what_the_policy_says():
+    """Before the tacit rule is learned, the written rule for a call is what the policy text
+    says: enterprise transfers, small disputes close in the bot, large ones transfer."""
+    from core.scenario import Case
+
+    for intent, tier, prior, amount in itertools.product(DEMO.intent_ids, DEMO.tiers, [0, 3], [49, 400]):
+        fields = {"intent": intent, "tier": tier, "prior_contacts_30d": prior, "amount_usd": amount}
+        case = Case(id="x", episode=0, text="", fields=fields, situation=DEMO.situation_of(fields), truth="", kind=intent)
+        claim = DEMO.scenario.policy_claim(case)
+        assert claim is not None, fields
+        if tier == "enterprise" and intent != "how_to":
+            assert claim.key == "policy-enterprise" and claim.action == "transfer_to_agent"
+        elif intent == "billing_dispute":
+            assert claim.key == ("policy-billing-large" if amount >= 200 else "policy-billing-small")
+            assert claim.action == ("transfer_to_agent" if amount >= 200 else "resolve_in_bot")
+        elif intent == "cancellation":
+            assert claim.key == "policy-cancellation" and claim.action == "transfer_to_agent"
+        else:
+            assert claim.action == "resolve_in_bot"
 
 
 def test_situation_labels_reproduce_the_scenario_everywhere():

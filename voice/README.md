@@ -169,6 +169,54 @@ Testing as yourself, use reported mode. In simulated mode the demo world decides
 whether the step worked, so a callback you never receive is on record as received, and John
 will say so on your next call; that is the simulator talking, not SenseLab.
 
+## The repair loop
+
+Lessons and records are the fast loop: one call teaches the next call in the same situation.
+The repair loop is the slow one, and it works on the written rules themselves. Every sealed
+call is graded by a judge on the platform. When the judge pins two failures on the same rule
+(the platform's own detector waits for three in a day; the demo asks sooner, on the same
+evidence), the loop asks for a fix. A repair agent reads the failed calls and the rule they
+followed and drafts a new version of that rule on a memory branch. The draft is replayed
+against the failed calls (Tier 1): the replay has to make a different decision than the one
+the judge faulted, or the draft stops there. If it holds, the platform splits live calls: half
+read the rewrite, half keep the old rule, and the arms are compared on outcomes and on the
+judge's verdicts. If the rewrite does no worse and the failures stop recurring, it ships to
+the policy entry on `main`. If the calls reading it do worse, it is held back and the loop
+waits for new failures before drafting again. No one edits `business.toml` for any of this.
+
+The page's "Repair loop" panel shows each draft with its lifecycle (proposed, tested, canary,
+shipped), the rule it rewrites and the new text, the repair agent's reasons, and the live
+split: how many calls read the rewrite and how many worked, against the calls on the old
+rule. When a call lands during a split, Details says which arm it drew. The narration line
+captions the moves as they happen.
+
+What this looks like on the demo scenario, from two simulated runs of 46 and 86 calls on
+fresh agents: the first two repeat billing callers were resolved in the bot, the judge pinned
+both on `policy-billing-small`, and within a minute the repair agent had drafted "escalate
+repeat callers to a human agent". The replay passed (the replayed decision no longer stayed
+in the bot) and the canary started. The calls that read the rewrite transferred repeat
+callers to a human, half an hour of queue time each, and the platform stopped the split: in
+one run with "success fell to 50% in the canary arm against 100% in control", in the other
+as "no effect" (13 of 19 worked against 16 of 19). The rewrite never reached the other half
+of the calls. The draft was a reasonable guess from two failures and it was wrong; the canary
+is what caught it. A rule pulled from an index would have gone to every caller.
+
+Meanwhile the fast loop had found the specialist callback on its own, four repeat callers
+after the first miss. So the second draft, which did say to prefer a callback over a live
+transfer, passed replay 3 of 3 and then came back from its canary "unexercised": the calls
+that read it never met the failure again, because by then no call did (0 wrong of the last
+40). In a run of this size the rewrite does not ship, and that is the correct verdict: a
+rewrite ships when the calls still on the old rule keep failing and the calls on the new one
+do not, or when enough calls have read it without harm. On a line taking real traffic that
+is the normal case; here the lessons get there first. The loop drafts again while failures
+keep arriving and goes quiet when they stop.
+
+For the judge to pin a failure on a rule, the rule has to be charged with the outcome of
+following it. Each line in `business.toml` names the action it prescribes and the situations
+it speaks for (`action` and `situations` on the policy rows); when Jev does what the line
+says, the line is a causal entry of the run and the outcome lands on it. A rule without a
+claim (the broken-promise line) is never blamed and never rewritten.
+
 ## No microphone
 
 The page has a text box ("No microphone? Type the call instead"): the same decision, the same

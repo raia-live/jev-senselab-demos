@@ -14,6 +14,7 @@ the product's.
 
 from __future__ import annotations
 
+import json
 import time
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -26,14 +27,25 @@ JUDGE_ID = "jev-demo-decision-failure"
 
 JUDGE_PROMPT = (
     "You grade one run of a decision agent. The agent read a {case_noun}, consulted its memory, "
-    "and chose one action; a downstream review then reported how the decision turned out. "
+    "and chose one action by calling 'decide'; on a live run a downstream review then reported "
+    "how the decision turned out, and the response ends with 'review: ...'. "
     "Decide whether the run FAILED and, if so, name the failure in one short phrase that would "
     "be the same for every run that fails the same way — name the kind of {case_noun} and the "
     "action taken, for example 'mid-market EMEA lead routed to AE and lost' or 'partial-shipment "
-    "invoice held and released late'. A run failed when the review reported a failure of any "
-    "severity; a run whose review reported success is a PASS. Use only what the trace shows: the "
-    "task as posed, the decide call and its arguments, the memory entries the agent read, the "
-    "decision summary, the response and the outcome. Quote the review line your verdict rests on.\n\n"
+    "invoice held and released late'. Use only what the trace shows: the task as posed, the "
+    "decide call and its arguments, the memory entries the agent read, the decision summary, "
+    "the response and the outcome.\n\n"
+    "A live run failed when the review reported a failure of any severity; one whose review "
+    "reported success is a PASS. Quote the review line your verdict rests on. A run is a REPLAY, "
+    "not a live run, when it carries no review of its own, or when the action in its decide "
+    "call is not the action the response or the decision summary names: the same {case_noun} "
+    "was decided again with the memory under memory_read as it would stand after a repair, and "
+    "no review of that new decision exists. Grade a replay on the decision alone. It PASSES "
+    "when the action in its decide call is what the entries under memory_read say to do for "
+    "this kind of {case_noun} (a policy line or correction that covers it, a lesson or record "
+    "that says the action worked here) and FAILS when that action is one those entries say did "
+    "not work or say not to take; quote the entry your verdict rests on. A replay that calls no "
+    "decide at all FAILS.\n\n"
     "When the run failed, say where the wrong action came from. Compare the action taken with the "
     "memory entries under memory_read: if an entry recommends, records or endorses the action the "
     "agent took for this kind of {case_noun} (a policy line, a lesson that says the action worked), "
@@ -68,6 +80,24 @@ def _replay_awaited(f: dict[str, Any]) -> bool:
     return bool(rep and rep.get("status") == "requested")
 
 
+def fix_covers(f: dict[str, Any]) -> bool:
+    """Whether a fix still speaks for its entry: it is on its way (proposed, under test,
+    passed, in canary) or it shipped. A fix whose replay test failed, whose canary was
+    stopped or failed, or that was dismissed, rolled back or seen to regress does not;
+    the loop may draft that entry again on new evidence."""
+    status = f.get("status")
+    if status in ("test_failed", "dismissed", "rolled_back", "regressed"):
+        return False
+    canary = f.get("canary") if isinstance(f.get("canary"), dict) else None
+    if canary and canary.get("status") in ("failed", "stopped", "inconclusive") and status not in SHIPPED_STATUSES:
+        return False
+    return status in OPEN_STATUSES or status in SHIPPED_STATUSES
+
+
+def _utcnow_iso() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + f".{int((time.time() % 1) * 1e6):06d}Z"
+
+
 def fix_row(f: dict[str, Any]) -> dict[str, Any]:
     """The lifecycle fields of one fix, compact enough for an episode row."""
     canary = f.get("canary") if isinstance(f.get("canary"), dict) else None
@@ -85,7 +115,21 @@ def fix_row(f: dict[str, Any]) -> dict[str, Any]:
             "predicted_fixes": len(manifest.get("predicted_fixes") or []),
             "predicted_regressions": len(manifest.get("predicted_regressions") or []),
             "expected_prevention": manifest.get("expected_prevention"),
+            "rationale": (manifest.get("rationale") or "")[:600] if isinstance(manifest.get("rationale"), str) else None,
         }
+    # The memory change itself: the entry the fix rewrites and what it now says.
+    correction = f.get("correction") if isinstance(f.get("correction"), dict) else None
+    if correction is None and isinstance(f.get("corrective_entry"), dict):
+        correction = f["corrective_entry"]
+    if correction:
+        row["correction"] = {
+            "key": correction.get("key"), "entity_path": correction.get("entity_path"),
+            "value": (correction.get("value") if isinstance(correction.get("value"), str)
+                      else json.dumps(correction.get("value"), default=str))[:1200],
+            "replaces_version": correction.get("replaces_version"),
+        }
+    if f.get("situation"):
+        row["situation"] = f.get("situation")
     if test:
         row["test"] = {k: test.get(k) for k in ("status", "passed", "repaired", "total", "regressed", "fidelity", "unreplayable")}
     if canary:
@@ -114,6 +158,8 @@ class RepairLoop:
         judge: bool = True,
         judge_mode: str = "continuous",
         judge_workers: int = 1,
+        propose_after: int = 2,
+        look_seconds: float = 0.0,
     ) -> None:
         self.api = api
         self.agent_id = agent_id
@@ -123,6 +169,10 @@ class RepairLoop:
         self.canary_min_outcomes = canary_min_outcomes
         self.canary_timeout_sessions = canary_timeout_sessions
         self.look_every = look_every
+        # Also look when this many seconds have passed since the last due look, so a live
+        # agent between calls still advances a test, a canary or a ship. 0 turns it off.
+        self.look_seconds = look_seconds
+        self._last_due_at = time.time()
         self.judge_on = judge
         # ``continuous``: the platform grades each trace as it seals, off the request path.
         # ``on_demand``: this process asks for each verdict (slower; it queues behind the
@@ -134,6 +184,13 @@ class RepairLoop:
         self._canary_started_at: dict[str, int] = {}
         self._kicked: set[str] = set()
         self._first_seen_look: dict[str, int] = {}
+        # Ask for a fix once the judge has pinned this many failures on one memory entry.
+        # The platform's own detector proposes on an incident (three in a day against the
+        # entry's history); a demo of a few dozen calls asks sooner, on the same evidence.
+        self.propose_after = propose_after
+        self._proposed_for: dict[str, str] = {}  # entry key -> when this loop last asked for a draft of it
+        self._unjudged: dict[str, tuple[int, int]] = {}  # failed trace -> (episode, sessions when sealed)
+        self._asked: set[str] = set()
         self.fixes_seen: dict[str, dict[str, Any]] = {}
         self.events: list[dict[str, Any]] = []
         self.verdicts: list[dict[str, Any]] = []
@@ -177,7 +234,14 @@ class RepairLoop:
 
     def after_seal(self, episode: int, trace_id: str | None, *, reported_success: bool) -> None:
         self.sessions_sealed += 1
-        if not self.judge_on or not trace_id or self._pool is None or self.judge_mode != "on_demand":
+        if not self.judge_on or not trace_id or self._pool is None:
+            return
+        if self.judge_mode != "on_demand":
+            # The platform grades as traces seal; a failure it has not graded by the next
+            # look but one is asked for by name (``_judge_missing``), so a verdict the
+            # repair needs is never left to sampling.
+            if not reported_success:
+                self._unjudged[trace_id] = (episode, self.sessions_sealed)
             return
         fut = self._pool.submit(self._judge, episode, trace_id, reported_success)
         self._pending.append(fut)
@@ -212,7 +276,8 @@ class RepairLoop:
     def look(self, episode: int, *, force: bool = False) -> dict[str, Any]:
         """List the agent's fixes; on a due look, advance the canary as the sweep would."""
         t0 = time.perf_counter()
-        due = force or (self.sessions_sealed - self._sessions_at_look) >= self.look_every
+        due = force or (self.sessions_sealed - self._sessions_at_look) >= self.look_every or \
+            (self.look_seconds > 0 and time.time() - self._last_due_at >= self.look_seconds)
         note: dict[str, Any] = {"look": bool(due), "sessions_sealed": self.sessions_sealed,
                                 "judge_backlog": self.judge_backlog()}
         try:
@@ -234,6 +299,7 @@ class RepairLoop:
             self._first_seen_look.setdefault(row["id"], self._looks)
         if due:
             self._sessions_at_look = self.sessions_sealed
+            self._last_due_at = time.time()
             self._looks += 1
             note["calls"] = self._advance(fixes, episode)
         note["fixes"] = {s: sum(1 for r in snapshot if r["status"] == s) for s in sorted({str(r["status"]) for r in snapshot})}
@@ -253,6 +319,12 @@ class RepairLoop:
         def log(kind: str, fix_id: str, **data: Any) -> None:
             self.events.append({"t": time.time(), "sessions": self.sessions_sealed, "episode": episode,
                                 "kind": kind, "fix_id": fix_id, **data})
+
+        verdicts = self._fetch_verdicts(log)
+        calls += 1
+        if verdicts is not None:
+            calls += self._judge_missing(verdicts)
+            calls += self._propose(fixes, verdicts, log)
 
         # A proposed fix whose Tier 1 test has not been queued after two looks: ask for it.
         for f in fixes:
@@ -333,6 +405,85 @@ class RepairLoop:
                 except EvalApiError as exc:
                     calls += 1
                     log("recheck_error", fid, error=f"{exc.status}: {str(exc.detail)[:200]}")
+        return calls
+
+    def _fetch_verdicts(self, log: Any) -> list[dict[str, Any]] | None:
+        if self.propose_after <= 0 and not self._unjudged:
+            return []
+        try:
+            return (self.api.verdicts(self.agent_id, limit=200) or {}).get("items") or []
+        except Exception as exc:  # noqa: BLE001
+            log("verdicts_error", "", error=f"{type(exc).__name__}: {exc}"[:200])
+            return None
+
+    def _judge_missing(self, verdicts: list[dict[str, Any]]) -> int:
+        """Ask for a verdict on each failed trace the continuous judge has not graded by the
+        look after the one it sealed in (at most three a look; they queue behind the grader)."""
+        if self._pool is None:
+            return 0
+        graded = {str(v.get("trace_id")) for v in verdicts}
+        for tid in list(self._unjudged):
+            if tid in graded:
+                del self._unjudged[tid]
+        due = [(tid, ep) for tid, (ep, at) in self._unjudged.items()
+               if tid not in self._asked and self.sessions_sealed - at >= self.look_every]
+        for tid, ep in due[:3]:
+            self._asked.add(tid)
+            self._pending.append(self._pool.submit(self._judge, ep, tid, False))
+        return 0
+
+    def _propose(self, fixes: list[dict[str, Any]], verdicts: list[dict[str, Any]], log: Any) -> int:
+        """Ask the platform for a fix when the judge has pinned ``propose_after`` failures on
+        the same memory entry and no fix for that entry is open or shipped. The fix is the
+        platform's: it reads the verdicts, drafts the change on a branch, and tests it.
+
+        A draft that did not make it (its replay test failed, its canary was stopped, it was
+        dismissed or rolled back) stops covering its entry, but the next draft on that entry
+        waits for ``propose_after`` further failures graded after it, so every draft is backed
+        by evidence the one before it did not have."""
+        if self.propose_after <= 0:
+            return 0
+        covered: set[str] = set()
+        tried_at: dict[str, str] = dict(self._proposed_for)
+        for f in fixes:
+            corr = f.get("correction") if isinstance(f.get("correction"), dict) else None
+            if not (corr and corr.get("key")):
+                continue
+            key = str(corr["key"])
+            if fix_covers(f):
+                covered.add(key)
+            else:
+                tried_at[key] = max(tried_at.get(key, ""), str(f.get("created_at") or ""))
+        by_key: dict[str, list[dict[str, Any]]] = {}
+        for v in verdicts:
+            if v.get("verdict") != "fail":
+                continue
+            for e in v.get("evidence") or []:
+                if isinstance(e, dict) and e.get("kind") == "entry" and e.get("key"):
+                    by_key.setdefault(str(e["key"]), []).append(v)
+                    break
+        calls = 0
+        for key, vs in by_key.items():
+            if key in covered:
+                continue
+            since = tried_at.get(key, "")
+            vs = [v for v in vs if str(v.get("created_at") or "") > since]
+            if len(vs) < self.propose_after:
+                continue
+            self._proposed_for[key] = _utcnow_iso()
+            latest = max(vs, key=lambda v: str(v.get("created_at") or ""))
+            try:
+                fix = self.api.propose_fix(self.agent_id, verdict_id=str(latest["id"]))
+                calls += 1
+                self.fixes_seen.setdefault(str(fix.get("id")), fix_row(fix))
+                log("propose", str(fix.get("id")), key=key, failures=len(vs), lever=fix.get("lever"),
+                    source=fix.get("source"), status=fix.get("status"),
+                    correction_key=((fix.get("correction") or {}).get("key") if isinstance(fix.get("correction"), dict) else None))
+            except EvalApiError as exc:
+                calls += 1
+                log("propose_error", "", key=key, error=f"{exc.status}: {str(exc.detail)[:200]}")
+            except Exception as exc:  # noqa: BLE001
+                log("propose_error", "", key=key, error=f"{type(exc).__name__}: {exc}"[:200])
         return calls
 
     # -- end of run ----------------------------------------------------------------------

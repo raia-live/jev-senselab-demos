@@ -91,15 +91,20 @@ class EvalClient:
     def ensure_judge(self, judge_id: str, agent_id: str, name: str, prompt: str, *,
                      mode: str = "continuous", sampling_rate: float = 1.0,
                      model: str | None = None) -> dict[str, Any]:
-        try:
-            return self._call("GET", f"/api/v1/eval/judges/{judge_id}", params={"agent_id": agent_id})
-        except EvalApiError as exc:
-            if exc.status != 404:
-                raise
         body: dict[str, Any] = {"id": judge_id, "agent_id": agent_id, "name": name, "prompt": prompt,
                                 "scoring_type": "binary", "mode": mode, "sampling_rate": sampling_rate, "enabled": True}
         if model:
             body["model"] = model
+        try:
+            have = self._call("GET", f"/api/v1/eval/judges/{judge_id}", params={"agent_id": agent_id})
+            if (have.get("prompt") or "") == prompt:
+                return have
+            # The rubric changed since this agent's judge was made: a new judge version, so
+            # verdicts say which rubric graded them.
+            return self._call("PUT", f"/api/v1/eval/judges/{judge_id}", params={"agent_id": agent_id}, json=body)
+        except EvalApiError as exc:
+            if exc.status != 404:
+                raise
         try:
             return self._call("POST", "/api/v1/eval/judges", json=body)
         except EvalApiError as exc:
@@ -145,6 +150,18 @@ class EvalClient:
 
     def fix_tests(self, fix_id: str) -> dict[str, Any]:
         return self._call("GET", f"/api/v1/eval/fixes/{fix_id}/tests")
+
+    def propose_fix(self, agent_id: str, *, verdict_id: str | None = None,
+                    behavior_id: str | None = None) -> dict[str, Any]:
+        """Have the platform draft a fix for one failing verdict or a behavior. The repair
+        agent writes the change on a memory branch and queues its Tier 1 test; a minute."""
+        body: dict[str, Any] = {"agent_id": agent_id}
+        if verdict_id:
+            body["verdict_id"] = verdict_id
+        if behavior_id:
+            body["behavior_id"] = behavior_id
+        r = self._call("POST", "/api/v1/eval/fixes/propose", json=body, retries=1, timeout=300.0)
+        return r.get("fix") if isinstance(r, dict) and isinstance(r.get("fix"), dict) else r
 
     def test_fix(self, fix_id: str) -> dict[str, Any]:
         return self._call("POST", f"/api/v1/eval/fixes/{fix_id}/test", params={"now": "true"})

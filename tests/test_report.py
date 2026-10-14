@@ -136,8 +136,14 @@ def test_corrections_block_shows_what_the_sdk_text_omits() -> None:
                  guidance_id="g1", entries=entries)
     assert g.entry_keys == ["a/b/policy-x"]  # the SDK leaves both excluded keys out
     block, keys = corrections_block(g)
-    assert keys == ["a/b/risk-x-out-of-scope"]  # corrective yes, synthetic contrast no
+    assert keys == ["a/b/risk-x-out-of-scope", "a/b/policy-x"]  # corrective yes, synthetic contrast no
     assert block.startswith(CORRECTIONS_HEADING) and "- a/b/risk-x-out-of-scope (" in block
+    # A policy entry that says what the written policy says is Jev's state already and stays
+    # out; one the repair loop rewrote (a new version, on a branch or on main) is a correction.
+    block, keys = corrections_block(g, frozenset({"the rule"}))
+    assert keys == ["a/b/risk-x-out-of-scope"] and "policy-x" not in block
+    block, keys = corrections_block(g, frozenset({"the rule, as written"}))
+    assert keys == ["a/b/risk-x-out-of-scope", "a/b/policy-x"] and "- a/b/policy-x (high, untested): the rule" in block
     tagged, tags = tag_entries(block + "\n\n" + g.text, keys + g.entry_keys)
     assert tags == {"M1": "a/b/risk-x-out-of-scope", "M2": "a/b/policy-x"}
     assert cap_lines("line one\nline two\nline three", 15) == "line one"

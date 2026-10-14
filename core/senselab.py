@@ -18,7 +18,7 @@ import httpx
 from amfs import AgentMemory, Run
 from amfs.guidance import Guidance
 from amfs_adapter_http import HttpAdapter
-from amfs_core.lessons import lesson_key
+from amfs_core.lessons import lesson_key, make_lesson
 
 from . import settings as S
 from .jev import Decision
@@ -76,6 +76,10 @@ class ReviewHistory:
 
     seen: dict[tuple[str, str], list[tuple[bool, str]]] = field(default_factory=dict)
     tally: dict[tuple[str, str], list[int]] = field(default_factory=dict)  # [worked, total]
+    #: Held across add-and-write by whoever writes the record to memory. Two outcomes on the
+    #: same pair sealed seconds apart (a live agent's calls) otherwise race to the entry, and
+    #: the one that lands last can be the one that counted fewer reviews.
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def add(self, situation: str, action_key: str, worked: bool, note: str) -> str:
         k = (situation, action_key)
@@ -243,17 +247,27 @@ def hold_action(text: str, held: Tally | None) -> str:
     return "\n".join(out)
 
 
-def corrections_block(g: Guidance) -> tuple[str, list[str]]:
+def _norm(value: Any) -> str:
+    return " ".join(str(value).split())
+
+
+def corrections_block(g: Guidance, written: frozenset[str] = frozenset()) -> tuple[str, list[str]]:
     """Render the repair loop's corrective entries (``risk-*``, ``correction-*``) that
-    ``Guidance.text`` leaves out, as lines in the renderer's own shape.
+    ``Guidance.text`` leaves out, as lines in the renderer's own shape; and with them any
+    ``policy-*`` entry that no longer says what the *written* policy says.
 
     The SDK keeps corrective entries out of the rendered text so a prompt used to train a
     model never contains them (``ContextEntry.is_training_excluded``). A decision agent is
     the reader they were written for: a correction names the rule that stopped working and
     what to do instead, and a canary can only measure a fix that the sessions in its arm
-    actually read. Returns the block (or ``""``) and the full keys it shows.
+    actually read. A rewritten policy entry is the same thing under the rule's own key: the
+    repair loop's fix to a rule is a new version of it, on a canary branch and then on main,
+    and the written rule Jev has in its state is the old one. Returns the block (or ``""``)
+    and the full keys it shows.
     """
     extra = [e for e in g.entries if e.is_training_excluded and not e.is_synthetic]
+    extra += [e for e in g.entries
+              if str(e.key).startswith("policy-") and e not in extra and _norm(e.value) not in written]
     if not extra:
         return "", []
     lines = [e.render() for e in extra]
@@ -285,7 +299,8 @@ def split_priors(text: str) -> tuple[str, str]:
 
 def drop_policy_lines(text: str, keys: list[str]) -> tuple[str, list[str]]:
     """Remove the ``policy-*`` entries from the rendered list: the written policy is already
-    in Jev's state, and the lines only crowd out what the record says."""
+    in Jev's state, and the lines only crowd out what the record says. One the repair loop
+    has rewritten comes back in the corrections block (``corrections_block``)."""
     policy = {k for k in keys if k.rsplit("/", 1)[-1].startswith("policy-")}
     if not policy:
         return text, keys
@@ -492,7 +507,7 @@ class SenseLabEpisode:
             context = "\n".join(line for line in context.splitlines() if not line.startswith(dup))
             shown = record_keys + [k for k in shown if k not in record_keys]
         context, shown = drop_policy_lines(context, shown)
-        block, corrective = corrections_block(g)
+        block, corrective = corrections_block(g, frozenset(_norm(t) for _, t in self.scenario.policy))
         if block:
             shown = corrective + shown
         # Most specific first — corrections, this situation's record, the tallies and the
@@ -509,6 +524,11 @@ class SenseLabEpisode:
         self.trace.corrective_entries = [k.rsplit("/", 1)[-1] for k in corrective]
         self.trace.guidance_error = g.error
         self.trace.regime_shift = g.regime_shift
+        # Which arm of a live canary this session drew, off the headers of the reads just
+        # made on this thread: ``canary`` read the fix's branch, ``control`` the old rule.
+        routing = self.client.last_routing()
+        self.trace.canary = routing.canary or self.trace.canary
+        self.trace.memory_branch = routing.branch or self.trace.memory_branch
         self.trace.memory_ms += (time.perf_counter() - t0) * 1000
         return self.trace.guidance_text
 
@@ -529,7 +549,7 @@ class SenseLabEpisode:
         for e in entries:
             if e.key == lk and isinstance(e.value, dict):
                 self._lesson = {"key": f"{e.entity_path}/{e.key}", "action": e.value.get("action"),
-                                "worked": e.value.get("worked")}
+                                "worked": e.value.get("worked"), "value": dict(e.value)}
         return [e for e in entries if str(e.key).startswith(prefix)]
 
     def basis_criteria(self) -> dict[str, str] | None:
@@ -553,6 +573,13 @@ class SenseLabEpisode:
             if not cited.rsplit("/", 1)[-1].startswith("seen-"):
                 keys.append(cited)
         action_key = f"decide:{decision.action}"
+        # The written rule for this situation, when the action is the one it prescribes: the
+        # policy's own entry made that claim, whether Jev read the rule from the state or
+        # cited nothing. A wrong rule is what the repair loop is there to correct, and it can
+        # only correct what the outcomes have charged.
+        claim = self.scenario.policy_claim(case)
+        if claim is not None and claim.action == decision.action:
+            keys.append(f"{self.entity_path}/{claim.key}")
         lessons = [les for les in (self.guidance.lessons if self.guidance else [])
                    if les["situation"] == case.situation]
         if self._lesson is not None:
@@ -577,35 +604,38 @@ class SenseLabEpisode:
             )
         except (TypeError, ValueError):
             pass
+        # The recorded output names no action: a replay of this step (the repair loop's
+        # Tier 1 test re-decides the case against a corrected memory) answers the call from
+        # the record, and a record that said "transfer_to_agent" would contradict a replay
+        # that chose otherwise. The options are in the arguments so a replayer knows the
+        # choice it is making.
         self.run.on_tool_result(
             "decide",
-            {"action": decision.action, "confidence": round(decision.confidence, 3)},
-            result=f"decision recorded: {decision.action}",
+            {"action": decision.action, "confidence": round(decision.confidence, 3),
+             "options": list(self.scenario.actions)},
+            result="decision recorded",
             action_key=f"decide:{decision.action}",
             duration_ms=int(decision.latency_ms),
         )
 
     def complete(self, case: Case, decision: Decision, outcome: Outcome,
                  history: ReviewHistory | None = None, *, task_input: str | None = None) -> EpisodeTrace:
-        """Write the lesson (and the review history), then seal the trace with the outcome.
+        """Seal the trace with the outcome, then write the lesson (and the review history).
         *task_input* replaces what ``begin`` was given when the run was opened ahead of the
-        case (the live agent opens runs before the caller has said what they want)."""
+        case (the live agent opens runs before the caller has said what they want).
+
+        The seal comes first on purpose. The outcome is credited to the causal entries at
+        their current version, and the judge reads the trace's entries as they stand when
+        it is sealed. With the lesson rewritten first, both saw the version written after
+        the fact ("did not work", with a failure against it) in place of the one Jev
+        actually read ("worked"): the claim that led to the decision was never charged, and
+        the judge found no entry behind the action, so the repair loop called the failure a
+        code problem and drafted nothing for memory."""
         import time
 
         assert self.mem is not None and self.run is not None
         t0 = time.perf_counter()
         action_key = f"decide:{decision.action}"
-        try:
-            self.run.learn(case.situation, action_key, outcome.success, outcome.note)
-        except Exception as exc:  # noqa: BLE001 - a lesson is a bonus; the outcome is the record
-            self.trace.commit_error = f"learn: {type(exc).__name__}: {exc}"[:200]
-        if history is not None:
-            try:
-                text = history.add(case.situation, action_key, outcome.success, outcome.note)
-                self.mem.write(self.entity_path, ReviewHistory.key(case.situation, action_key), text,
-                               confidence=0.85, memory_type="experience")
-            except Exception as exc:  # noqa: BLE001
-                self.trace.commit_error = f"history: {type(exc).__name__}: {exc}"[:200]
         causal = self.causal_keys(case, decision, outcome)
         self.trace.causal_keys = [k.rsplit("/", 1)[-1] for k in causal]
         try:
@@ -625,9 +655,26 @@ class SenseLabEpisode:
             self.trace.trace_id = str(getattr(last, "id", "") or "") or None
         except Exception as exc:  # noqa: BLE001
             self.trace.commit_error = f"commit: {type(exc).__name__}: {exc}"[:200]
+        # The lesson, unless the one read at begin already says exactly this: a rewrite that
+        # changes nothing only opens a new version, and attribution counts reads by version.
+        new = make_lesson(case.situation, action_key, outcome.success, outcome.note)
+        current = (self._lesson or {}).get("value") if self._lesson else None
+        if not (isinstance(current, dict) and {k: current.get(k) for k in new} == new):
+            try:
+                self.run.learn(case.situation, action_key, outcome.success, outcome.note)
+            except Exception as exc:  # noqa: BLE001 - a lesson is a bonus; the outcome is the record
+                self.trace.commit_error = f"learn: {type(exc).__name__}: {exc}"[:200]
+        if history is not None:
+            try:
+                with history.lock:
+                    text = history.add(case.situation, action_key, outcome.success, outcome.note)
+                    self.mem.write(self.entity_path, ReviewHistory.key(case.situation, action_key), text,
+                                   confidence=0.85, memory_type="experience")
+            except Exception as exc:  # noqa: BLE001
+                self.trace.commit_error = f"history: {type(exc).__name__}: {exc}"[:200]
         routing = self.client.last_routing()
-        self.trace.canary = routing.canary
-        self.trace.memory_branch = routing.branch
+        self.trace.canary = routing.canary or self.trace.canary
+        self.trace.memory_branch = routing.branch or self.trace.memory_branch
         self.trace.memory_ms += (time.perf_counter() - t0) * 1000
         return self.trace
 

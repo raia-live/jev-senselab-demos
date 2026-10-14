@@ -98,6 +98,12 @@
   .lesson.ok { border-left-color:var(--ok); } .lesson.bad { border-left-color:var(--bad); }
   .lesson .s { font-family:var(--mono); font-size:11px; color:var(--muted); } .lesson .a { font-weight:600; } .lesson .n { color:var(--ink-2); }
   .rec { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:5px 0; border-top:1px solid var(--line); color:var(--ink-2); } .rec .s { font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .fix { padding:9px 11px; border-radius:9px; background:var(--bg); border-left:3px solid var(--sl); margin-bottom:8px; font-size:12.5px; }
+  .fix.off { border-left-color:var(--line-2); opacity:.75; } .fix .k { font-family:var(--mono); font-size:11px; color:var(--muted); }
+  .fix .steps { display:flex; gap:4px; margin:6px 0; flex-wrap:wrap; } .fix .steps span { font-size:11px; padding:2px 7px; border-radius:999px; background:var(--card); border:1px solid var(--line); color:var(--muted); }
+  .fix .steps span.on { background:var(--sl); color:#fff; border-color:var(--sl); } .fix .steps span.now { border-color:var(--sl); color:var(--sl); font-weight:600; }
+  .fix .steps span.no { background:var(--bad); color:#fff; border-color:var(--bad); }
+  .fix .v { white-space:pre-wrap; color:var(--ink-2); margin-top:4px; font-size:12px; } .fix .why { color:var(--ink-2); margin-top:4px; }
   .drawer textarea, .drawer input, .drawer select { width:100%; background:var(--panel); color:var(--ink); border:1px solid var(--line-2); border-radius:8px; padding:8px; }
   .row { display:flex; gap:8px; align-items:center; margin-top:8px; }
   .small { font-size:12px; color:var(--muted); }
@@ -181,6 +187,8 @@
     <div id="lessons" class="small">loading</div>
     <h3>Record by situation</h3>
     <div id="records" class="small"></div>
+    <h3>The repair loop: rules rewritten</h3>
+    <div id="repair" class="small">loading</div>
     <h3>No microphone? Type the call</h3>
     <textarea id="t-text" rows="3">You charged me $49 twice for the same period. This is the third time I'm calling about it.</textarea>
     <div class="row"><select id="t-intent"></select><input id="t-amount" type="number" value="49" style="width:110px"><button class="btn sm" id="t-send">Decide</button></div>
@@ -360,6 +368,7 @@ function apply(e, live) {
         caption(`<span class="jev">Jev + SenseLab:</span> ${esc(ACTION[e.action] || e.action)} <span style="color:var(--muted);font-size:15px">${Math.round(e.confidence * 100)}% · ${e.jev_ms} ms</span>`,
           (e.alone_action ? (differs ? `<b>Jev alone, on the written policy, would have chosen ${esc(ACTION[e.alone_action] || e.alone_action)}</b> (${Math.round(e.alone_confidence * 100)}%). ` : `Jev alone would have chosen the same. `) : "")
           + (e.basis && e.basis !== "none" ? `The decision rested on <span class="mono">${esc(e.basis)}</span>. ` : "")
+          + armNote(e)
           + `${esc(AGENT)} tells the caller, in their own words.`);
       }
       refreshDecision(id);
@@ -385,6 +394,21 @@ function apply(e, live) {
       }
       break; }
     case "recording_saved": if (live) setTimeout(state, 300); break;
+    case "repair_loop": {
+      const ch = (e.changed || [])[0];
+      if (live && ch) {
+        const key = ch.correction && ch.correction.key ? ch.correction.key : "a rule";
+        const cs = ch.canary ? ch.canary.status : null;
+        const said = cs === "failed" || cs === "stopped" ? `put the rewrite of ${key} on half the live calls; they did worse than the old rule, so it was held back` : cs === "inconclusive" ? (ch.canary.reason === "unexercised" ? `ran the rewrite of ${key} on half the live calls, but the failure never came up again on them; it was held back` : `ran the rewrite of ${key} on half the live calls and could not tell the arms apart; it was held back`) : cs === "passed" && !ch.shipped_at ? `saw the live calls hold up the rewrite of ${key}` : { proposed: `drafted a rewrite of ${key}`, testing: `is replaying past calls against a rewrite of ${key}`,
+          test_passed: `replayed past calls against the rewrite of ${key}: it holds`, test_inconclusive: `replayed past calls against the rewrite of ${key}: not enough to say`,
+          test_failed: `replayed past calls against the rewrite of ${key}: it did not hold`, canary: `is splitting live calls between the old ${key} and the rewrite`,
+          memory_shipped: `shipped the rewrite of ${key}: every call reads it now`, verified: `verified the rewrite of ${key} on live calls`,
+          regressed: `saw the rewrite of ${key} regress and pulled it`, dismissed: `dismissed the rewrite of ${key}` }[ch.status] || `moved the rewrite of ${key} to ${String(ch.status || "").replace(/_/g, " ")}`;
+        caption(`<span class="sl">SenseLab</span> ${said}.`, "The repair loop: judge, incident, rewrite, replay test, canary, ship. No one edited the policy file.");
+        glow("sl", 2500);
+      }
+      setTimeout(repair, 500);
+      break; }
     case "world_changed": if (live) caption(`The world changed.`, `${esc(e.note || "")} The written policy did not change. Watch SenseLab notice.`); $("changed").checked = !!e.changed; break;
   }
   if (live && isCur) drawTimeline();
@@ -449,9 +473,17 @@ function drawTimeline() {
 }
 
 /* -- details --------------------------------------------------------------------------- */
+// Which side of a live repair canary a call landed on, when one was running.
+function armNote(d) {
+  const rewritten = (d.corrective_entries || []).length ? d.corrective_entries.join(", ") : null;
+  if (d.canary_arm === "canary") return `<b>This call drew the canary arm:</b> Jev read the rewrite of ${esc(rewritten || "the rule")} on <span class="mono">${esc(d.memory_branch || "the fix's branch")}</span>. `;
+  if (d.canary_arm === "control") return `This call drew the control arm of the running canary: Jev read the old rule. `;
+  if (rewritten) return `A rewritten rule (${esc(rewritten)}) was in Jev's view. `;
+  return "";
+}
 function refreshDecision(callId) {
   const d = lastDecision[callId]; if (!d) return;
-  $("alone").innerHTML = d.alone_action ? `With SenseLab: <b>${esc(ACTION[d.action] || d.action)}</b> (${Math.round(d.confidence * 100)}%). Alone, on the written policy: <b>${esc(ACTION[d.alone_action] || d.alone_action)}</b> (${Math.round((d.alone_confidence || 0) * 100)}%).${d.alone_outcome ? ` The world's verdict on the alone choice: ${d.alone_outcome.success ? "would have worked" : "a miss"}${d.alone_outcome.cost_usd ? `, $${Number(d.alone_outcome.cost_usd).toLocaleString()}` : ""}.` : ""}` : "no decision yet";
+  $("alone").innerHTML = d.alone_action ? `With SenseLab: <b>${esc(ACTION[d.action] || d.action)}</b> (${Math.round(d.confidence * 100)}%). Alone, on the written policy: <b>${esc(ACTION[d.alone_action] || d.alone_action)}</b> (${Math.round((d.alone_confidence || 0) * 100)}%).${d.alone_outcome ? ` The world's verdict on the alone choice: ${d.alone_outcome.success ? "would have worked" : "a miss"}${d.alone_outcome.cost_usd ? `, $${Number(d.alone_outcome.cost_usd).toLocaleString()}` : ""}.` : ""} ${armNote(d)}` : "no decision yet";
   $("probs").innerHTML = Object.entries(d.probabilities || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="prob ${k === d.action ? "pick" : ""}"><span>${esc(ACTION[k] || k)}</span><span class="bar"><i style="width:${Math.round(v * 100)}%"></i></span><span class="mono" style="text-align:right">${Math.round(v * 100)}%</span></div>`).join("");
   $("slot").textContent = d.memory_text || "(empty)";
   const mk = $("mark");
@@ -471,6 +503,49 @@ async function memory() {
     return `<div class="lesson ${mm[3] === "worked" ? "ok" : "bad"}"><div class="s">${esc(mm[1])}</div><div class="a">${esc(ACTION[mm[2]] || mm[2])} ${mm[3]}</div><div class="n">${esc(mm[4])}</div></div>`;
   }).join("") || "none yet; the first sealed outcome writes one";
   $("records").innerHTML = m.seen.map((r) => { const mm = String(r.value).match(/^Seen on (\S+) with decide:(\w+): worked (\d+) of (\d+)/); return mm ? `<div class="rec"><span><span class="s">${esc(mm[1])}</span><br>${esc(ACTION[mm[2]] || mm[2])}</span><span>${mm[3]} of ${mm[4]}</span></div>` : ""; }).join("") || "nothing seen yet";
+}
+const FIX_STEPS = ["proposed", "tested", "canary", "shipped"];
+const CANARY_OVER = ["failed", "stopped", "inconclusive"];
+function canaryHeld(f) { return !!(f.canary && CANARY_OVER.includes(f.canary.status) && !f.shipped_at); }
+function fixStep(f) {
+  const st = f.status || "";
+  if (["memory_shipped", "verified", "regressed"].includes(st)) return 3;
+  if (st === "canary" || canaryHeld(f)) return 2;
+  if (["test_passed", "test_inconclusive", "test_failed"].includes(st)) return 1;
+  return 0;
+}
+function pct(a, b) { return b ? `${Math.round((a / b) * 100)}%` : "no outcomes yet"; }
+function renderFix(f) {
+  const step = fixStep(f), st = f.status || "", held = canaryHeld(f);
+  const off = held || ["test_failed", "dismissed", "rolled_back", "regressed"].includes(st);
+  const c = (f.canary && f.canary.canary) || {}, k = (f.canary && f.canary.control) || {};
+  const steps = FIX_STEPS.map((name, i) => {
+    let cls = i < step ? "on" : i === step ? "now" : "";
+    if (i === 1 && st === "test_failed") cls = "no";
+    if (i === 2 && held) cls = "no";
+    if (i === 3 && step === 3) cls = "on";
+    let label = name;
+    if (i === 1 && f.test && f.test.total != null) label = `tested ${f.test.repaired ?? "?"} of ${f.test.total} repaired`;
+    if (i === 2 && f.canary) label = `canary ${f.canary.pct ?? ""}% · ${c.outcomes ?? 0} vs ${k.outcomes ?? 0} outcomes · ${held ? "held back" : f.canary.status === "passed" ? "held up" : f.canary.status || ""}`;
+    if (i === 3 && f.shipped_at) label = `shipped ${hhmm(Date.parse(f.shipped_at) / 1000)}`;
+    return `<span class="${cls}">${esc(label)}</span>`;
+  }).join("");
+  const what = f.correction ? `<div class="k">${esc(f.correction.key)}${f.correction.replaces_version ? ` · rewrites v${f.correction.replaces_version}` : ""}${f.branch ? ` · on ${esc(f.branch)}` : ""}</div><div class="v">${esc(f.correction.value)}</div>` : `<div class="k">${esc(f.lever || "")} fix, no memory change drafted</div>`;
+  const why = f.manifest && f.manifest.rationale ? `<div class="why">${esc(f.manifest.rationale)}</div>` : "";
+  const because = !held ? "" : f.canary.status === "failed" ? "The calls reading it did worse. " : { no_effect: "No difference between the arms. ", unexercised: "The failure did not come up again on the calls that read it, so there was nothing to prove. ", window: "The window closed before the arms could be told apart. " }[f.canary.reason] || "";
+  const verdict = f.canary && (c.outcomes || k.outcomes)
+    ? `<div class="why"><b>Live calls:</b> the ones reading the rewrite worked ${c.succeeded ?? 0} of ${c.outcomes ?? 0} (${pct(c.succeeded, c.outcomes)}), with ${c.recurred ?? 0} of ${c.graded ?? 0} graded as the same failure again; the ones on the old rule ${k.succeeded ?? 0} of ${k.outcomes ?? 0} (${pct(k.succeeded, k.outcomes)}), ${k.recurred ?? 0} of ${k.graded ?? 0}. ${because}${held ? "The rewrite was held back; the old rule stays and the loop drafts again on the next failures." : f.shipped_at ? "The rewrite shipped to the policy entry." : f.canary.status === "passed" ? "The split held up." : "Still splitting."}</div>`
+    : "";
+  const head = `<b>${esc((f.title || "").replace(/^Fix: /, ""))}</b> <span class="k">${esc(held ? "held back after canary" : st.replace(/_/g, " "))}${f.situation ? ` · ${esc(f.situation)}` : ""}</span>`;
+  return `<div class="fix ${off ? "off" : ""}">${head}<div class="steps">${steps}</div>${what}${why}${verdict}</div>`;
+}
+async function repair() {
+  let r; try { r = await (await fetch("/api/loop")).json(); } catch { return; }
+  const el = $("repair");
+  if (!r.enabled) { el.textContent = "off: the eval API is not on this account"; return; }
+  const fixes = (r.fixes_seen || []).slice().reverse();
+  const intro = `Every sealed call is graded by a judge. Failures that share a cause become an incident; SenseLab drafts a rewrite of the rule behind them, replays past calls against it, splits live calls between the old rule and the new one, ships it to the policy entry when the split holds up and holds it back when it does not. ${r.sessions_sealed != null ? `${r.sessions_sealed} calls sealed since start.` : ""}`;
+  el.innerHTML = `<div style="margin-bottom:8px">${intro}</div>` + (fixes.map(renderFix).join("") || `<div class="fix off">no rewrite proposed yet: it takes a few failures that the judge grades to the same rule</div>`);
 }
 async function state() {
   const st = await (await fetch("/api/state")).json();
@@ -643,6 +718,7 @@ async function init() {
     } catch (e) { $("call").disabled = true; $("call").textContent = "browser calls unavailable"; console.error(e); }
   } else { $("call").disabled = true; $("call").textContent = "browser calls off"; $("drawer").classList.add("open"); }
   setInterval(tick, 400); setInterval(clock, 200); setInterval(state, 5000); setInterval(memory, 8000); memory();
+  setInterval(repair, 20000); repair();
   window.addEventListener("resize", drawTimeline);
 }
 init();

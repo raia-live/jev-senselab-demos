@@ -27,7 +27,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.scenario import Case, Scenario
+from core.scenario import Case, PolicyClaim, Scenario
 
 TIERS = ["consumer", "business", "enterprise"]
 
@@ -143,12 +143,21 @@ class CallHandling(Scenario):
         "issue_credit": "Apply an account credit for the disputed amount on this call.",
     })
     policy: list[tuple[str, str]] = field(default_factory=lambda: [
+        ("policy-enterprise", "Enterprise accounts: transfer to the enterprise desk for anything other than a how-to question."),
         ("policy-billing-small", "Billing questions and disputes under $200: resolve in the bot. Explain the charge and adjust it if it is clearly wrong."),
         ("policy-billing-large", "Billing disputes of $200 or more: transfer to a billing agent."),
         ("policy-cancellation", "Cancellation requests: transfer to the retention team."),
         ("policy-outage", "Outage and service-down reports: resolve in the bot with the status page information and the current ETA."),
         ("policy-upgrade-howto", "Upgrades, plan changes and how-to questions: resolve in the bot."),
-        ("policy-enterprise", "Enterprise accounts: transfer to the enterprise desk for anything other than a how-to question."),
+    ])
+    policy_claims: list[PolicyClaim] = field(default_factory=lambda: [
+        PolicyClaim("policy-enterprise", "transfer_to_agent",
+                    ("billing_dispute/enterprise/*", "cancellation/enterprise", "outage/enterprise", "upgrade/enterprise")),
+        PolicyClaim("policy-billing-small", "resolve_in_bot", ("billing_dispute/*/*/small",)),
+        PolicyClaim("policy-billing-large", "transfer_to_agent", ("billing_dispute/*/*/large",)),
+        PolicyClaim("policy-cancellation", "transfer_to_agent", ("cancellation/*",)),
+        PolicyClaim("policy-outage", "resolve_in_bot", ("outage/*",)),
+        PolicyClaim("policy-upgrade-howto", "resolve_in_bot", ("upgrade/*", "how_to/*")),
     ])
     judge_rubric: str = (
         "A decision failed when the review reports a callback about the same issue, a cancellation, "

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -38,6 +39,15 @@ def tool_call_message(call_id: str, case: Case) -> dict[str, Any]:
                           "function": {"name": "decide_next_step", "arguments": args}}],
         "call": {"id": call_id, "type": "webCall"},
     }}
+
+
+def action_of(result: str) -> str:
+    """The action id in the tool's answer, whichever stack wrote it: "Next step: <id>." (the
+    one-model stacks) or "Decided: <label> (<id>)." (GPT-Live)."""
+    if "Next step: " in result:
+        return result.split("Next step: ", 1)[1].split(".", 1)[0].strip()
+    m = re.search(r"^Decided: [^(]*\(([a-z_]+)\)", result)
+    return m.group(1) if m else "?"
 
 
 def end_message(call_id: str, action: str) -> dict[str, Any]:
@@ -90,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         r = c.post("/vapi/webhook", json=tool_call_message(call_id, case)).json()
         decide_ms = (time.perf_counter() - t0) * 1000
         result = (r.get("results") or [{}])[0].get("result", "")
-        action = result.split("Next step: ", 1)[-1].split(".", 1)[0] if "Next step: " in result else "?"
+        action = action_of(result)
         c.post("/vapi/webhook", json=end_message(call_id, action))
         # The review and the seal happen off the request path; wait for the outcome to land.
         d = None
