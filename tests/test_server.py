@@ -3,9 +3,13 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi.testclient import TestClient
+import pytest
 
-import voice.server as server
+pytest.importorskip("fastapi", reason="the voice server's tests need the voice extra: uv sync --extra voice")
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+import voice.server as server  # noqa: E402
 from voice.agent import Caller, caller_line
 
 
