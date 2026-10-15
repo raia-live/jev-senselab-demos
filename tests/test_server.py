@@ -48,6 +48,26 @@ def test_a_stranger_gets_the_step_written_for_no_file():
     # The "nothing else" line is marked as an instruction, after a run in which it was read out.
     assert "Instructions for the assistant, not words for the caller: this is the one next step" in result
     assert "Why: 6 of 6 resolved on the call." in result
+    assert "Before the decision" not in result
+    # The caller rang back about the same thing: the result says so before the new step, so
+    # the agent owns it instead of telling them the earlier step went fine.
+    back = ("They are back about the same thing, two minutes after the last step we took for them (booked a specialist "
+            "callback). That step is on their record as not working, on that alone.")
+    d = SimpleNamespace(action="transfer_to_agent", then="A colleague takes it.", rang_back=back)
+    result = server.tool_result(d, b, record="r")
+    assert f"Why: r Before the decision: {back} Own it in one line" in result
+    result = server.tool_result(d, b, record="r", stack="realtime")
+    assert f"Why, in plain words and without the numbers: r First: {back} Say in one line" in result
+
+
+def test_one_turns_tool_calls_run_in_a_fixed_order():
+    # The reasoner may list decide_next_step before update_file in one turn. The refusal
+    # on file has to close the step it refuses before the new decision opens the next one.
+    calls = [{"id": "3", "function": {"name": "decide_next_step"}}, {"id": "1", "name": "identify_caller"},
+             {"id": "2", "function": {"name": "update_file"}}, {"id": "4", "function": {"name": "endCall"}},
+             {"id": "5", "function": {"name": "update_file"}}]
+    assert [tc["id"] for tc in server.tool_order(calls)] == ["1", "2", "5", "3", "4"]
+    assert server.tool_order([]) == []
 
 
 def test_variable_values_give_a_stranger_no_facts_to_repeat():

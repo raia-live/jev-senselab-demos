@@ -297,8 +297,13 @@ function apply(e, live) {
       }
       break; }
     case "file_updated": {
-      (c.fileUpdates = c.fileUpdates || []).push({ t: e.t, kind: e.kind, value: e.value });
-      if (live && isCur) { glow("sl"); pulse("e-riley-sl", { label: `on file: ${esc(e.kind)}`, color: C.riley }); status("sl", `${e.kind} on file`); caption(`<span class="sl">On ${esc(c.caller.name || "the caller")}'s file:</span> ${esc(e.kind)} ${esc(e.value)}.`, `The caller gave it, ${esc(AGENT)} read it back, and it went to SenseLab the moment they confirmed. It is in the brief from the first word of their next call.`); }
+      const detail = e.detail || "note";
+      (c.fileUpdates = c.fileUpdates || []).push({ t: e.t, kind: detail, value: e.value });
+      if (live && isCur) {
+        glow("sl"); pulse("e-riley-sl", { label: `on file: ${esc(detail)}`, color: C.riley }); status("sl", `${detail} on file`);
+        if (detail === "outcome") caption(`<span class="sl">On ${esc(c.caller.name || "the caller")}'s file, in their words:</span> ${esc(e.value)}.`, `What came of the last step, as the caller tells it. If that step was still waiting on its outcome, this is the outcome: the run is sealed on their word, and the record for callers in their situation changes with it. Nobody clicked anything.`);
+        else caption(`<span class="sl">On ${esc(c.caller.name || "the caller")}'s file:</span> ${esc(detail)} ${esc(e.value)}.`, `The caller gave it, ${esc(AGENT)} read it back, and it went to SenseLab the moment they confirmed. It is in the brief from the first word of their next call.`);
+      }
       break; }
     case "identified": {
       if (e.matched) c.caller = e.caller;
@@ -369,13 +374,14 @@ function apply(e, live) {
           (e.alone_action ? (differs ? `<b>Jev alone, on the written policy, would have chosen ${esc(ACTION[e.alone_action] || e.alone_action)}</b> (${Math.round(e.alone_confidence * 100)}%). ` : `Jev alone would have chosen the same. `) : "")
           + (e.basis && e.basis !== "none" ? `The decision rested on <span class="mono">${esc(e.basis)}</span>. ` : "")
           + armNote(e)
+          + (e.rang_back ? `<b>They rang back about the same thing.</b> The step from their earlier call was still waiting on its outcome; ringing back is the outcome, so it was sealed as not working before this decision, with nobody pressing anything, and ${esc(AGENT)} says so first. ` : "")
           + `${esc(AGENT)} tells the caller, in their own words.`);
       }
       refreshDecision(id);
       break; }
     case "call_ended": {
       c.end = e.t;
-      if (live && isCur) { unglow("you"); unglow("riley"); status("riley", "call over"); pulse("e-riley-world", { label: "call ended", color: C.riley }); glow("world", 2500); caption(`Call ended.`, REPORTED ? `Now the world replies: did that work? Mark it in Details when you know (or POST /api/outcome from the system that does). The lesson is written the moment it lands.` : `Now the world replies: did that work? In production it is the survey, the churn, the callback that did or did not happen. The demo's world answers at once.`); }
+      if (live && isCur) { unglow("you"); unglow("riley"); status("riley", "call over"); pulse("e-riley-world", { label: "call ended", color: C.riley }); glow("world", 2500); caption(`Call ended.`, REPORTED ? `Now the world replies: did that work? ${esc(AGENT)} marks it from the next call when the caller says so, or rings back about the same thing; a system that knows can POST /api/outcome, and Details has a switch for a human. The lesson is written the moment it lands.` : `Now the world replies: did that work? In production it is the survey, the churn, the callback that did or did not happen. The demo's world answers at once.`); }
       break; }
     case "outcome": {
       c.outcome = { t: e.t, success: e.success, note: e.note, cost: e.cost_usd, seal_ms: e.seal_ms, trace: e.trace_id, keys: e.causal_keys || [], alone: e.alone || null };
@@ -389,7 +395,8 @@ function apply(e, live) {
              : !e.success && al.success ? `Jev alone would have chosen ${esc(ACTION[al.action] || al.action)}, which would have worked; the lesson from this call corrects that. `
              : `Jev alone would have chosen ${esc(ACTION[al.action] || al.action)}${al.success ? ", also fine" : ", also a miss"}. `)
           : "Jev alone would have done the same. ";
-        caption(`<span class="${e.success ? "ok" : "bad"}">${e.success ? "That worked." : "That did not work."}</span> Sealed to <span class="sl">SenseLab</span>, lesson written.`, `${esc(e.note)}${e.cost_usd ? ` The miss cost $${Number(e.cost_usd).toLocaleString()}.` : ""} ${vs}The next caller in this situation gets Jev's answer with this lesson in front of it. That loop is the RSI.`);
+        const how = e.source === "caller" ? ` ${esc(AGENT)} marked it from the call itself: no button, no review.` : "";
+        caption(`<span class="${e.success ? "ok" : "bad"}">${e.success ? "That worked." : "That did not work."}</span> Sealed to <span class="sl">SenseLab</span>, lesson written.`, `${esc(e.note)}${e.cost_usd ? ` The miss cost $${Number(e.cost_usd).toLocaleString()}.` : ""}${how} ${vs}The next caller in this situation gets Jev's answer with this lesson in front of it. That loop is the RSI.`);
         setTimeout(memory, 1500); setTimeout(state, 1500);
       }
       break; }

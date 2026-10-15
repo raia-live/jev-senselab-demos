@@ -2,8 +2,10 @@
 
 import datetime as dt
 import threading
+import time
 from types import SimpleNamespace
 
+from core.scenario import Outcome
 from voice.agent import Caller
 from voice.business import Business
 from voice.customers import (
@@ -210,6 +212,20 @@ def test_the_agent_notes_a_call_that_reached_no_decision():
     assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["call_id"] == "c-01a13944"
     ag._note_call({"id": "c-2", "caller": {}, "live": []}, None)  # no account matched: nothing to file it under
     assert len(writes) == 1
+    # A call with two decisions (the first refused, a second decided) keeps a line for each:
+    # the first under the call's key, the second under one that differs.
+    ag._lock = threading.Lock()
+    bruno = {"customer_id": "bruno-andrade"}
+    first = SimpleNamespace(id="c-01a13944:4", call_id="c-01a13944", caller=bruno, fields={"intent": "cancellation"},
+                            text="Bruno, consumer. Caller said: \"cancel\" Wants out.", action="transfer_to_agent")
+    second = SimpleNamespace(id="c-01a13944:5", call_id="c-01a13944", caller=bruno, fields={"intent": "cancellation"},
+                             text="Bruno, consumer. Caller said: \"no transfer\" Refused.", action="resolve_in_bot")
+    ag.decisions = [first, second]
+    ag._note_customer(first, Outcome(success=False, severity="failure", note="Caller said on this call: no transfer", true_success=False, cost_usd=0.0))
+    ag._note_customer(second, None)
+    assert writes[1][1] == "contact-" + dt.date.today().isoformat() + "-a13944" and writes[1][2]["worked"] is False
+    assert writes[2][1] == "contact-" + dt.date.today().isoformat() + "-139441" and writes[2][2]["worked"] is None
+    assert writes[1][1] != writes[2][1]
 
 
 def test_a_caller_who_says_their_name_is_matched_to_an_account():
@@ -294,7 +310,7 @@ def test_the_agent_puts_a_detail_on_the_callers_record_and_the_number_in_the_boo
     assert ag.phonebook.who("+16505550199") == ({"name": "Bruno", "tier": "consumer", "prior_contacts_30d": 3, "tenure_months": 39,
                                                   "customer_id": "bruno-andrade"}, "number")  # a call from it is Bruno
     assert ag.calls["c1"]["customer_brief"].endswith("On file now (phone number, given on this call): six five zero, five five five, zero one nine nine.")
-    assert ag.events[-1][0] == "file_updated" and ag.events[-1][1]["kind"] == "phone"
+    assert ag.events[-1][0] == "file_updated" and ag.events[-1][1]["detail"] == "phone"
     assert ag.update_file("c1", {"kind": "phone", "value": ""}) == "Nothing to put on file: say what the detail is."
     ag.calls["c2"] = {"id": "c2", "caller": {"name": "", "customer_id": ""}}
     assert ag.update_file("c2", {"kind": "email", "value": "sam@example.com"}).startswith("No account matched this caller")
@@ -323,7 +339,9 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
     ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
     ag.calls, ag.events, ag._lock, ag.phonebook = {}, [], threading.Lock(), None
     ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
-    ag.report_outcome = lambda did, outcome, source="review": sealed.append((did, outcome.success, outcome.note, source))  # type: ignore[method-assign]
+    # The seal (trace, lesson, record) is slow and runs off the call's path; here it runs inline.
+    ag._pool = SimpleNamespace(submit=lambda fn, *a, **kw: fn(*a, **kw))
+    ag._seal = lambda p, outcome, source="review": sealed.append((p.decision.id, outcome.success, outcome.note, source))  # type: ignore[method-assign]
     bruno = {"name": "Bruno", "tier": "consumer", "prior_contacts_30d": 3, "tenure_months": 39, "customer_id": "bruno-andrade"}
     earlier = SimpleNamespace(decision=SimpleNamespace(id="c0:0", call_id="c0", at=100.0, caller=bruno, action="schedule_callback"))
     older = SimpleNamespace(decision=SimpleNamespace(id="b0:0", call_id="b0", at=50.0, caller=bruno, action="issue_credit"))
@@ -334,14 +352,28 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
     assert sealed == [("c0:0", False, "Caller said on a later call: nobody called me", "caller")]  # the latest of theirs, not Priya's
     assert ("That closes the earlier step (booked a specialist callback) as did not work, on their word; "
             "the record for callers in their situation now says so.") in text
+    assert "c0" not in ag._pending and ag._pending["b0"] == [older]  # off the open list; the other step stays open
     # Whatever it closed, the file update arranges nothing: the next step is the decision's.
     assert text.endswith("decide_next_step says what happens, and no step is promised before it has answered.")
     assert writes[-1][1].startswith("note-") and writes[-1][2]["kind"] == "outcome"
+    # Jev sees it at the next decision on this call, under the own-record heading.
+    assert ag.calls["c1"]["said_on_call"] == ['they said the step from their last call (booked a specialist callback) did not hold, '
+                                              'in their words: "nobody called me".']
+    # The caller refuses the step taken a minute ago on THIS call ("no, don't transfer me"):
+    # that is the outcome of this call's own open step, and the result says to decide again.
+    mine = SimpleNamespace(decision=SimpleNamespace(id="c1:0", call_id="c1", at=300.0, caller=bruno, action="transfer_to_agent"))
+    ag._pending = {"c1": [mine]}
+    text = ag.update_file("c1", {"kind": "outcome", "value": "No, I don't want to be transferred, cancel it now", "worked": False})
+    assert sealed[-1] == ("c1:0", False, "Caller said on this call: No, I don't want to be transferred, cancel it now", "caller")
+    assert "That closes the step taken on this call (transferred the call to an agent) as did not work, on their word" in text
+    assert text.endswith("decide_next_step again, with what they said as the new fact: it is the only way a different step comes back.")
+    assert ag._pending == {} and ag.calls["c1"]["said_on_call"][-1].startswith("they said the step taken a moment ago on this call "
+                                                                                 "(transferred the call to an agent) did not hold")
     # Nothing open for this caller and no record fetched: the note still goes on file.
     ag._pending, ag._customer = {}, {}
     text = ag.update_file("c1", {"kind": "outcome", "value": "they did call, thanks", "worked": "true"})
     assert text.startswith("On file: what came of the last step, in the caller's words they did call, thanks.") and "closes" not in text
-    assert len(sealed) == 1 and writes[-1][2]["value"] == "they did call, thanks"
+    assert len(sealed) == 2 and writes[-1][2]["value"] == "they did call, thanks"
     # Nothing open, but the file has the line the demo world wrote ("called back next
     # morning; CSAT 5/5"): the caller's word replaces it, under the same key, and the step
     # is marked as not holding. That is the 17:37 call: John told Bruno the specialist had
@@ -360,7 +392,9 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
                                      "on a later call: nobody called back. It did not hold.")
     assert "key" not in amended[0][2] and mem.contacts[0]["worked"] is False  # the in-hand record agrees
     assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["amended"] is True
-    assert len(sealed) == 1
+    assert len(sealed) == 2  # amending the file seals nothing
+    assert ag.calls["c1"]["said_on_call"][-1] == ('they said the step from their last call (booked a specialist callback) did not '
+                                                  'hold, in their words: "nobody called back".')
     # Already saying what the caller says: nothing to rewrite.
     n = len(writes)
     ag.update_file("c1", {"kind": "outcome", "value": "still nothing", "worked": False})
@@ -375,6 +409,84 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
     text = ag.update_file("c1", {"kind": "outcome", "value": "nobody called", "worked": False})
     assert "(booked a specialist callback) now carries their word: it did not hold" in text
     assert writes[-1][1] == k_open and writes[-1][2]["worked"] is False and writes[-2][1].startswith("note-")
+
+
+def test_a_caller_ringing_back_about_the_same_thing_closes_the_open_step_as_not_working():
+    # Outcomes are reported. Priya was transferred at 21:22 and rang back at 21:24 about the
+    # same cancellation: nobody needs to press a button, the ring-back is the outcome. Every
+    # open step of hers on that problem is sealed as a failure, Jev's view of her record says
+    # so, and the result tells the agent to own it. Steps on other problems, other callers'
+    # steps and this call's own stay open.
+    from voice.agent import LiveAgent, _ago
+
+    assert [_ago(s) for s in (10, 125, 1800, 7000, 3600 * 5, 86400 * 3, 86400 * 40)] == [
+        "a minute", "two minutes", "30 minutes", "two hours", "five hours", "three days", "40 days"]
+    writes: list[tuple[str, str, dict]] = []
+    sealed: list[tuple[str, bool, str, str]] = []
+
+    class _Mem:
+        def write(self, entity, key, value, **_kw):
+            writes.append((entity, key, value))
+
+    class _Client:
+        def memory(self, _agent_id):
+            return _Mem()
+
+    ag = LiveAgent.__new__(LiveAgent)
+    ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
+    ag.calls, ag.events, ag._lock, ag._customer = {}, [], threading.Lock(), {}
+    ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
+    ag._pool = SimpleNamespace(submit=lambda fn, *a, **kw: fn(*a, **kw))
+    ag._seal = lambda p, outcome, source="review": sealed.append((p.decision.id, outcome.success, outcome.note, source))  # type: ignore[method-assign]
+    priya = {"name": "Priya", "tier": "consumer", "prior_contacts_30d": 1, "tenure_months": 20, "customer_id": "priya-raman"}
+    now = time.time()
+
+    def pend(did, call_id, at, caller, intent, action):
+        return SimpleNamespace(decision=SimpleNamespace(id=did, call_id=call_id, at=at, caller=caller, action=action,
+                                                        fields={"intent": intent}, situation=f"{intent}/consumer"))
+
+    first = pend("p0:0", "p0", now - 130, priya, "cancellation", "transfer_to_agent")
+    again = pend("p0:1", "p0", now - 100, priya, "cancellation", "transfer_to_agent")
+    billing = pend("p1:0", "p1", now - 3000, priya, "billing_dispute", "schedule_callback")
+    bruno = pend("b0:0", "b0", now - 60, {**priya, "name": "Bruno", "customer_id": "bruno-andrade"}, "cancellation", "transfer_to_agent")
+    mine = pend("p2:0", "p2", now - 5, priya, "cancellation", "transfer_to_agent")
+    ag._pending = {"p0": [first, again], "p1": [billing], "b0": [bruno], "p2": [mine]}
+    ag.calls["p2"] = {"id": "p2", "caller": priya}
+    text = ag._rang_back("p2", "priya-raman", "cancellation")
+    assert text == ("They are back about the same thing, two minutes after the last step we took for them (transferred the "
+                    "call to an agent). That step is on their record as not working, on that alone.")
+    assert sealed == [("p0:0", False, "Rang back about the same thing two minutes later", "caller"),
+                      ("p0:1", False, "Rang back about the same thing two minutes later", "caller")]
+    assert ag._pending == {"p1": [billing], "b0": [bruno], "p2": [mine]}
+    assert ag.calls["p2"]["said_on_call"] == ["they are back about the same thing, two minutes after the last step we took for "
+                                              "them (transferred the call to an agent); that step did not hold, on that alone."]
+    # A stranger, a different problem, or nothing open: nothing happens. And once per call and
+    # problem: a second decision on the same call (she refuses the step) does not mark it again.
+    assert ag._rang_back("p2", "", "cancellation") == "" and ag._rang_back("p2", "priya-raman", "outage") == ""
+    assert ag._rang_back("p2", "priya-raman", "cancellation") == "" and len(sealed) == 2
+    assert ag.calls["p2"]["rang_back_for"] == ["cancellation", "outage"]
+    ag.calls["p3"] = {"id": "p3", "caller": priya}
+    ag._pending.pop("p2")  # this call's own step, closed some other way
+    assert ag._rang_back("p3", "priya-raman", "cancellation") == "" and len(sealed) == 2  # nothing open, no file in hand
+    # Nothing open in this process (the server was restarted since), but her file carries the
+    # step with its outcome not in yet: the file's line gets the ring-back instead.
+    ag.calls["p4"] = {"id": "p4", "caller": priya}
+    k_open, v_open = contact_entry("fake-01a13a5d", intent="cancellation", summary="not using it enough", action="transfer_to_agent",
+                                   outcome_note="", worked=None, agent_name="John", action_words=BUSINESS.action_words(),
+                                   today=TODAY, now=dt.datetime.now(dt.UTC) - dt.timedelta(days=2))
+    k_other, v_other = contact_entry("fake-01a13a00", intent="billing_dispute", summary="s", action="schedule_callback",
+                                     outcome_note="", worked=None, agent_name="John", action_words=BUSINESS.action_words(), today=TODAY)
+    mem = CustomerMemory.from_entries("priya-raman", [SimpleNamespace(key=k_open, value=v_open), SimpleNamespace(key=k_other, value=v_other)])
+    ag._customer = {"p4": SimpleNamespace(result=lambda timeout=None: mem)}
+    text = ag._rang_back("p4", "priya-raman", "cancellation")
+    assert text.startswith("They are back about the same thing, two days after the last step we took for them (transferred the call to an agent).")
+    assert writes[-1][1] == k_open and writes[-1][2]["worked"] is False
+    assert writes[-1][2]["text"].endswith("What came of it: Caller said on a later call: they rang back about it two days later. It did not hold.")
+    assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["amended"] is True and len(sealed) == 2
+    assert ag.calls["p4"]["said_on_call"][0].startswith("they are back about the same thing, two days after")
+    ag.calls["p5"] = {"id": "p5", "caller": priya}
+    ag._customer["p5"] = ag._customer["p4"]
+    assert ag._rang_back("p5", "priya-raman", "cancellation") == ""  # the line now says so; nothing left open on it
 
 
 def test_calls_on_one_day_sort_by_the_minute_and_the_brief_says_how_long_ago():

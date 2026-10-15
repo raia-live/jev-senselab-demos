@@ -266,16 +266,37 @@ def tool_result(d: Any, business: Business, *, record: str = "", stack: str = "l
     the result is plain facts; on the one-model stacks the reader is the voice itself, and
     the result also says how to deliver it."""
     label = business.action(d.action).label
+    # They rang back about the same thing: the earlier step is already marked as not
+    # working, and the agent says so before the new step, instead of pretending it held.
+    back = getattr(d, "rang_back", None) or ""
     if stack == "live":
         why = f" Why: {record}" if record else ""
-        return (f"Decided: {label.lower()} ({d.action}). What happens now: {d.then}{why} Instructions for the "
+        rang = (f" Before the decision: {back} Own it in one line (the earlier step did not happen for them, and it "
+                f"is on their file as such) before saying what happens now.") if back else ""
+        return (f"Decided: {label.lower()} ({d.action}). What happens now: {d.then}{why}{rang} Instructions for the "
                 f"assistant, not words for the caller: this is the one next step on this call, offer nothing else; "
                 f"any detail taken from the caller (a number, a time) is repeated back to them once.")
     why = f" Why, in plain words and without the numbers: {record}" if record else ""
+    rang = (f" First: {back} Say in one line that you can see it did not happen for them and it is on their file as "
+            f"such, then the new step.") if back else ""
     return (f"Next step: {d.action}. Decided: {label.lower()}. This is what happens on this call; do not offer, "
-            f"hint at or agree to anything else. {d.then}{why} Say it the way you would to a friend, in a sentence "
+            f"hint at or agree to anything else. {d.then}{why}{rang} Say it the way you would to a friend, in a sentence "
             f"or two, with the reason, then let them respond. Confirm any detail you take from them by repeating it "
             f"back. Do not end the call until they have said they are done.")
+
+
+_TOOL_RANK = {"identify_caller": 0, "update_file": 1, "recall_customer": 2, "decide_next_step": 3}
+
+
+def tool_order(tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The order to run one turn's tool calls in, whatever order the model listed them: who
+    is calling, then what they said goes on file, then the decision. A refusal put on file
+    ("no, don't transfer me") has to close the step it refuses before the new decision opens
+    the next one, or it would close the wrong step. Stable within a rank."""
+    def rank(tc: dict[str, Any]) -> int:
+        fn = tc.get("function") or {}
+        return _TOOL_RANK.get(str(fn.get("name") or tc.get("name") or ""), 9)
+    return sorted(tool_calls, key=rank)
 
 
 def tool_reply(tc: dict[str, Any], d: Any, business: Business, *, record: str = "", stack: str = "live") -> dict[str, Any]:
@@ -333,7 +354,7 @@ async def vapi_webhook(request: Request) -> JSONResponse:
         # live record of the caller's words that reaches the server (see note_turns).
         ag.note_turns(call_id, (msg.get("artifact") or {}).get("messages"))
         results = []
-        for tc in msg.get("toolCallList") or []:
+        for tc in tool_order(msg.get("toolCallList") or []):
             fn = tc.get("function") or {}
             name = str(fn.get("name") or tc.get("name") or "")
             args = fn.get("arguments") if fn else tc.get("parameters")

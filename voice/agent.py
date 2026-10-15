@@ -138,6 +138,9 @@ class LiveDecision:
     canary_arm: str | None = None
     memory_branch: str | None = None
     corrective_entries: list[str] = field(default_factory=list)  # rewritten rules in Jev's view
+    # Set when this call closed an earlier step for the same caller as not working, because
+    # they rang back about the same thing while it was still open.
+    rang_back: str | None = None
 
     def public(self) -> dict[str, Any]:
         d = asdict(self)
@@ -164,7 +167,9 @@ OWN_RECORD_NOTE = (
     "which steps were already taken for them and how each came out. 'Did not hold, on their word' there is a "
     "step we promised this caller that did not happen, and the policy on that applies to this call, whatever "
     "the tally says that step has done for other callers: the tally is about others, the file is about them. "
-    "A step that held for them counts for taking it again. A step still open for them says nothing either way."
+    "A step that held for them counts for taking it again. A step still open for them says nothing either way. "
+    "A line 'from this call' is what this call has shown so far: a step they refused on this call, in their words, "
+    "did not hold for them, the same as one that was promised and did not happen."
 )
 
 _NOTHING_ARRANGED = (" Nothing is arranged by this. If they still need something done about it, that is a request for "
@@ -176,6 +181,28 @@ def _truthy(v: Any) -> bool:
     if isinstance(v, bool):
         return v
     return str(v or "").strip().lower() in ("true", "yes", "y", "1", "worked", "it worked", "ok")
+
+
+def _ago(seconds: float) -> str:
+    """A span of time the way it is said on a call: "two minutes", "an hour", "three days"."""
+    words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+    s = max(0.0, seconds)
+    if s < 90:
+        return "a minute"
+    if s < 90 * 60:
+        n = int(round(s / 60))
+        return f"{words.get(n, str(n))} minutes"
+    if s < 36 * 3600:
+        n = max(1, int(round(s / 3600)))
+        return "an hour" if n == 1 else f"{words.get(n, str(n))} hours"
+    n = int(round(s / 86400))
+    return f"{words.get(n, str(n))} days"
+
+
+def _since(stamp: str) -> str:
+    """How long ago a file entry's stamp (ISO, as customers.py writes it) was, in words."""
+    minutes = cust._minutes_since(stamp)
+    return _ago(minutes * 60) if minutes is not None else "some time"
 
 
 def _int(v: Any, default: int) -> int:
@@ -448,7 +475,7 @@ class LiveAgent:
             call.setdefault("file_updates", []).append({"kind": entry["kind"], "value": value, "note": note, "t": time.time()})
             if call.get("customer_brief"):
                 call["customer_brief"] += f"\nOn file now ({what}, given on this call): {value or note}."
-        self._event("file_updated", {"call_id": call_id, "customer_id": customer_id, "kind": entry["kind"], "key": key,
+        self._event("file_updated", {"call_id": call_id, "customer_id": customer_id, "detail": entry["kind"], "key": key,
                                      "value": value[:80], "note": note[:120]})
         closed = ""
         if entry["kind"] == "outcome":
@@ -465,19 +492,111 @@ class LiveAgent:
         with self._lock:
             earlier = [p for cid, ps in self._pending.items() if cid != call_id for p in ps
                        if str(p.decision.caller.get("customer_id") or "") == customer_id]
-        if not earlier:
+            # No earlier call open: the step they are talking about may be the one taken a
+            # minute ago on this call ("no, I won't be transferred, cancel it now"). Their
+            # refusal is that step's outcome.
+            on_this_call = not earlier
+            if on_this_call:
+                earlier = [p for p in self._pending.get(call_id, [])
+                           if str(p.decision.caller.get("customer_id") or "") in ("", customer_id)]
+            p = max(earlier, key=lambda p: p.decision.at) if earlier else None
+            if p is not None:
+                # Off the open list under the lock; the seal runs off the call's path (it is
+                # slow, and the caller is on the line waiting for the next step).
+                self._pending[p.decision.call_id].remove(p)
+                if not self._pending[p.decision.call_id]:
+                    del self._pending[p.decision.call_id]
+        if p is None:
             return self._amend_record(call_id, customer_id, worked=worked, words=words)
-        p = max(earlier, key=lambda p: p.decision.at)
         severity = "success" if worked else "failure"
-        outcome = Outcome(success=worked, severity=severity, note=f"Caller said on a later call: {words}"[:300],
+        said = f"Caller said on {'this' if on_this_call else 'a later'} call: {words}"[:300]
+        outcome = Outcome(success=worked, severity=severity, note=said,
                           true_success=worked, cost_usd=float(self.business.cost_by_severity.get(severity, 0.0)))
-        try:
-            self.report_outcome(p.decision.id, outcome, source="caller")
-        except KeyError:
-            return ""
+        self._pool.submit(self._seal, p, outcome, source="caller")
         did = self.business.action_words().get(p.decision.action) or p.decision.action.replace("_", " ")
+        # The record Jev reads at the next decision was fetched when the call started; what
+        # the caller just said goes in beside it, so the next step is weighed with it.
+        self._said_on_call(call_id, (f"they said the step {'taken a moment ago on this call' if on_this_call else 'from their last call'} "
+                                     f"({did}) {'held' if worked else 'did not hold'}, in their words: \"{words}\"."))
+        if on_this_call:
+            return (f" That closes the step taken on this call ({did}) as {'worked' if worked else 'did not work'}, on "
+                    "their word; the record for callers in their situation now says so. If their problem is still "
+                    "open, decide_next_step again, with what they said as the new fact: it is the only way a different "
+                    "step comes back.")
         return (f" That closes the earlier step ({did}) as {'worked' if worked else 'did not work'}, on their word; "
                 "the record for callers in their situation now says so." + _NOTHING_ARRANGED)
+
+    def _rang_back(self, call_id: str, customer_id: str, intent: str) -> str:
+        """A known caller is on the line about the same thing we took a step on for them
+        from an earlier call, and that step is still waiting on its outcome (outcomes are
+        reported, not simulated). Ringing back about it is the outcome: the step did not
+        work for them. Seal those decisions on it, so the record and the judge see it
+        without anyone pressing a button, and say so to the agent."""
+        if not customer_id:
+            return ""
+        with self._lock:
+            # Once per call and problem: a second decision on the same call (they refused the
+            # step, the facts changed) must not mark the earlier step again, and the record
+            # fetched when the call started still shows it open.
+            call = self.calls.get(call_id)
+            seen = call.setdefault("rang_back_for", []) if call is not None else []
+            if intent in seen:
+                return ""
+            seen.append(intent)
+            earlier = [p for cid, ps in self._pending.items() if cid != call_id for p in ps
+                       if str(p.decision.caller.get("customer_id") or "") == customer_id
+                       and str(p.decision.fields.get("intent") or p.decision.situation.split("/")[0]) == intent]
+            # Off the open list now, under the lock, so nothing seals them twice; the seal
+            # itself (the trace, the lesson, the record) is slow and runs off the call's path.
+            for p in earlier:
+                self._pending[p.decision.call_id].remove(p)
+                if not self._pending[p.decision.call_id]:
+                    del self._pending[p.decision.call_id]
+        closed: list[tuple[str, str]] = []
+        for p in sorted(earlier, key=lambda p: p.decision.at):
+            ago = _ago(time.time() - p.decision.at)
+            did = self.business.action_words().get(p.decision.action) or p.decision.action.replace("_", " ")
+            outcome = Outcome(success=False, severity="failure", note=f"Rang back about the same thing {ago} later",
+                              true_success=False, cost_usd=float(self.business.cost_by_severity.get("failure", 0.0)))
+            self._pool.submit(self._seal, p, outcome, source="caller")
+            closed.append((did, ago))
+        if not closed:
+            # Nothing open in this process: a step from before the server last started is on
+            # their file with its outcome not in yet. The file's line gets their ring-back.
+            memory = self._customer_memory(call_id, wait_s=2.0)
+            about = f"Called about {intent.replace('_', ' ')}:"
+            steps = [c for c in (memory.contacts if memory else []) if c.get("action") and not c.get("seeded")
+                     and c.get("key") and c.get("worked") is None and str(c.get("text") or "").startswith(about)]
+            if not steps:
+                return ""
+            last = steps[0]  # newest first
+            ago = _since(str(last.get("at") or last.get("date") or ""))
+            value = cust.amend_contact(last, worked=False, words=f"they rang back about it {ago} later")
+            try:
+                self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), str(last["key"]),
+                                                        value, confidence=1.0, memory_type="experience")
+            except Exception as exc:  # noqa: BLE001
+                log.warning("amending %s for %s: %s", last["key"], customer_id, exc)
+                return ""
+            last.update(value)
+            did = self.business.action_words().get(str(last["action"])) or str(last["action"]).replace("_", " ")
+            self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"],
+                                           "text": value["text"], "amended": True})
+            closed.append((did, ago))
+        did, ago = closed[-1]
+        self._said_on_call(call_id, f"they are back about the same thing, {ago} after the last step we took for them "
+                                    f"({did}); that step did not hold, on that alone.")
+        return (f"They are back about the same thing, {ago} after the last step we took for them ({did}). That step "
+                f"is on their record as not working, on that alone.")
+
+    def _said_on_call(self, call_id: str, line: str) -> None:
+        """A line for Jev's view of this caller's record, learned on this call (their word on
+        a step, a ring-back), kept on the call since the record itself was fetched at its
+        start. Read back by ``decide``."""
+        with self._lock:
+            call = self.calls.get(call_id)
+            if call is not None:
+                call.setdefault("said_on_call", []).append(line)
 
     def _amend_record(self, call_id: str, customer_id: str, *, worked: bool, words: str) -> str:
         """No open decision to seal (it was sealed already, or by an earlier run of the
@@ -502,6 +621,8 @@ class LiveAgent:
         did = self.business.action_words().get(str(last["action"])) or str(last["action"]).replace("_", " ")
         self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"], "text": value["text"],
                                        "amended": True})
+        self._said_on_call(call_id, f"they said the step from their last call ({did}) {'held' if worked else 'did not hold'}, "
+                                    f"in their words: \"{words}\".")
         return (f" The file's line on that step ({did}) now carries their word: it {'worked' if worked else 'did not hold'}."
                 + _NOTHING_ARRANGED)
 
@@ -759,6 +880,8 @@ class LiveAgent:
         this one) and, when there is one, this caller's own record with the steps."""
         with self._lock:
             own = str((self.calls.get(call_id) or {}).get("caller_record") or "")
+        # The ring-back line is in the result on its own ("Before the decision"); not twice.
+        own = "\n".join(line for line in own.splitlines() if "they are back about the same thing" not in line)
         return " ".join(x for x in (self.situation_record_words(situation), own) if x)
 
     def situation_record_words(self, situation: str) -> str:
@@ -812,7 +935,13 @@ class LiveAgent:
         customer_id = str(d.caller.get("customer_id") or "")
         if not customer_id:
             return
-        key, value = cust.contact_entry(d.call_id, intent=str(d.fields.get("intent") or self.business.fallback_intent),
+        # One line per decision, not per call: a call with two steps (the first refused, a
+        # second decided) keeps both, under keys that differ past the first.
+        with self._lock:
+            ids = [x.id for x in self.decisions if x.call_id == d.call_id]
+        k = ids.index(d.id) if d.id in ids else 0
+        key, value = cust.contact_entry(d.call_id if k == 0 else f"{d.call_id}-{k}",
+                                        intent=str(d.fields.get("intent") or self.business.fallback_intent),
                                         summary=d.text.split(". ", 2)[-1][:240] if ". " in d.text else d.text[:240],
                                         action=d.action, outcome_note=outcome.note if outcome else "",
                                         worked=outcome.success if outcome else None,
@@ -856,6 +985,9 @@ class LiveAgent:
         situation = self.business.situation_of(fields)
         self._event("tool_call", {"call_id": call_id, "intent": intent, "situation": situation, "summary": summary[:160],
                                   "said": said[:160]})
+        # Back about the same thing while an earlier step for them is still open: that step
+        # did not work. Sealed here, before the decision, so the record Jev weighs says so.
+        rang_back = self._rang_back(call_id, c.customer_id, intent)
         n = len(self.decisions)
         # In simulated mode the scenario knows the hidden right answer (for the review when
         # the call ends); in reported mode there is none, the outcome will say.
@@ -880,6 +1012,12 @@ class LiveAgent:
         # half: the per-customer entries) goes in beside the situation's guidance, so a step
         # that has already failed this caller is weighed as such.
         own = cust.track_record(self._customer_memory(call_id, wait_s=2.0), self.business.action_words())
+        # What this call itself has shown about them (their word on a step, a ring-back) is
+        # not in that record yet; it goes in beside it, under the same heading, so Jev
+        # weighs it the same way.
+        with self._lock:
+            said_on_call = list(call.get("said_on_call") or [])
+        own = "\n".join([own, *(f"This caller's own record, from this call: {line}" for line in said_on_call)]).strip()
         with self._lock:
             call["caller_record"] = own
         guided = f"{memory_text}\n{own}".strip() if own else memory_text
@@ -913,6 +1051,7 @@ class LiveAgent:
             alone_confidence=round(alone.confidence, 3) if alone else None,
             canary_arm=ep.trace.canary, memory_branch=ep.trace.memory_branch,
             corrective_entries=list(ep.trace.corrective_entries),
+            rang_back=rang_back or None,
         )
         with self._lock:
             self.decisions.append(live)
@@ -924,7 +1063,7 @@ class LiveAgent:
                                  "memory_ms": live.memory_ms, "jev_ms": live.jev_ms,
                                  "alone_action": live.alone_action, "alone_confidence": live.alone_confidence,
                                  "canary_arm": live.canary_arm, "memory_branch": live.memory_branch,
-                                 "corrective_entries": live.corrective_entries})
+                                 "corrective_entries": live.corrective_entries, "rang_back": live.rang_back})
         return live
 
     # -- the outcome -----------------------------------------------------------------------
@@ -1073,6 +1212,11 @@ class LiveAgent:
             self._pending[cid].remove(p)
             if not self._pending[cid]:
                 del self._pending[cid]
+        return self._seal(p, outcome, source=source)
+
+    def _seal(self, p: _Pending, outcome: Outcome, *, source: str) -> LiveDecision:
+        """The slow half of ``report_outcome``, for a decision already taken off ``_pending``:
+        commit the trace, write the lesson and the record, tell the page."""
         d = p.decision
         d.outcome = {**outcome.to_row(), "source": source, "at": time.time()}
         t0 = time.perf_counter()
@@ -1188,7 +1332,9 @@ class LiveAgent:
         ``t`` (a speech stop known only after the pause, a turn reported after the fact)."""
         with self._lock:
             self._seq += 1
-            self.events.append({"seq": self._seq, "t": time.time(), "kind": kind, **data})
+            # The event's kind is *kind*, whatever the data carries under that name (a file
+            # update's detail kind used to overwrite it, and the page never saw the update).
+            self.events.append({"seq": self._seq, "t": time.time(), **data, "kind": kind})
             del self.events[:-500]
         log.info("%s %s", kind, {k: v for k, v in data.items() if k not in ("memory_text",)})
 

@@ -154,15 +154,34 @@ agent either rule. The page marks these outcomes "demo world".
 
 To report outcomes yourself instead (your own CRM, a survey, a person), set
 `outcomes.mode = "reported"` in the business file, or `VOICE_OUTCOMES=reported` for one run.
-Then nothing is assumed when a call ends: the decision waits, "Details" shows an "It worked /
-It did not" control for it, and `POST /api/outcome` with `{"decision_id", "severity", "note"}`
-does the same from code. The caller can close it too: when they ring back and say what came
-of the last step ("nobody called me", "the credit showed up"), John puts that on their file
-(`update_file`, kind `outcome`) and the open decision is sealed on their word, so what
-SenseLab learns from that call is what happened. If nothing is open (the decision was sealed
-already, or by an earlier run of the server), the line on their file for that step is
-rewritten with their word instead: the caller's word wins over a verdict reached without
-them. The lesson is written the moment the outcome lands, however long that takes. In simulated mode a single call can still be held back with
+Then nothing is assumed when a call ends: the decision waits. Most of the time the calls
+themselves close it, and John does the marking:
+
+- The caller says what came of the last step ("nobody called me", "the credit showed up").
+  John puts that on their file (`update_file`, kind `outcome`) and the open decision from
+  their earlier call is sealed on their word.
+- The caller rings back about the same thing while the step for it is still open. Ringing
+  back is the outcome: when John asks what happens next, every open decision of theirs on
+  that problem is sealed as not working ("Rang back about the same thing two minutes
+  later"), before the new decision is made, and John is told to own it ("I can see the
+  callback we booked didn't happen; that's on your file") instead of saying it went fine.
+  If the caller has said it did work, that goes on file first and nothing is marked against
+  it. A step from before the server last started is on their file with its outcome not in
+  yet; the ring-back rewrites that line instead.
+- The caller refuses the step John just gave them on this call ("no, I don't want to be
+  transferred, cancel it now"). That is the outcome of the step taken a minute ago: it goes
+  on file as not working, in their words, and John asks for the next step again with the
+  refusal as the new fact. Jev sees it under the caller's own record, so the second decision
+  is made knowing the first was refused. It may come back the same, and then John says so,
+  with the reason. Pushing back ("why would it work this time?") is not a refusal; John
+  answers from the record and the decision stands.
+
+The rest is for whoever else knows: `POST /api/outcome` with `{"decision_id", "severity",
+"note"}` from the system that does, and an "It worked / It did not" switch in "Details" for a
+person. If nothing is open when the caller's word arrives (the decision was sealed already),
+the line on their file for that step is rewritten with their word instead: the caller's word
+wins over a verdict reached without them. The lesson is written the moment the outcome lands,
+however long that takes. In simulated mode a single call can still be held back with
 `POST /api/calls/{id}/end` and `{"auto_review": false}`.
 
 Testing as yourself, use reported mode. In simulated mode the demo world decides at hang-up
