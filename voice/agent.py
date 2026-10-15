@@ -567,22 +567,22 @@ class LiveAgent:
             about = f"Called about {intent.replace('_', ' ')}:"
             steps = [c for c in (memory.contacts if memory else []) if c.get("action") and not c.get("seeded")
                      and c.get("key") and c.get("worked") is None and str(c.get("text") or "").startswith(about)]
-            if not steps:
+            for last in reversed(steps):  # oldest first, so the newest is what gets said
+                ago = _since(str(last.get("at") or last.get("date") or ""))
+                value = cust.amend_contact(last, worked=False, words=f"they rang back about it {ago} later")
+                try:
+                    self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), str(last["key"]),
+                                                            value, confidence=1.0, memory_type="experience")
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("amending %s for %s: %s", last["key"], customer_id, exc)
+                    continue
+                last.update(value)
+                did = self.business.action_words().get(str(last["action"])) or str(last["action"]).replace("_", " ")
+                self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"],
+                                               "text": value["text"], "amended": True})
+                closed.append((did, ago))
+            if not closed:
                 return ""
-            last = steps[0]  # newest first
-            ago = _since(str(last.get("at") or last.get("date") or ""))
-            value = cust.amend_contact(last, worked=False, words=f"they rang back about it {ago} later")
-            try:
-                self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), str(last["key"]),
-                                                        value, confidence=1.0, memory_type="experience")
-            except Exception as exc:  # noqa: BLE001
-                log.warning("amending %s for %s: %s", last["key"], customer_id, exc)
-                return ""
-            last.update(value)
-            did = self.business.action_words().get(str(last["action"])) or str(last["action"]).replace("_", " ")
-            self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"],
-                                           "text": value["text"], "amended": True})
-            closed.append((did, ago))
         did, ago = closed[-1]
         self._said_on_call(call_id, f"they are back about the same thing, {ago} after the last step we took for them "
                                     f"({did}); that step did not hold, on that alone.")

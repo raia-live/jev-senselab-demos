@@ -474,14 +474,21 @@ def test_a_caller_ringing_back_about_the_same_thing_closes_the_open_step_as_not_
     k_open, v_open = contact_entry("fake-01a13a5d", intent="cancellation", summary="not using it enough", action="transfer_to_agent",
                                    outcome_note="", worked=None, agent_name="John", action_words=BUSINESS.action_words(),
                                    today=TODAY, now=dt.datetime.now(dt.UTC) - dt.timedelta(days=2))
+    k_older, v_older = contact_entry("fake-01a13a5c", intent="cancellation", summary="first try", action="schedule_callback",
+                                     outcome_note="", worked=None, agent_name="John", action_words=BUSINESS.action_words(),
+                                     today=TODAY, now=dt.datetime.now(dt.UTC) - dt.timedelta(days=5))
     k_other, v_other = contact_entry("fake-01a13a00", intent="billing_dispute", summary="s", action="schedule_callback",
                                      outcome_note="", worked=None, agent_name="John", action_words=BUSINESS.action_words(), today=TODAY)
-    mem = CustomerMemory.from_entries("priya-raman", [SimpleNamespace(key=k_open, value=v_open), SimpleNamespace(key=k_other, value=v_other)])
+    mem = CustomerMemory.from_entries("priya-raman", [SimpleNamespace(key=k_open, value=v_open), SimpleNamespace(key=k_other, value=v_other),
+                                                      SimpleNamespace(key=k_older, value=v_older)])
     ag._customer = {"p4": SimpleNamespace(result=lambda timeout=None: mem)}
+    n = len(writes)
     text = ag._rang_back("p4", "priya-raman", "cancellation")
     assert text.startswith("They are back about the same thing, two days after the last step we took for them (transferred the call to an agent).")
-    assert writes[-1][1] == k_open and writes[-1][2]["worked"] is False
+    # Both open steps on that problem get it (oldest first); the billing one is left alone.
+    assert [w[1] for w in writes[n:]] == [k_older, k_open] and all(w[2]["worked"] is False for w in writes[n:])
     assert writes[-1][2]["text"].endswith("What came of it: Caller said on a later call: they rang back about it two days later. It did not hold.")
+    assert writes[-2][2]["text"].endswith("they rang back about it five days later. It did not hold.")
     assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["amended"] is True and len(sealed) == 2
     assert ag.calls["p4"]["said_on_call"][0].startswith("they are back about the same thing, two days after")
     ag.calls["p5"] = {"id": "p5", "caller": priya}
