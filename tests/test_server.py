@@ -70,6 +70,44 @@ def test_one_turns_tool_calls_run_in_a_fixed_order():
     assert server.tool_order([]) == []
 
 
+def test_the_server_notices_when_vapi_cannot_reach_it(monkeypatch):
+    # A dead tunnel is silent: the assistant talks, its tool calls go nowhere, the page shows
+    # a call with no decision and no end. The server rings its own doorbell through the
+    # public URL and /api/config says whether anyone answered, so the page can.
+    import httpx
+
+    monkeypatch.setattr(server.cfg, "public_url", "https://tunnel.example")
+    answers: list[Any] = []
+
+    def fake_get(url, **_kw):
+        assert url == "https://tunnel.example/api/ping"
+        a = answers.pop(0)
+        if isinstance(a, Exception):
+            raise a
+        return a
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    answers.append(httpx.ConnectError("tunnel offline"))
+    server._check_public_url()
+    assert server.reach["ok"] is False and server.reach["detail"] == "ConnectError: tunnel offline"
+    answers.append(SimpleNamespace(status_code=404, json=lambda: {}))  # ngrok's own page: the tunnel is gone
+    server._check_public_url()
+    assert server.reach["ok"] is False and server.reach["detail"] == "404 from https://tunnel.example"
+    answers.append(SimpleNamespace(status_code=200, json=lambda: {"token": "someone else"}))  # another server on that URL
+    server._check_public_url()
+    assert server.reach["ok"] is False and server.reach["detail"].endswith("answered by a different server")
+    answers.append(SimpleNamespace(status_code=200, json=lambda: {"token": server._REACH_TOKEN}))
+    server._check_public_url()
+    assert server.reach["ok"] is True and server.reach["detail"] == "" and server.reach["checked_at"]
+    monkeypatch.setattr(server.app.router, "on_startup", [])
+    monkeypatch.setattr(server.app.router, "on_shutdown", [])
+    monkeypatch.setattr(server, "agent", SimpleNamespace(changed=False))
+    c = TestClient(server.app)
+    assert c.get("/api/ping").json() == {"token": server._REACH_TOKEN}
+    conf = c.get("/api/config").json()
+    assert conf["public_url"] == "https://tunnel.example" and conf["reach"]["ok"] is True
+
+
 def test_variable_values_give_a_stranger_no_facts_to_repeat():
     # The Caller defaults (consumer, 14 months) are for a lookup that found an account. A
     # caller nobody matched must not hear them as facts about themselves.

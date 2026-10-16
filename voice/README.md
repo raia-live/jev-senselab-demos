@@ -65,6 +65,13 @@ updates the Vapi assistant "Jev support agent (SenseLab demo)" pointed at your t
 starts the repair loop watcher for the agent. Then open the page, pick who is calling, press
 Call, and talk.
 
+The server also checks, every few seconds, that it can reach itself through
+`VOICE_PUBLIC_URL`. A tunnel that has died is silent otherwise: Vapi cannot deliver the tool
+calls, so the agent keeps talking, nothing is decided or recorded, and the hang-up never
+arrives. When that happens the page shows a red bar saying so and keeps the call button off
+until the tunnel is back. If you restart ngrok without a reserved domain, its URL changes;
+restart the server with the new `VOICE_PUBLIC_URL` so the assistant is pointed at it again.
+
 Give the line some history first. A support line that has taken no calls has nothing to have
 learned, so before a demo send it the scenario's callers:
 

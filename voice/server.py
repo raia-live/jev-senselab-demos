@@ -30,6 +30,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from dataclasses import asdict
@@ -172,6 +173,43 @@ def _startup() -> None:
         log.info("using assistant %s from VAPI_ASSISTANT_ID", cfg.assistant_id)
     else:
         log.info("no VOICE_PUBLIC_URL: browser calls are off, text mode (POST /api/calls) works")
+    if cfg.public_url:
+        threading.Thread(target=_watch_public_url, name="public-url", daemon=True).start()
+
+
+# Whether Vapi can reach this server through the public URL. A dead tunnel is silent: the
+# assistant talks, its tool calls go nowhere, and the page shows a call with no decision.
+# So the server rings its own doorbell now and then and the page says when nobody answers.
+reach: dict[str, Any] = {"checked_at": None, "ok": None, "detail": ""}
+_REACH_TOKEN = uuid.uuid4().hex
+
+
+@app.get("/api/ping")
+def api_ping() -> dict[str, str]:
+    return {"token": _REACH_TOKEN}
+
+
+def _check_public_url() -> None:
+    import httpx
+
+    try:
+        r = httpx.get(f"{cfg.public_url}/api/ping", timeout=8.0, follow_redirects=True,
+                      headers={"ngrok-skip-browser-warning": "1"})
+        ok = r.status_code == 200 and (r.json().get("token") == _REACH_TOKEN)
+        detail = "" if ok else (f"{r.status_code} from {cfg.public_url}" + ("" if r.status_code != 200 else
+                                                                                ", answered by a different server"))
+    except Exception as exc:  # noqa: BLE001
+        ok, detail = False, f"{type(exc).__name__}: {exc}"[:160]
+    if ok is not reach["ok"]:
+        (log.info if ok else log.warning)("public URL %s %s", cfg.public_url, "reachable" if ok else f"NOT reachable: {detail}")
+    reach.update(checked_at=time.time(), ok=ok, detail=detail)
+
+
+def _watch_public_url() -> None:
+    time.sleep(3)  # the server is listening by then
+    while True:
+        _check_public_url()
+        time.sleep(20 if reach["ok"] else 5)
 
 
 @app.on_event("shutdown")
@@ -438,6 +476,7 @@ def api_config() -> dict[str, Any]:
         "entity_path": cfg.entity_path, "dashboard": S.DASHBOARD_URL, "browser_calls": bool(cfg.public_key and cfg.assistant_id),
         "noise": cfg.noise, "changed": _agent().changed, "phone_numbers": cfg.phone_numbers,
         "business": cfg.business.public(), "stack": cfg.stack,
+        "public_url": cfg.public_url or None, "reach": dict(reach),
     }
 
 

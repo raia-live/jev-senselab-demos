@@ -33,6 +33,7 @@
   .btn { padding:9px 16px; border-radius:10px; border:1px solid transparent; cursor:pointer; font-weight:600; font-size:13.5px; background:var(--panel); color:var(--ink-2); border-color:var(--line-2); white-space:nowrap; box-shadow:0 1px 2px rgba(16,24,40,.04); }
   .btn:hover { color:var(--ink); border-color:#9aa6bd; }
   .btn.go { background:var(--ok); color:#fff; border-color:transparent; } .btn.stop { background:#fef2f2; color:var(--bad); border-color:#fecaca; }
+  .reach { flex-basis:100%; background:#fef2f2; color:var(--bad); border:1px solid #fecaca; border-radius:8px; padding:6px 12px; font-size:13px; } .reach b { font-weight:600; } .reach .mono { font-family:ui-monospace,monospace; font-size:12px; }
   .btn.sm { padding:6px 10px; font-size:12px; font-weight:500; }
   .btn:disabled { opacity:.35; cursor:default; }
   .phone { display:flex; align-items:center; gap:10px; padding:6px 6px 6px 12px; border:1px dashed var(--line-2); border-radius:10px; font-family:var(--mono); font-size:13px; color:var(--ink-2); white-space:nowrap; }
@@ -123,6 +124,7 @@
     <div class="phone"><span id="phone">no number</span><button class="btn sm" id="usephone" title="Phone calls carry no account facts; this makes the next call to the number this caller">use this caller</button><span class="ok" id="phoneok"></span></div>
     <label class="tog" id="changed-wrap" title="The simulated world's mid-run change. The written policy does not change with it; nobody tells the agent."><input type="checkbox" id="changed"><span class="sw"></span><span id="changed-l">the change is live</span></label>
     <button class="btn" id="details">Details</button>
+    <div id="reach" class="reach" style="display:none"></div>
   </header>
 
   <section class="stage">
@@ -554,6 +556,24 @@ async function repair() {
   const intro = `Every sealed call is graded by a judge. Failures that share a cause become an incident; SenseLab drafts a rewrite of the rule behind them, replays past calls against it, splits live calls between the old rule and the new one, ships it to the policy entry when the split holds up and holds it back when it does not. ${r.sessions_sealed != null ? `${r.sessions_sealed} calls sealed since start.` : ""}`;
   el.innerHTML = `<div style="margin-bottom:8px">${intro}</div>` + (fixes.map(renderFix).join("") || `<div class="fix off">no rewrite proposed yet: it takes a few failures that the judge grades to the same rule</div>`);
 }
+// Whether Vapi can reach this server. With the tunnel down the assistant still talks, but its
+// tool calls go nowhere: no decision, no hang-up, a call that never ends on the page. Say so,
+// and keep the call button off until the server can hear its own doorbell again.
+let REACH_OK = null;
+async function reachCheck() {
+  const c = await (await fetch("/api/config")).json();
+  const r = c.reach || {}; const el = $("reach");
+  if (!c.public_url || r.ok !== false) {
+    el.style.display = "none";
+    if (REACH_OK === false && r.ok === true) caption(`<span class="ok">Vapi can reach this server again.</span>`, `Calls will decide and hang up normally.`);
+    REACH_OK = r.ok;
+  } else {
+    el.style.display = "";
+    el.innerHTML = `<b>Vapi cannot reach this server.</b> <span class="mono">${esc(c.public_url)}</span> does not answer (${esc(r.detail || "no reply")}). Is the tunnel running (<span class="mono">ngrok http 8787</span>)? Until it is, ${esc(AGENT)} will talk but nothing he says is decided or recorded: tool calls and the hang-up never arrive.`;
+    REACH_OK = false;
+  }
+  if (cfg.browser_calls && !liveCallId) $("call").disabled = REACH_OK === false;
+}
 async function state() {
   const st = await (await fetch("/api/state")).json();
   stateCalls = st.calls; st.decisions.forEach((d) => { lastDecision[d.call_id] = d; });
@@ -725,6 +745,7 @@ async function init() {
     } catch (e) { $("call").disabled = true; $("call").textContent = "browser calls unavailable"; console.error(e); }
   } else { $("call").disabled = true; $("call").textContent = "browser calls off"; $("drawer").classList.add("open"); }
   setInterval(tick, 400); setInterval(clock, 200); setInterval(state, 5000); setInterval(memory, 8000); memory();
+  setInterval(reachCheck, 5000); setTimeout(reachCheck, 4000);
   setInterval(repair, 20000); repair();
   window.addEventListener("resize", drawTimeline);
 }
