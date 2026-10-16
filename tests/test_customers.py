@@ -30,6 +30,18 @@ def test_personas_are_distinct_and_scripted():
     for p in PERSONAS:
         assert len(p.script) >= 3, p.id  # a conversation, not a phrase
         assert p.history, p.id
+    # A persona whose point is the demo world's switch says something else when outcomes
+    # are reported and there is no switch; the rest read the same in both modes.
+    priya = next(p for p in PERSONAS if p.id == "priya-raman")
+    assert "switch" in priya.label and "switch" in priya.why
+    shown = priya.for_mode(reported=True)
+    assert "switch" not in shown.label and "switch" not in shown.why and shown.id == priya.id and shown.script == priya.script
+    assert priya.for_mode(reported=False) is priya
+    for p in PERSONAS:
+        if p.id != "priya-raman":
+            assert p.for_mode(reported=True) is p and "switch" not in p.why, p.id
+    assert "switch" not in BUSINESS.public()["personas"][2]["label"] if not BUSINESS.simulated else True
+    assert "for_mode" not in shown.public() and shown.public()["label"] == shown.label
 
 
 def test_seed_entries_are_dated_oldest_first():

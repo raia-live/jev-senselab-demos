@@ -243,7 +243,9 @@ why = "A plain case: the bot explains the charge. The history says where the $29
 
 [[personas]]
 id = "priya-raman"
-label = "Priya, cancelling (consumer; flip the switch)"
+label = "Priya, cancelling (consumer; flip the retention switch)"
+# With reported outcomes there is no switch: Priya's own calls say whether the transfer kept her.
+label_reported = "Priya, cancelling (consumer; the transfer that does not hold)"
 name = "Priya"
 tier = "consumer"
 prior_contacts_30d = 0
@@ -261,7 +263,8 @@ script = [
   "What would the offer be?",
   "Hmm. Okay, I'll give it two more months then.",
 ]
-why = "With the retention offer off, a human saves the account. Turn it on and the bot's offer saves it instead; the written policy still says transfer. Watch SenseLab notice the switch."
+why = "With the retention offer off, a human saves the account. Turn it on (the 'retention offer live' switch in the header) and the bot's offer saves it instead; the written policy still says transfer. Watch SenseLab notice the switch."
+why_reported = "The written policy says transfer a consumer cancellation. Whether that keeps the account is for Priya to say: hang up and call back about cancelling, or tell John you don't want to be transferred, and the transfer goes on her record as not holding, with nobody marking anything. The next decision for her, and for callers like her, is made knowing it."
 
 [[personas]]
 id = "tomas-eriksen"

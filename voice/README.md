@@ -88,9 +88,13 @@ those lost this caller before and a specialist callback kept him. Jev with Sense
 callback. When you hang up, the world confirms it, the page tells you what Jev alone would
 have cost, and a line about this call is added to Bruno's history.
 
-Then flip "retention offer live" and call as Priya. The policy still says transfer. The
-first call transfers, the queue loses the caller, the review says so, and the next call keeps
-them in the bot.
+Then call as Priya. In simulated mode, flip "retention offer live" in the header first: the
+policy still says transfer, the first call transfers, the queue loses the caller, the review
+says so, and the next call keeps them in the bot. In reported mode there is no switch (the
+demo world is not deciding anything), and Priya's own calls do its work: ring back about
+cancelling, or tell John you will not be transferred, and the transfer goes on her record as
+not holding without anyone marking it (see Outcomes). The persona's label and note on the
+page change with the mode (`label_reported`, `why_reported` in the business file).
 
 The five callers come with a seeded history (`[[personas]]` in `voice/business.toml`), because
 a first demo call needs something to know; those entries are marked as seeded. Everything after

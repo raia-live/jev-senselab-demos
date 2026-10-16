@@ -349,7 +349,7 @@ class Business:
             "actions": [{"id": a.id, "label": a.label} for a in self.actions],
             "outcomes_mode": self.outcomes_mode, "change_rule": self.scenario.change_rule or None,
             "change_label": self.change_label or None,
-            "personas": [p.public() for p in self.personas], "file": str(self.path),
+            "personas": [p.for_mode(not self.simulated).public() for p in self.personas], "file": str(self.path),
             # The test calls, so voice.testcalls runs the business the server is running.
             "scenarios": [s.public() for s in self.scenarios],
         }

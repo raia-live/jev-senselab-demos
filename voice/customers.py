@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 
@@ -38,6 +38,11 @@ class Persona:
     script: list[str]
     why: str
     pushback: str = ""
+    # What the label and the "why" say when outcomes are reported, not simulated: a persona
+    # whose point is the demo world's switch has no switch to point at then. Empty means
+    # the same words in both modes.
+    label_reported: str = ""
+    why_reported: str = ""
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> Persona:
@@ -50,7 +55,14 @@ class Persona:
             history=[(int(h[0]), str(h[1])) for h in row.get("history") or ()],
             notes=str(row.get("notes") or ""), script=[str(x) for x in row.get("script") or ()],
             why=str(row.get("why") or ""), pushback=str(row.get("pushback") or ""),
+            label_reported=str(row.get("label_reported") or ""), why_reported=str(row.get("why_reported") or ""),
         )
+
+    def for_mode(self, reported: bool) -> Persona:
+        """The persona as the page should show it in this outcomes mode."""
+        if not reported or not (self.label_reported or self.why_reported):
+            return self
+        return replace(self, label=self.label_reported or self.label, why=self.why_reported or self.why)
 
     def public(self) -> dict[str, Any]:
         d = asdict(self)
