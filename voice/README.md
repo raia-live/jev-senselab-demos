@@ -122,10 +122,14 @@ The caller's own record also goes into the decision. Beside what SenseLab knows 
 like this one, Jev gets a line on this one: which steps were taken for them and how each
 came out, in their words ("booked a specialist callback 2 times; it did not hold 1 time, on
 their word"). The business file has a rule for that case (a step we promised that did not
-happen: transfer to an agent), and only a decision with the file can apply it; the same
-call without SenseLab books the callback again. The "why" John gives the caller carries both
-records, and the prompt has him say he can see the last one did not come, not that it works
-for most people.
+happen is not booked for them again), and only a decision with the file can apply it; the same
+call without SenseLab books the same step again. The record is what knows which steps those
+are, so the server adds one line naming them ("Not to be taken again for this caller:
+transferred the call to an agent"). Without that line a tally that says the step works for
+most people wins over the one caller it failed; `[jev] no_repeat_failed_steps = false` in
+`business.toml` turns the line off if your policy has no such rule. The "why" John gives the
+caller carries both records, and the prompt has him say he can see the last one did not
+come, not that it works for most people.
 
 For a clean take, start on an empty memory: `VOICE_ENTITY_PATH=jev-demos/call_handling/take2`
 (the caller histories live under the entity, so they are re-seeded there too), then run the

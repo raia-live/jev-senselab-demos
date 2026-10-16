@@ -51,6 +51,9 @@ class Action:
     # so "say what the charge is" has to become "take an email and have it checked". Empty
     # means ``then`` serves both.
     then_no_file: str = ""
+    # The step by intent, where one wording does not fit all ("resolve on the call" is an
+    # explanation for a charge and an offer for a cancellation). Falls back to ``then``.
+    then_by_intent: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -169,6 +172,9 @@ class Business:
     policy_claims: tuple[PolicyClaim, ...]
     jev_instructions: str
     judge_rubric: str
+    # A step that did not hold for a caller is not taken for them again; the decision is told
+    # so in one line, from their record. ``[jev] no_repeat_failed_steps = false`` turns it off.
+    no_repeat_failed_steps: bool
     outcomes_mode: str
     simulator_ref: str | None
     cost_by_severity: dict[str, float]
@@ -205,7 +211,8 @@ class Business:
         actions = tuple(
             Action(id=str(a["id"]), label=str(a.get("label") or a["id"].replace("_", " ")),
                    jev=str(a.get("jev") or a.get("label") or a["id"]), words=str(a.get("words") or a.get("label") or a["id"]).lower(),
-                   then=str(a.get("then") or ""), then_no_file=str(a.get("then_no_file") or ""))
+                   then=str(a.get("then") or ""), then_no_file=str(a.get("then_no_file") or ""),
+                   then_by_intent={str(k): str(v) for k, v in (a.get("then_by_intent") or {}).items()})
             for a in raw.get("actions") or ()
         )
         splits = tuple(
@@ -246,6 +253,7 @@ class Business:
                                 for p in raw.get("policy") or () if p.get("action") and p.get("situations")),
             jev_instructions=str(jev.get("instructions") or "Choose what the agent does next on this call."),
             judge_rubric=str(jev.get("judge_rubric") or ""),
+            no_repeat_failed_steps=bool(jev.get("no_repeat_failed_steps", True)),
             outcomes_mode=mode, simulator_ref=(str(outcomes["simulator"]) if outcomes.get("simulator") else None),
             cost_by_severity={str(k): float(v) for k, v in (outcomes.get("cost_by_severity") or
                                                             {"minor_failure": 100, "failure": 1000, "critical_failure": 10000}).items()},
@@ -274,12 +282,15 @@ class Business:
         a = next((a for a in self.actions if a.id == action_id), None)
         return a or Action(id=action_id, label=action_id.replace("_", " "), jev="", words=action_id.replace("_", " "), then="")
 
-    def then_for(self, action_id: str, *, matched: bool) -> str:
+    def then_for(self, action_id: str, *, matched: bool, intent: str | None = None) -> str:
         """What happens now, for a caller we matched to an account or for one we did not.
-        A stranger has no file, so the words that lean on one would send the agent guessing."""
+        A stranger has no file, so the words that lean on one would send the agent guessing.
+        With *intent*, the wording for that problem where the action has one."""
         a = self.action(action_id)
         if not matched and a.then_no_file:
             return a.then_no_file
+        if intent and a.then_by_intent.get(intent):
+            return a.then_by_intent[intent]
         return a.then
 
     def action_labels(self) -> dict[str, str]:

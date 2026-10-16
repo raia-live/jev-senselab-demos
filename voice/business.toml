@@ -92,6 +92,10 @@ jev = "Handle it on this call: explain, adjust, apply the standard offer or walk
 words = "handled it on the call"
 then = "Answer it now, from the caller's file and only from it. The first thing said is the entry in the caller's file that matches the charge, in the file's own words, then what it means and what is being done about it, in a few sentences, then see if that covers it. No entry in the file to point to means the answer is 'I don't see that in my notes', the email on the account read back, and a colleague checking it today. The answer is the handling, so no 'I'll handle this' and no 'let me check' first. Nothing beyond the file is known on this call, and nothing beyond it gets said: no reversal, refund or credit that the file does not record."
 then_no_file = "No account matched this caller, so there is no file, and nobody on this call can say what the charge or issue is: do not guess at one. Resolving it means: ask what the line says, take the email on their account, read it back, and say a colleague will check that line today and reply to that email. Say that in one go; it is the whole answer."
+# "Resolve on the call" is an explanation when the problem is a charge; for a cancellation it
+# is the standard offer, made on the call, and the cancellation itself if they decline.
+[actions.then_by_intent]
+cancellation = "Handle the cancellation on this call; nobody else is brought in. Make the standard offer once, plainly, and let them choose: the next two months at half price, or the account paused for up to three months at no charge. If they take one, confirm which and from when. If they decline, the account is cancelled at the end of the current paid period: confirm that date and that nothing further is charged. Anything on their file still open (a charge the file says is not yet reversed) is named as the file has it, not promised: do not say it is reversed or refunded if the file does not."
 
 [[actions]]
 id = "transfer_to_agent"
@@ -169,6 +173,11 @@ text = "A step we promised this caller that did not happen (a callback that neve
 
 [jev]
 instructions = "Choose what the support agent does next on this call."
+# A step that did not hold for a caller (on their word, or because they rang back about the
+# same thing) is not taken for them again: the decision is told so in one line, from their
+# record. The policy-broken-promise row above says as much; this is what makes it bite when
+# the tally says the step works for most people.
+no_repeat_failed_steps = true
 # What a failed decision looks like here, for the judge that grades each call afterwards.
 judge_rubric = """A decision failed when the review reports a callback about the same issue, a cancellation, \
 a caller who hung up in a transfer queue, a credit reversed by finance, or agent time spent on \

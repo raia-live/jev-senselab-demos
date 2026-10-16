@@ -198,7 +198,8 @@ def test_prompt_and_tools_come_from_the_file(tmp_path: Path):
     # the caller ("the file either explains it or it doesn't"). The fallback lives in the
     # speaker's own rules; the step the reasoner relays is one plain instruction.
     assert "Two instructions, not one conditional sentence" in reasoner
-    assert "The first thing you say is the entry in your file that matches" in speaker
+    assert "For a charge, the first thing you say is the entry in your file that matches" in speaker
+    assert "For a cancellation it is the offer the tool result names" in speaker
     # Twentieth run, on a clean file: "one was a duplicate and it's already been reversed",
     # about two charges the file did not have. The step text and the speaker both name the
     # file entry first, and a reversal the file does not record is called what it is.

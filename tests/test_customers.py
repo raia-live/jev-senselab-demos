@@ -369,8 +369,9 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
     assert text.endswith("decide_next_step says what happens, and no step is promised before it has answered.")
     assert writes[-1][1].startswith("note-") and writes[-1][2]["kind"] == "outcome"
     # Jev sees it at the next decision on this call, under the own-record heading.
-    assert ag.calls["c1"]["said_on_call"] == ['they said the step from their last call (booked a specialist callback) did not hold, '
-                                              'in their words: "nobody called me".']
+    assert ag.calls["c1"]["said_on_call"] == [{"line": 'they said the step from their last call (booked a specialist callback) did not '
+                                                       'hold, in their words: "nobody called me".',
+                                               "action": "schedule_callback", "worked": False}]
     # The caller refuses the step taken a minute ago on THIS call ("no, don't transfer me"):
     # that is the outcome of this call's own open step, and the result says to decide again.
     mine = SimpleNamespace(decision=SimpleNamespace(id="c1:0", call_id="c1", at=300.0, caller=bruno, action="transfer_to_agent"))
@@ -379,7 +380,8 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
     assert sealed[-1] == ("c1:0", False, "Caller said on this call: No, I don't want to be transferred, cancel it now", "caller")
     assert "That closes the step taken on this call (transferred the call to an agent) as did not work, on their word" in text
     assert text.endswith("decide_next_step again, with what they said as the new fact: it is the only way a different step comes back.")
-    assert ag._pending == {} and ag.calls["c1"]["said_on_call"][-1].startswith("they said the step taken a moment ago on this call "
+    assert ag._pending == {} and ag.calls["c1"]["said_on_call"][-1]["action"] == "transfer_to_agent"
+    assert ag.calls["c1"]["said_on_call"][-1]["line"].startswith("they said the step taken a moment ago on this call "
                                                                                  "(transferred the call to an agent) did not hold")
     # Nothing open for this caller and no record fetched: the note still goes on file.
     ag._pending, ag._customer = {}, {}
@@ -405,8 +407,9 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
     assert "key" not in amended[0][2] and mem.contacts[0]["worked"] is False  # the in-hand record agrees
     assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["amended"] is True
     assert len(sealed) == 2  # amending the file seals nothing
-    assert ag.calls["c1"]["said_on_call"][-1] == ('they said the step from their last call (booked a specialist callback) did not '
-                                                  'hold, in their words: "nobody called back".')
+    assert ag.calls["c1"]["said_on_call"][-1] == {"line": 'they said the step from their last call (booked a specialist callback) did '
+                                                          'not hold, in their words: "nobody called back".',
+                                                  "action": "schedule_callback", "worked": False}
     # Already saying what the caller says: nothing to rewrite.
     n = len(writes)
     ag.update_file("c1", {"kind": "outcome", "value": "still nothing", "worked": False})
@@ -470,8 +473,9 @@ def test_a_caller_ringing_back_about_the_same_thing_closes_the_open_step_as_not_
     assert sealed == [("p0:0", False, "Rang back about the same thing two minutes later", "caller"),
                       ("p0:1", False, "Rang back about the same thing two minutes later", "caller")]
     assert ag._pending == {"p1": [billing], "b0": [bruno], "p2": [mine]}
-    assert ag.calls["p2"]["said_on_call"] == ["they are back about the same thing, two minutes after the last step we took for "
-                                              "them (transferred the call to an agent); that step did not hold, on that alone."]
+    assert ag.calls["p2"]["said_on_call"] == [{"line": "they are back about the same thing, two minutes after the last step we took "
+                                                       "for them (transferred the call to an agent); that step did not hold, on that alone.",
+                                               "action": "transfer_to_agent", "worked": False}]
     # A stranger, a different problem, or nothing open: nothing happens. And once per call and
     # problem: a second decision on the same call (she refuses the step) does not mark it again.
     assert ag._rang_back("p2", "", "cancellation") == "" and ag._rang_back("p2", "priya-raman", "outage") == ""
@@ -502,7 +506,8 @@ def test_a_caller_ringing_back_about_the_same_thing_closes_the_open_step_as_not_
     assert writes[-1][2]["text"].endswith("What came of it: Caller said on a later call: they rang back about it two days later. It did not hold.")
     assert writes[-2][2]["text"].endswith("they rang back about it five days later. It did not hold.")
     assert ag.events[-1][0] == "customer_noted" and ag.events[-1][1]["amended"] is True and len(sealed) == 2
-    assert ag.calls["p4"]["said_on_call"][0].startswith("they are back about the same thing, two days after")
+    assert ag.calls["p4"]["said_on_call"][0]["line"].startswith("they are back about the same thing, two days after")
+    assert ag.calls["p4"]["said_on_call"][0]["action"] == "transfer_to_agent"
     ag.calls["p5"] = {"id": "p5", "caller": priya}
     ag._customer["p5"] = ag._customer["p4"]
     assert ag._rang_back("p5", "priya-raman", "cancellation") == ""  # the line now says so; nothing left open on it
@@ -560,3 +565,50 @@ def test_caller_tier_is_checked_against_the_business():
     c = Caller.from_mapping({"tier": "platinum"}, tiers=BUSINESS.tiers, default_tier=BUSINESS.default_tier)
     assert c.tier == "consumer"
     assert Caller.from_mapping({"tier": "platinum"}).tier == "platinum"  # unchecked without a business
+
+
+def test_a_step_that_did_not_hold_for_this_caller_is_named_as_not_to_be_taken_again():
+    from dataclasses import replace
+
+    from voice.agent import LiveAgent
+
+    ag = LiveAgent.__new__(LiveAgent)
+    ag.business = BUSINESS
+    memory = CustomerMemory(customer_id="priya-raman", contacts=[
+        {"key": "contact-2026-10-14-a", "date": "2026-10-14", "text": "Called about cancellation: transferred the call to an agent.",
+         "action": "transfer_to_agent", "worked": False, "seeded": False},
+        {"key": "contact-2026-10-01-b", "date": "2026-10-01", "text": "Called about billing dispute: booked a specialist callback.",
+         "action": "schedule_callback", "worked": True, "seeded": False},
+        {"key": "contact-2026-09-01-seed0", "date": "2026-09-01", "text": "Opened the account.", "seeded": True},
+    ])
+    # From the file alone: the transfer did not hold; the callback did and is not named.
+    assert ag._not_again_line(memory, []) == (
+        "Not to be taken again for this caller: transferred the call to an agent. Each did not hold for them, and a step "
+        "that did not hold for a caller is not booked for them again, whatever it has done for others. Choose the best of "
+        "the other steps for their situation.")
+    # What this call has shown is added, once per step, in the order it came.
+    said = [{"line": "they refused a credit", "action": "issue_credit", "worked": False},
+            {"line": "rang back", "action": "transfer_to_agent", "worked": False}]
+    assert ag._not_again_line(memory, said).startswith(
+        "Not to be taken again for this caller: transferred the call to an agent; applied a credit.")
+    # Their word on this call that the step held lifts it.
+    held = [{"line": "they said the agent did call", "action": "transfer_to_agent", "worked": True}]
+    assert ag._not_again_line(memory, held) == ""
+    # Nothing failed, nothing said: no line. A stranger: no line.
+    assert ag._not_again_line(CustomerMemory(customer_id="x"), []) == ""
+    assert ag._not_again_line(None, []) == ""
+    # The business can keep the rule off.
+    ag.business = replace(BUSINESS, no_repeat_failed_steps=False)
+    assert ag._not_again_line(memory, said) == ""
+
+
+def test_the_step_words_for_a_cancellation_are_the_offer_not_the_charge():
+    on_call = BUSINESS.then_for("resolve_in_bot", matched=True, intent="cancellation")
+    assert on_call.startswith("Handle the cancellation on this call") and "half price" in on_call
+    assert "charge" not in BUSINESS.then_for("resolve_in_bot", matched=True, intent="cancellation").split(".")[0]
+    # A charge keeps the billing words; no intent keeps them too; a stranger gets the no-file words whatever the intent.
+    assert BUSINESS.then_for("resolve_in_bot", matched=True, intent="billing_dispute") == BUSINESS.action("resolve_in_bot").then
+    assert BUSINESS.then_for("resolve_in_bot", matched=True) == BUSINESS.action("resolve_in_bot").then
+    assert BUSINESS.then_for("resolve_in_bot", matched=False, intent="cancellation") == BUSINESS.action("resolve_in_bot").then_no_file
+    # Other actions have no per-intent words and fall back to their one wording.
+    assert BUSINESS.then_for("transfer_to_agent", matched=True, intent="cancellation") == BUSINESS.action("transfer_to_agent").then

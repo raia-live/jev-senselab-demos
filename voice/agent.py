@@ -169,7 +169,9 @@ OWN_RECORD_NOTE = (
     "the tally says that step has done for other callers: the tally is about others, the file is about them. "
     "A step that held for them counts for taking it again. A step still open for them says nothing either way. "
     "A line 'from this call' is what this call has shown so far: a step they refused on this call, in their words, "
-    "did not hold for them, the same as one that was promised and did not happen."
+    "did not hold for them, the same as one that was promised and did not happen. A line beginning 'Not to be taken "
+    "again for this caller' is binding: those steps are out for this call, whatever the tally or the recommendation "
+    "says; choose among the others."
 )
 
 _NOTHING_ARRANGED = (" Nothing is arranged by this. If they still need something done about it, that is a request for "
@@ -517,7 +519,8 @@ class LiveAgent:
         # The record Jev reads at the next decision was fetched when the call started; what
         # the caller just said goes in beside it, so the next step is weighed with it.
         self._said_on_call(call_id, (f"they said the step {'taken a moment ago on this call' if on_this_call else 'from their last call'} "
-                                     f"({did}) {'held' if worked else 'did not hold'}, in their words: \"{words}\"."))
+                                     f"({did}) {'held' if worked else 'did not hold'}, in their words: \"{words}\"."),
+                           action=p.decision.action, worked=worked)
         if on_this_call:
             return (f" That closes the step taken on this call ({did}) as {'worked' if worked else 'did not work'}, on "
                     "their word; the record for callers in their situation now says so. If their problem is still "
@@ -553,6 +556,7 @@ class LiveAgent:
                 if not self._pending[p.decision.call_id]:
                     del self._pending[p.decision.call_id]
         closed: list[tuple[str, str]] = []
+        closed_actions: list[str] = []
         for p in sorted(earlier, key=lambda p: p.decision.at):
             ago = _ago(time.time() - p.decision.at)
             did = self.business.action_words().get(p.decision.action) or p.decision.action.replace("_", " ")
@@ -560,6 +564,7 @@ class LiveAgent:
                               true_success=False, cost_usd=float(self.business.cost_by_severity.get("failure", 0.0)))
             self._pool.submit(self._seal, p, outcome, source="caller")
             closed.append((did, ago))
+            closed_actions.append(p.decision.action)
         if not closed:
             # Nothing open in this process: a step from before the server last started is on
             # their file with its outcome not in yet. The file's line gets their ring-back.
@@ -581,22 +586,46 @@ class LiveAgent:
                 self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"],
                                                "text": value["text"], "amended": True})
                 closed.append((did, ago))
+                closed_actions.append(str(last["action"]))
             if not closed:
                 return ""
         did, ago = closed[-1]
         self._said_on_call(call_id, f"they are back about the same thing, {ago} after the last step we took for them "
-                                    f"({did}); that step did not hold, on that alone.")
+                                    f"({did}); that step did not hold, on that alone.", action=closed_actions[-1], worked=False)
         return (f"They are back about the same thing, {ago} after the last step we took for them ({did}). That step "
                 f"is on their record as not working, on that alone.")
 
-    def _said_on_call(self, call_id: str, line: str) -> None:
+    def _not_again_line(self, memory: cust.CustomerMemory | None, said_on_call: list[dict[str, Any]]) -> str:
+        """The steps that did not hold for this caller (their file, and what this call has
+        shown), named as not to be taken for them again. Empty when there are none, or when
+        the business does not keep that rule."""
+        if not self.business.no_repeat_failed_steps:
+            return ""
+        failed: list[str] = []
+        for c in (memory.contacts if memory else []):
+            if c.get("action") and not c.get("seeded") and c.get("worked") is False:
+                failed.append(str(c["action"]))
+        failed += [str(x["action"]) for x in said_on_call if x.get("action") and x.get("worked") is False]
+        # Their word that it held, later, lifts it; the latest word on a step wins.
+        held_later = {str(x["action"]) for x in said_on_call if x.get("action") and x.get("worked") is True}
+        steps = [a for a in dict.fromkeys(failed) if a not in held_later]
+        if not steps:
+            return ""
+        words = self.business.action_words()
+        did = "; ".join(words.get(a) or a.replace("_", " ") for a in steps)
+        return (f"Not to be taken again for this caller: {did}. Each did not hold for them, and a step that did not hold "
+                f"for a caller is not booked for them again, whatever it has done for others. Choose the best of the "
+                f"other steps for their situation.")
+
+    def _said_on_call(self, call_id: str, line: str, *, action: str | None = None, worked: bool | None = None) -> None:
         """A line for Jev's view of this caller's record, learned on this call (their word on
         a step, a ring-back), kept on the call since the record itself was fetched at its
-        start. Read back by ``decide``."""
+        start. *action* and *worked* say which step it was about and how it fared, for the
+        steps not to take again. Read back by ``decide``."""
         with self._lock:
             call = self.calls.get(call_id)
             if call is not None:
-                call.setdefault("said_on_call", []).append(line)
+                call.setdefault("said_on_call", []).append({"line": line, "action": action, "worked": worked})
 
     def _amend_record(self, call_id: str, customer_id: str, *, worked: bool, words: str) -> str:
         """No open decision to seal (it was sealed already, or by an earlier run of the
@@ -622,7 +651,7 @@ class LiveAgent:
         self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"], "text": value["text"],
                                        "amended": True})
         self._said_on_call(call_id, f"they said the step from their last call ({did}) {'held' if worked else 'did not hold'}, "
-                                    f"in their words: \"{words}\".")
+                                    f"in their words: \"{words}\".", action=str(last["action"]), worked=worked)
         return (f" The file's line on that step ({did}) now carries their word: it {'worked' if worked else 'did not hold'}."
                 + _NOTHING_ARRANGED)
 
@@ -1011,13 +1040,19 @@ class LiveAgent:
         # This caller's own record with the steps we have taken for them (SenseLab's other
         # half: the per-customer entries) goes in beside the situation's guidance, so a step
         # that has already failed this caller is weighed as such.
-        own = cust.track_record(self._customer_memory(call_id, wait_s=2.0), self.business.action_words())
+        memory = self._customer_memory(call_id, wait_s=2.0)
+        own = cust.track_record(memory, self.business.action_words())
         # What this call itself has shown about them (their word on a step, a ring-back) is
         # not in that record yet; it goes in beside it, under the same heading, so Jev
         # weighs it the same way.
         with self._lock:
             said_on_call = list(call.get("said_on_call") or [])
-        own = "\n".join([own, *(f"This caller's own record, from this call: {line}" for line in said_on_call)]).strip()
+        own = "\n".join([own, *(f"This caller's own record, from this call: {x['line']}" for x in said_on_call)]).strip()
+        # The steps that did not hold for this caller are not taken for them again: that is
+        # the written policy's rule on a broken promise, and the record is what knows which
+        # steps those are. Said in one line, because a tally that says the step works for
+        # most people (and a prior that says act on it) otherwise outweighs their own file.
+        own = "\n".join(x for x in (own, self._not_again_line(memory, said_on_call)) if x)
         with self._lock:
             call["caller_record"] = own
         guided = f"{memory_text}\n{own}".strip() if own else memory_text
@@ -1042,7 +1077,7 @@ class LiveAgent:
         live = LiveDecision(
             id=case.id, call_id=call_id, at=time.time(), caller=asdict(c), fields=fields, text=text,
             situation=situation, action=decision.action, confidence=round(decision.confidence, 3),
-            then=self.business.then_for(decision.action, matched=bool(c.customer_id)), basis=decision.basis,
+            then=self.business.then_for(decision.action, matched=bool(c.customer_id), intent=intent), basis=decision.basis,
             probabilities={k: round(v, 3) for k, v in decision.probabilities.items()},
             memory_text=memory_text, memory_entries=list(ep.trace.guidance_entries[:12]),
             memory_mode=ep.trace.guidance_mode, memory_prefetched=prefetched, memory_ms=round(memory_ms),
