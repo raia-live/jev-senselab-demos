@@ -211,7 +211,7 @@
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-let ACTION = {}, AGENT = "the agent", REPORTED = false;
+let ACTION = {}, AGENT = "the agent", REPORTED = false, OPEN_STEPS = 0;
 const C = { you: "#d97706", riley: "#4f6bed", jev: "#db2777", sl: "#059669", world: "#7c3aed", bad: "#dc2626", ok: "#059669" };
 const fmtPhone = (n) => { const m = String(n).match(/^\+1(\d{3})(\d{3})(\d{4})$/); return m ? `+1 (${m[1]}) ${m[2]}-${m[3]}` : n; };
 const hhmm = (s) => new Date(s * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -505,12 +505,15 @@ function refreshDecision(callId) {
 }
 async function memory() {
   const m = await (await fetch("/api/memory")).json(); if (m.error) return;
-  $("sl-badge").textContent = `${m.lessons.length} lesson${m.lessons.length === 1 ? "" : "s"} · ${m.seen.length} record${m.seen.length === 1 ? "" : "s"}`;
+  $("sl-badge").textContent = `${m.lessons.length} lesson${m.lessons.length === 1 ? "" : "s"} · ${m.seen.length} record${m.seen.length === 1 ? "" : "s"}`
+    + (OPEN_STEPS ? ` · ${OPEN_STEPS} step${OPEN_STEPS === 1 ? "" : "s"} open` : "");
   $("lessons").innerHTML = m.lessons.map((r) => {
     const v = String(r.value); const mm = v.match(/^When: (\S+)\. (\w+) (worked|did not work)\. ?(.*)$/s);
     if (!mm) return `<div class="lesson"><div class="n">${esc(v)}</div></div>`;
     return `<div class="lesson ${mm[3] === "worked" ? "ok" : "bad"}"><div class="s">${esc(mm[1])}</div><div class="a">${esc(ACTION[mm[2]] || mm[2])} ${mm[3]}</div><div class="n">${esc(mm[4])}</div></div>`;
-  }).join("") || "none yet; the first sealed outcome writes one";
+  }).join("") || ("none yet; the first sealed outcome writes one" + (OPEN_STEPS && REPORTED
+    ? `. ${OPEN_STEPS === 1 ? "One step is" : OPEN_STEPS + " steps are"} open: a step is sealed when the caller rings back about the same thing, or says on a call how it went, and that is when the lesson and the record for the situation are written.`
+    : OPEN_STEPS ? `. ${OPEN_STEPS === 1 ? "One step is" : OPEN_STEPS + " steps are"} open: mark it above, or wait for the world.` : ""));
   $("records").innerHTML = m.seen.map((r) => { const mm = String(r.value).match(/^Seen on (\S+) with decide:(\w+): worked (\d+) of (\d+)/); return mm ? `<div class="rec"><span><span class="s">${esc(mm[1])}</span><br>${esc(ACTION[mm[2]] || mm[2])}</span><span>${mm[3]} of ${mm[4]}</span></div>` : ""; }).join("") || "nothing seen yet";
 }
 const FIX_STEPS = ["proposed", "tested", "canary", "shipped"];
@@ -577,6 +580,7 @@ async function reachCheck() {
 async function state() {
   const st = await (await fetch("/api/state")).json();
   stateCalls = st.calls; st.decisions.forEach((d) => { lastDecision[d.call_id] = d; });
+  OPEN_STEPS = st.decisions.filter((d) => !d.outcome).length;
   $("dot").className = "dot " + (st.calls.some((c) => c.status === "in-progress") ? "live" : "ok");
   $("changed").checked = !!st.changed;
   $("calls").innerHTML = st.calls.slice(0, 10).map((c) => {
