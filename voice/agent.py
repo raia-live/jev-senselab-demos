@@ -185,6 +185,68 @@ def _truthy(v: Any) -> bool:
     return str(v or "").strip().lower() in ("true", "yes", "y", "1", "worked", "it worked", "ok")
 
 
+# A detail as it comes through speech-to-text: an address written out, or spoken ("bruno at
+# bruno dot com"); a number as digits with whatever separators, or as digit words.
+_EMAIL_WRITTEN = re.compile(r"[a-z0-9][\w.+-]*@[a-z0-9][\w-]*(?:\.[a-z0-9-]+)+", re.I)
+_EMAIL_SPOKEN = re.compile(r"(?<![\w'])([a-z0-9][\w+-]*(?:\s+dot\s+[a-z0-9][\w-]*)*)\s+at\s+"
+                           r"([a-z0-9][\w-]*(?:\s+dot\s+[a-z0-9-]+)*\s+dot\s+[a-z]{2,})\b", re.I)
+_PHONE = re.compile(r"(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)")
+_DIGIT_WORDS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7",
+                "eight": "8", "nine": "9"}
+_DIGIT_WORD = re.compile(r"\b(" + "|".join(_DIGIT_WORDS) + r")\b", re.I)
+
+
+def _details_in(text: str) -> set[tuple[str, str]]:
+    """The emails and phone numbers in one transcript line, normalised: lower-case address,
+    digits only for a number (a leading country code dropped)."""
+    out: set[tuple[str, str]] = set()
+    for m in _EMAIL_WRITTEN.finditer(text):
+        out.add(("email", m.group(0).lower().rstrip(".")))
+    for m in _EMAIL_SPOKEN.finditer(text):
+        local, domain = (re.sub(r"\s+dot\s+", ".", g.lower()) for g in m.groups())
+        out.add(("email", f"{local}@{domain}".replace(" ", "")))
+    digits = _DIGIT_WORD.sub(lambda m: _DIGIT_WORDS[m.group(1).lower()], text)
+    digits = re.sub(r"(?<=\d)[\s,]+(?=\d)", "", digits)  # "6 5 0 5 5 5 ..." read out one by one
+    for m in _PHONE.finditer(digits):
+        n = re.sub(r"\D", "", m.group(0))
+        out.add(("phone", n[-10:] if len(n) == 11 and n.startswith("1") else n))
+    return out
+
+
+def confirmed_details(lines: list[tuple[str | None, str]]) -> list[tuple[str, str]]:
+    """The details both sides of a call said: the caller gave it and the agent read it back
+    (or the other way round, and the caller confirmed by repeating it). In the order they
+    first came up. A number the agent read out of the file and the caller only nodded at is
+    not here, and neither is one the caller mentioned once in passing."""
+    said: dict[str, set[tuple[str, str]]] = {"user": set(), "assistant": set()}
+    order: list[tuple[str, str]] = []
+    for role, text in lines:
+        who = "user" if role in ("user", "caller") else "assistant"
+        for d in _details_in(text):
+            if d not in said["user"] and d not in said["assistant"]:
+                order.append(d)
+            said[who].add(d)
+    return [d for d in order if d in said["user"] and d in said["assistant"]]
+
+
+def _same_detail(kind: str, a: str, b: str) -> bool:
+    if kind == "phone":
+        return re.sub(r"\D", "", a)[-10:] == re.sub(r"\D", "", b)[-10:]
+    return " ".join(a.lower().split()) == " ".join(b.lower().split())
+
+
+def _on_file(memory: cust.CustomerMemory, kind: str, value: str) -> bool:
+    """Already on the caller's file: as a detail of that kind, or (a number) in the notes."""
+    d = memory.details.get(kind)
+    if d and _same_detail(kind, str(d.get("value") or ""), value):
+        return True
+    if kind == "phone":
+        return any(_same_detail("phone", str(x[1]), value) for x in _details_in(memory.notes or "") if x[0] == "phone")
+    if kind == "email":
+        return any(x[1] == value for x in _details_in(memory.notes or "") if x[0] == "email")
+    return False
+
+
 def _ago(seconds: float) -> str:
     """A span of time the way it is said on a call: "two minutes", "an hour", "three days"."""
     words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
@@ -275,6 +337,8 @@ class LiveAgent:
         self._slot_fields: dict[tuple[str, str], dict[str, Any]] = {}  # to open a queued slot early
         self._opening: dict[str, Future[None]] = {}  # call id -> the _open_all job, until the slots exist
         self._customer: dict[str, Future[cust.CustomerMemory | None]] = {}  # call id -> what we know of the caller
+        self._files: dict[str, cust.CustomerMemory] = {}  # customer id -> their file as last fetched, for the page
+        self._files_dirty: set[str] = set()  # customer ids written since that fetch
         self._lock = threading.RLock()
         self._pool = ThreadPoolExecutor(max_workers=prefetch_workers, thread_name_prefix="prefetch")
         self.ready_info: dict[str, Any] = {}
@@ -463,27 +527,68 @@ class LiveAgent:
         if not customer_id:
             return ("No account matched this caller, so there is no file to put it on. Keep it for this call and "
                     "use it; it cannot be kept for next time.")
+        entry = self._write_detail(call, customer_id, kind=kind, value=value, note=note, source="agent")
+        if entry is None:
+            return "The file could not be updated just now. Use the detail on this call and say it will be noted."
+        what = cust.DETAIL_KINDS.get(entry["kind"], "note")
+        closed = ""
+        if entry["kind"] == "outcome":
+            closed = self._close_from_caller(call_id, customer_id, worked=_truthy(params.get("worked")), words=value)
+        return (f"On file: {what} {value or note}. It is on their record now and will be there next time; "
+                f"tell them so in a few words, once.{closed}")
+
+    def _write_detail(self, call: dict[str, Any], customer_id: str, *, kind: str, value: str, note: str,
+                      source: str) -> dict[str, Any] | None:
+        """One detail onto the caller's file in SenseLab, with the page told. *source* says
+        who put it there: the agent on the call, or the hang-up net below."""
+        call_id = str(call["id"])
         key, entry = cust.detail_entry(call_id, kind=kind, value=value, note=note)
         try:
             self.client.memory(self.agent_id).write(cust.customer_entity(self.entity_path, customer_id), key, entry,
                                                     confidence=1.0, memory_type="fact")
         except Exception as exc:  # noqa: BLE001
             log.warning("file update for %s: %s", customer_id, exc)
-            return "The file could not be updated just now. Use the detail on this call and say it will be noted."
+            return None
+        self._file_written(customer_id)
         if entry["kind"] == "phone" and getattr(self, "phonebook", None) is not None:
             self.phonebook.remember(value, dict(call["caller"]))
         what = cust.DETAIL_KINDS.get(entry["kind"], "note")
         with self._lock:
-            call.setdefault("file_updates", []).append({"kind": entry["kind"], "value": value, "note": note, "t": time.time()})
+            call.setdefault("file_updates", []).append({"kind": entry["kind"], "value": value, "note": note, "t": time.time(),
+                                                        "source": source})
             if call.get("customer_brief"):
                 call["customer_brief"] += f"\nOn file now ({what}, given on this call): {value or note}."
         self._event("file_updated", {"call_id": call_id, "customer_id": customer_id, "detail": entry["kind"], "key": key,
-                                     "value": value[:80], "note": note[:120]})
-        closed = ""
-        if entry["kind"] == "outcome":
-            closed = self._close_from_caller(call_id, customer_id, worked=_truthy(params.get("worked")), words=value)
-        return (f"On file: {what} {value or note}. It is on their record now and will be there next time; "
-                f"tell them so in a few words, once.{closed}")
+                                     "value": value[:80], "note": note[:120], "source": source})
+        return entry
+
+    def _file_details_from_call(self, call: dict[str, Any], memory_fut: Future[cust.CustomerMemory | None] | None) -> None:
+        """The net under ``update_file``: a detail the caller gave and the agent read back on
+        the call (an email, a number to reach them on) that never made it to the file goes on
+        it at hang-up, from the transcript. Only what both sides said, so a number the agent
+        read out of the file, or one the caller mentioned in passing, does not count; and
+        nothing already on file."""
+        customer_id = str((call.get("caller") or {}).get("customer_id") or "")
+        if not customer_id:
+            return
+        memory = None
+        if memory_fut is not None:
+            try:
+                memory = memory_fut.result(timeout=5)
+            except Exception:  # noqa: BLE001 - the check against the file is then skipped
+                memory = None
+        with self._lock:
+            lines = [(ln.get("role"), ln.get("text") or "") for ln in call.get("live") or []]
+            filed = [(u.get("kind"), u.get("value") or "") for u in call.get("file_updates") or []]
+        for kind, value in confirmed_details(lines):
+            if any(k == kind and _same_detail(kind, v, value) for k, v in filed):
+                continue
+            if memory is not None and _on_file(memory, kind, value):
+                continue
+            entry = self._write_detail(call, customer_id, kind=kind, value=value,
+                                       note="given on the call and read back; filed at hang-up", source="transcript")
+            if entry is not None:
+                filed.append((kind, value))
 
     def _close_from_caller(self, call_id: str, customer_id: str, *, worked: bool, words: str) -> str:
         """The caller has said what came of the last step we took for them. If that decision
@@ -582,6 +687,7 @@ class LiveAgent:
                     log.warning("amending %s for %s: %s", last["key"], customer_id, exc)
                     continue
                 last.update(value)
+                self._file_written(customer_id)
                 did = self.business.action_words().get(str(last["action"])) or str(last["action"]).replace("_", " ")
                 self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"],
                                                "text": value["text"], "amended": True})
@@ -647,6 +753,7 @@ class LiveAgent:
             log.warning("amending %s for %s: %s", last["key"], customer_id, exc)
             return _NOTHING_ARRANGED
         last.update(value)
+        self._file_written(customer_id)
         did = self.business.action_words().get(str(last["action"])) or str(last["action"]).replace("_", " ")
         self._event("customer_noted", {"call_id": call_id, "customer_id": customer_id, "key": last["key"], "text": value["text"],
                                        "amended": True})
@@ -890,7 +997,16 @@ class LiveAgent:
             return None
         t0 = time.perf_counter()
         entries = self.client.memory(self.agent_id).list(cust.customer_entity(self.entity_path, caller.customer_id))
-        return cust.CustomerMemory.from_entries(caller.customer_id, entries, ms=round((time.perf_counter() - t0) * 1000))
+        memory = cust.CustomerMemory.from_entries(caller.customer_id, entries, ms=round((time.perf_counter() - t0) * 1000))
+        with self._lock:
+            self._files[caller.customer_id] = memory
+            self._files_dirty.discard(caller.customer_id)
+        return memory
+
+    def _file_written(self, customer_id: str) -> None:
+        """A write went to this caller's file; the page's copy is stale until refetched."""
+        with self._lock:
+            self._files_dirty.add(customer_id)
 
     def _customer_memory(self, call_id: str, *, wait_s: float = 6.0) -> cust.CustomerMemory | None:
         """The caller's record for this call, if it was fetched (a matched caller) and is back."""
@@ -981,6 +1097,7 @@ class LiveAgent:
         except Exception as exc:  # noqa: BLE001
             log.warning("customer note for %s: %s", customer_id, exc)
             return
+        self._file_written(customer_id)
         self._event("customer_noted", {"call_id": d.call_id, "customer_id": customer_id, "key": key, "text": value["text"]})
 
     # -- the decision ----------------------------------------------------------------------
@@ -1122,7 +1239,7 @@ class LiveAgent:
                 fut.cancel()  # a queued slot is skipped by its lane; a running one finishes unused
             for k in [k for k in self._slot_fields if k[0] == call_id]:
                 del self._slot_fields[k]
-            self._customer.pop(call_id, None)
+            memory_fut = self._customer.pop(call_id, None)
             call = self.calls.get(call_id)
             if call is not None:
                 call["status"] = "ended"
@@ -1141,6 +1258,8 @@ class LiveAgent:
             pending = list(self._pending.get(call_id) or [])
         if has_recording and self.recordings_dir is not None:
             self._pool.submit(self._save_recording, call_id, recording, fetch_recording)
+        if call is not None:
+            self._pool.submit(self._file_details_from_call, call, memory_fut)
         for p in pending:
             p.decision.ended_reason = ended_reason
         self._event("call_ended", {"call_id": call_id, "ended_reason": ended_reason, "decisions": len(pending),
@@ -1169,6 +1288,7 @@ class LiveAgent:
         except Exception as exc:  # noqa: BLE001
             log.warning("customer note for %s: %s", customer_id, exc)
             return
+        self._file_written(customer_id)
         self._event("customer_noted", {"call_id": call["id"], "customer_id": customer_id, "key": key, "text": value["text"]})
 
     def _save_recording(self, call_id: str, url: str | None, fetch: Callable[[], str | None] | None) -> None:
@@ -1312,7 +1432,46 @@ class LiveAgent:
                 policy.append(row)
             else:
                 other.append(row)
-        return {"entity_path": self.entity_path, "lessons": lessons, "seen": seen, "policy": policy, "other": other[:40]}
+        return {"entity_path": self.entity_path, "lessons": lessons, "seen": seen, "policy": policy, "other": other[:40],
+                "files": self._caller_files()}
+
+    def _caller_files(self) -> list[dict[str, Any]]:
+        """The caller files SenseLab holds, as the page shows them: the other half of what it
+        learns from a call, there before any outcome is in. Each caller this process has
+        looked up; a file written since its last fetch is fetched again, once."""
+        with self._lock:
+            dirty = set(self._files_dirty)
+            known = dict(self._files)
+            open_by_customer: dict[str, int] = {}
+            for ps in self._pending.values():
+                for p in ps:
+                    cid = str(p.decision.caller.get("customer_id") or "")
+                    if cid:
+                        open_by_customer[cid] = open_by_customer.get(cid, 0) + 1
+            names = {str(c["caller"].get("customer_id") or ""): str(c["caller"].get("name") or "")
+                     for c in self.calls.values() if c.get("caller")}
+        for cid in dirty:
+            try:
+                entries = self.client.memory(self.agent_id).list(cust.customer_entity(self.entity_path, cid))
+                known[cid] = cust.CustomerMemory.from_entries(cid, entries)
+                with self._lock:
+                    self._files[cid] = known[cid]
+                    self._files_dirty.discard(cid)
+            except Exception as exc:  # noqa: BLE001 - the page shows the last copy
+                log.warning("caller file %s: %s", cid, exc)
+        out = []
+        for cid, m in known.items():
+            ours = [c for c in m.contacts if not c.get("seeded")]
+            out.append({"customer_id": cid, "name": names.get(cid) or cid,
+                        "contacts": len(ours), "seeded": len(m.contacts) - len(ours),
+                        "did_not_hold": sum(1 for c in ours if c.get("worked") is False),
+                        "held": sum(1 for c in ours if c.get("worked") is True),
+                        "details": [{"kind": cust.DETAIL_KINDS.get(k, k), "value": str(d.get("value") or "")[:60]}
+                                    for k, d in m.details.items()],
+                        "remarks": len(m.remarks), "open": open_by_customer.get(cid, 0),
+                        "last": (ours[0]["text"][:160] if ours else "")})
+        out.sort(key=lambda f: (-f["contacts"], f["name"]))
+        return out
 
     def loop_snapshot(self) -> dict[str, Any]:
         """What the repair loop has: the last look's note and the fixes seen. The look itself

@@ -213,6 +213,7 @@ def test_the_agent_notes_a_call_that_reached_no_decision():
             return _Mem()
 
     ag = LiveAgent.__new__(LiveAgent)
+    ag._files, ag._files_dirty, ag._lock = {}, set(), threading.Lock()
     ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
     ag.events = []
     ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
@@ -246,6 +247,7 @@ def test_a_caller_who_says_their_name_is_matched_to_an_account():
     from voice.agent import LiveAgent
 
     ag = LiveAgent.__new__(LiveAgent)
+    ag._files, ag._files_dirty = {}, set()
     ag.business, ag.entity_path, ag.agent_id = BUSINESS, "jev-demos/voice", "john"
     ag.calls, ag.events, ag._lock = {}, [], threading.Lock()
     ag._opening, ag._customer, ag._pool = {}, {}, ThreadPoolExecutor(1)
@@ -309,6 +311,7 @@ def test_the_agent_puts_a_detail_on_the_callers_record_and_the_number_in_the_boo
             return _Mem()
 
     ag = LiveAgent.__new__(LiveAgent)
+    ag._files, ag._files_dirty = {}, set()
     ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
     ag.calls, ag.events, ag._lock = {}, [], threading.Lock()
     ag.phonebook = PhoneBook(_Client(), "john", "jev-demos/voice")
@@ -348,6 +351,7 @@ def test_what_the_caller_says_came_of_the_last_step_closes_it_on_their_word():
             return _Mem()
 
     ag = LiveAgent.__new__(LiveAgent)
+    ag._files, ag._files_dirty = {}, set()
     ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
     ag.calls, ag.events, ag._lock, ag.phonebook = {}, [], threading.Lock(), None
     ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
@@ -448,6 +452,7 @@ def test_a_caller_ringing_back_about_the_same_thing_closes_the_open_step_as_not_
             return _Mem()
 
     ag = LiveAgent.__new__(LiveAgent)
+    ag._files, ag._files_dirty = {}, set()
     ag.client, ag.agent_id, ag.entity_path, ag.business = _Client(), "john", "jev-demos/voice", BUSINESS
     ag.calls, ag.events, ag._lock, ag._customer = {}, [], threading.Lock(), {}
     ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
@@ -573,6 +578,7 @@ def test_a_step_that_did_not_hold_for_this_caller_is_named_as_not_to_be_taken_ag
     from voice.agent import LiveAgent
 
     ag = LiveAgent.__new__(LiveAgent)
+    ag._files, ag._files_dirty = {}, set()
     ag.business = BUSINESS
     memory = CustomerMemory(customer_id="priya-raman", contacts=[
         {"key": "contact-2026-10-14-a", "date": "2026-10-14", "text": "Called about cancellation: transferred the call to an agent.",
@@ -612,3 +618,65 @@ def test_the_step_words_for_a_cancellation_are_the_offer_not_the_charge():
     assert BUSINESS.then_for("resolve_in_bot", matched=False, intent="cancellation") == BUSINESS.action("resolve_in_bot").then_no_file
     # Other actions have no per-intent words and fall back to their one wording.
     assert BUSINESS.then_for("transfer_to_agent", matched=True, intent="cancellation") == BUSINESS.action("transfer_to_agent").then
+
+
+def test_a_detail_both_sides_said_on_the_call_is_filed_at_hang_up():
+    # Bruno's 11:15 call: he gave an email, John read it back and said "I've got it", and
+    # never called update_file. At hang-up the transcript puts it on his file, once; a
+    # number John read out of the file and Bruno only nodded at is not a detail he gave.
+    from concurrent.futures import Future
+
+    from voice.agent import LiveAgent, confirmed_details
+
+    lines = [("assistant", "Hi Bruno, it's John at Northwind Cloud. I've got your file open here."),
+             ("user", "You can use the one in the file"),
+             ("assistant", "I don't actually have an email on file here. What's the best one to use?"),
+             ("user", "bruno at example dot com"), ("assistant", "Bruno at example dot com."), ("user", "Yep"),
+             ("assistant", "A colleague will reply to bruno at example dot com. I have (650) 555-0142 as your mobile, still right?"),
+             ("user", "Yes, that's right. Thanks, bye")]
+    assert confirmed_details(lines) == [("email", "bruno@example.com")]
+    assert confirmed_details([("user", "my number is 650-555-0142"),
+                              ("assistant", "Six five zero, five five five, zero one four two, right?"), ("user", "yes")]) == [("phone", "6505550142")]
+    assert confirmed_details([("user", "it's at bruno dot com, I'm at home"), ("assistant", "okay")]) == []
+
+    writes: list[tuple[str, str, dict]] = []
+
+    class _Mem:
+        def write(self, entity, key, value, **_kw):
+            writes.append((entity, key, value))
+
+    class _Client:
+        def memory(self, _agent_id):
+            return _Mem()
+
+    ag = LiveAgent.__new__(LiveAgent)
+    ag._files, ag._files_dirty, ag._lock = {}, set(), threading.Lock()
+    ag.client, ag.agent_id, ag.entity_path, ag.business, ag.phonebook = _Client(), "john", "jev-demos/voice", BUSINESS, None
+    ag.events = []
+    ag._event = lambda kind, data: ag.events.append((kind, data))  # type: ignore[method-assign]
+    call = {"id": "c-bruno", "caller": {"customer_id": "bruno-andrade", "name": "Bruno"},
+            "live": [{"role": r, "text": t} for r, t in lines], "customer_brief": "Caller: Bruno."}
+    fut: Future = Future()
+    fut.set_result(CustomerMemory(customer_id="bruno-andrade", notes="Mobile on file: (650) 555-0142."))
+    ag._file_details_from_call(call, fut)
+    assert [(k, v["kind"], v["value"]) for _, k, v in writes] == [("detail-email", "email", "bruno@example.com")]
+    assert writes[0][0] == "jev-demos/voice/customers/bruno-andrade"
+    assert ag.events == [("file_updated", {"call_id": "c-bruno", "customer_id": "bruno-andrade", "detail": "email", "key": "detail-email",
+                                           "value": "bruno@example.com", "note": "given on the call and read back; filed at hang-up",
+                                           "source": "transcript"})]
+    assert call["customer_brief"].endswith("On file now (email, given on this call): bruno@example.com.")
+    assert ag._files_dirty == {"bruno-andrade"}
+    # Already on file (the agent did call update_file this time, or an earlier call had it): nothing is written twice.
+    writes.clear()
+    ag.events.clear()
+    call["file_updates"] = [{"kind": "email", "value": "Bruno@example.com"}]
+    ag._file_details_from_call(call, fut)
+    assert writes == []
+    del call["file_updates"]
+    fut2: Future = Future()
+    fut2.set_result(CustomerMemory(customer_id="bruno-andrade", details={"email": {"value": "bruno@example.com", "date": "2026-10-01"}}))
+    ag._file_details_from_call(call, fut2)
+    assert writes == []
+    # A stranger has no file to put it on.
+    ag._file_details_from_call({"id": "c-x", "caller": {}, "live": call["live"]}, None)
+    assert writes == []

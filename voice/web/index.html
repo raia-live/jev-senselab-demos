@@ -185,6 +185,8 @@
     <div id="probs" class="small">no decision yet</div>
     <h3>What SenseLab put in front of Jev</h3>
     <pre class="slot" id="slot">(none)</pre>
+    <h3>Caller files</h3>
+    <div id="files" class="small">none yet; the first matched caller opens one</div>
     <h3>Lessons SenseLab has drawn <span class="mono" id="mempath"></span></h3>
     <div id="lessons" class="small">loading</div>
     <h3>Record by situation</h3>
@@ -304,6 +306,7 @@ function apply(e, live) {
       if (live && isCur) {
         glow("sl"); pulse("e-riley-sl", { label: `on file: ${esc(detail)}`, color: C.riley }); status("sl", `${detail} on file`);
         if (detail === "outcome") caption(`<span class="sl">On ${esc(c.caller.name || "the caller")}'s file, in their words:</span> ${esc(e.value)}.`, `What came of the last step, as the caller tells it. If that step was still waiting on its outcome, this is the outcome: the run is sealed on their word, and the record for callers in their situation changes with it. Nobody clicked anything.`);
+        else if (e.source === "transcript") caption(`<span class="sl">On ${esc(c.caller.name || "the caller")}'s file:</span> ${esc(detail)} ${esc(e.value)}.`, `The caller gave it and ${esc(AGENT)} read it back on the call; it went to SenseLab at hang-up, from the transcript. It is in the brief from the first word of their next call.`);
         else caption(`<span class="sl">On ${esc(c.caller.name || "the caller")}'s file:</span> ${esc(detail)} ${esc(e.value)}.`, `The caller gave it, ${esc(AGENT)} read it back, and it went to SenseLab the moment they confirmed. It is in the brief from the first word of their next call.`);
       }
       break; }
@@ -505,8 +508,18 @@ function refreshDecision(callId) {
 }
 async function memory() {
   const m = await (await fetch("/api/memory")).json(); if (m.error) return;
-  $("sl-badge").textContent = `${m.lessons.length} lesson${m.lessons.length === 1 ? "" : "s"} · ${m.seen.length} record${m.seen.length === 1 ? "" : "s"}`
-    + (OPEN_STEPS ? ` · ${OPEN_STEPS} step${OPEN_STEPS === 1 ? "" : "s"} open` : "");
+  const files = m.files || [];
+  const filed = files.reduce((n, f) => n + f.contacts + f.details.length + f.remarks, 0);
+  $("sl-badge").textContent = `${filed} filed · ${m.lessons.length} lesson${m.lessons.length === 1 ? "" : "s"} · ${m.seen.length} record${m.seen.length === 1 ? "" : "s"}`;
+  $("files").innerHTML = files.map((f) => {
+    const bits = [`${f.contacts} line${f.contacts === 1 ? "" : "s"} from ${esc(AGENT)}'s calls` + (f.seeded ? ` (${f.seeded} from before)` : "")];
+    if (f.did_not_hold) bits.push(`${f.did_not_hold} step${f.did_not_hold === 1 ? "" : "s"} did not hold`);
+    if (f.held) bits.push(`${f.held} held`);
+    if (f.open) bits.push(`${f.open} open`);
+    f.details.forEach((d) => bits.push(`${esc(d.kind)}: ${esc(d.value)}`));
+    if (f.remarks) bits.push(`${f.remarks} note${f.remarks === 1 ? "" : "s"}`);
+    return `<div class="lesson"><div class="a">${esc(f.name)}</div><div class="n">${bits.join(" · ")}${f.last ? `<br>Last: “${esc(f.last)}”` : ""}</div></div>`;
+  }).join("") || "none yet; the first matched caller opens one";
   $("lessons").innerHTML = m.lessons.map((r) => {
     const v = String(r.value); const mm = v.match(/^When: (\S+)\. (\w+) (worked|did not work)\. ?(.*)$/s);
     if (!mm) return `<div class="lesson"><div class="n">${esc(v)}</div></div>`;
