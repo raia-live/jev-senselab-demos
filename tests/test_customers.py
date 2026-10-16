@@ -638,6 +638,12 @@ def test_a_detail_both_sides_said_on_the_call_is_filed_at_hang_up():
     assert confirmed_details([("user", "my number is 650-555-0142"),
                               ("assistant", "Six five zero, five five five, zero one four two, right?"), ("user", "yes")]) == [("phone", "6505550142")]
     assert confirmed_details([("user", "it's at bruno dot com, I'm at home"), ("assistant", "okay")]) == []
+    # Speech-to-text split the address over two lines a second apart; read as one, it counts.
+    assert confirmed_details([("user", "bruno at"), ("user", "example dot com"), ("assistant", "Bruno at example dot com."),
+                              ("user", "Yep")]) == [("email", "bruno@example.com")]
+    from voice.agent import transcript_lines
+    assert transcript_lines("AI: Hi Bruno.\nUser: bruno at example dot com\nAI: Bruno at example dot com.\n\nnoise") == [
+        ("assistant", "Hi Bruno."), ("user", "bruno at example dot com"), ("assistant", "Bruno at example dot com.")]
 
     writes: list[tuple[str, str, dict]] = []
 

@@ -220,13 +220,34 @@ def confirmed_details(lines: list[tuple[str | None, str]]) -> list[tuple[str, st
     not here, and neither is one the caller mentioned once in passing."""
     said: dict[str, set[tuple[str, str]]] = {"user": set(), "assistant": set()}
     order: list[tuple[str, str]] = []
+    # Speech-to-text hands an address over in pieces ("bruno at" / "bruno dot com", two
+    # lines a second apart), so one speaker's run of lines is read as one.
+    merged: list[tuple[str, str]] = []
     for role, text in lines:
         who = "user" if role in ("user", "caller") else "assistant"
+        if merged and merged[-1][0] == who:
+            merged[-1] = (who, f"{merged[-1][1]} {text}")
+        else:
+            merged.append((who, text))
+    for who, text in merged:
         for d in _details_in(text):
             if d not in said["user"] and d not in said["assistant"]:
                 order.append(d)
             said[who].add(d)
     return [d for d in order if d in said["user"] and d in said["assistant"]]
+
+
+_TRANSCRIPT_LINE = re.compile(r"^(AI|Assistant|Bot|User|Caller):\s*(.*)$", re.I)
+
+
+def transcript_lines(transcript: str) -> list[tuple[str, str]]:
+    """Vapi's end-of-call transcript ("AI: ...", "User: ...") as (role, text) lines."""
+    out: list[tuple[str, str]] = []
+    for raw in transcript.splitlines():
+        m = _TRANSCRIPT_LINE.match(raw.strip())
+        if m:
+            out.append(("user" if m.group(1).lower() in ("user", "caller") else "assistant", m.group(2)))
+    return out
 
 
 def _same_detail(kind: str, a: str, b: str) -> bool:
@@ -579,6 +600,7 @@ class LiveAgent:
                 memory = None
         with self._lock:
             lines = [(ln.get("role"), ln.get("text") or "") for ln in call.get("live") or []]
+            lines += transcript_lines(str(call.get("transcript") or ""))  # Vapi's own, where it came
             filed = [(u.get("kind"), u.get("value") or "") for u in call.get("file_updates") or []]
         for kind, value in confirmed_details(lines):
             if any(k == kind and _same_detail(kind, v, value) for k, v in filed):
